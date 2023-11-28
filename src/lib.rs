@@ -1,3 +1,8 @@
+mod samples;
+mod ancestors;
+
+mod dna;
+
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }
