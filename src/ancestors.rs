@@ -1,6 +1,9 @@
 use crate::dna::AncestralSequence;
 use crate::samples::VariantSite;
 
+const ANCESTRAL_STATE: u64 = 0;
+const DERIVED_STATE: u64 = 1;
+
 pub struct AncestorGenerator {
     sites: Vec<VariantSite>,
 }
@@ -60,23 +63,25 @@ impl AncestorGenerator {
 
 #[cfg(test)]
 mod tests {
-    use vers_vecs::BitVec;
-    use crate::ancestors::AncestorGenerator;
+    use crate::ancestors::{AncestorGenerator, DERIVED_STATE};
     use crate::samples::VariantSite;
+    use std::fs::File;
+    use std::io::{BufRead, BufReader};
+    use vers_vecs::BitVec;
 
     #[test]
     fn compute_trivial_ancestors() {
-        let gen2 = BitVec::from_bits(&[0, 0, 1, 0, 1, 0]);
-        let gen3 = BitVec::from_bits(&[0, 1, 1, 0, 0, 0]);
-        let gen4 = BitVec::from_bits(&[0, 1, 0, 0, 1, 0]);
-        let gen5 = BitVec::from_bits(&[0, 0, 0, 1, 1, 0]);
+        let site1 = BitVec::from_bits(&[0, 0, 1, 0, 1, 0]);
+        let site2 = BitVec::from_bits(&[0, 1, 1, 0, 0, 0]);
+        let site3 = BitVec::from_bits(&[0, 1, 0, 0, 1, 0]);
+        let site4 = BitVec::from_bits(&[0, 0, 0, 1, 1, 0]);
 
         let ag = AncestorGenerator {
             sites: vec![
-                VariantSite::new(gen2, 1),
-                VariantSite::new(gen3, 2),
-                VariantSite::new(gen4, 3),
-                VariantSite::new(gen5, 4),
+                VariantSite::new(site1, 1),
+                VariantSite::new(site2, 2),
+                VariantSite::new(site3, 3),
+                VariantSite::new(site4, 4),
             ],
         };
 
@@ -86,26 +91,25 @@ mod tests {
         // TODO generate root ancestor
         assert_eq!(ancestors.len(), 4); // TODO 5
 
-        // TODO bitvec needs Eq implementation
-        // assert_eq!(ancestors[0].state, BitVec::from_bits(&[1, 0, 0, 0]));
-        // assert_eq!(ancestors[1].state, BitVec::from_bits(&[0, 1, 0, 0]));
-        // assert_eq!(ancestors[2].state, BitVec::from_bits(&[0, 0, 1, 0]));
-        // assert_eq!(ancestors[3].state, BitVec::from_bits(&[0, 0, 0, 1]));
+        assert_eq!(ancestors[0].state, BitVec::from_bits(&[1, 0, 0, 0]));
+        assert_eq!(ancestors[1].state, BitVec::from_bits(&[0, 1, 0, 0]));
+        assert_eq!(ancestors[2].state, BitVec::from_bits(&[0, 0, 1, 0]));
+        assert_eq!(ancestors[3].state, BitVec::from_bits(&[0, 0, 0, 1]));
     }
 
     #[test]
     fn compute_multi_focal_ancestors() {
-        let gen1 = BitVec::from_bits(&[0, 0, 0, 1, 1]);
-        let gen2 = BitVec::from_bits(&[0, 1, 1, 0, 0]);
-        let gen3 = BitVec::from_bits(&[0, 1, 1, 0, 0]);
-        let gen4 = BitVec::from_bits(&[0, 0, 0, 1, 1]);
+        let site1 = BitVec::from_bits(&[0, 0, 0, 1, 1]);
+        let site2 = BitVec::from_bits(&[0, 1, 1, 0, 0]);
+        let site3 = BitVec::from_bits(&[0, 1, 1, 0, 0]);
+        let site4 = BitVec::from_bits(&[0, 0, 0, 1, 1]);
 
         let ag = AncestorGenerator {
             sites: vec![
-                VariantSite::new(gen1, 1),
-                VariantSite::new(gen2, 2),
-                VariantSite::new(gen3, 3),
-                VariantSite::new(gen4, 4),
+                VariantSite::new(site1, 1),
+                VariantSite::new(site2, 2),
+                VariantSite::new(site3, 3),
+                VariantSite::new(site4, 4),
             ],
         };
 
@@ -113,10 +117,40 @@ mod tests {
 
         // TODO find out why tsinfer generates the root ancestor twice
         // TODO generate root ancestor
-        assert_eq!(ancestors.len(), 3); // TODO 4
+        assert_eq!(ancestors.len(), 2); // TODO 3
 
-        // TODO bitvec needs Eq implementation
-        // assert_eq!(ancestors[1].state, BitVec::from_bits(&[0, 1, 1, 0]));
-        // assert_eq!(ancestors[2].state, BitVec::from_bits(&[1, 0, 0, 1]));
+        assert_eq!(ancestors[1].state, BitVec::from_bits(&[0, 1, 1, 0]));
+        assert_eq!(ancestors[2].state, BitVec::from_bits(&[1, 0, 0, 1]));
+    }
+
+    #[test]
+    fn compute_chr20_40_variants() {
+        let input = File::open("testdata/chr20_40variants.txt").expect("could not find test data");
+        let reader = BufReader::new(input);
+        let variant_sites = reader
+            .lines()
+            .enumerate()
+            .map(|(pos, line)| {
+                VariantSite::new(
+                    BitVec::from_bits(&line.expect("unexpected io error")
+                        .trim()
+                        .split(" ")
+                        .map(|s| s.parse().expect("corrupt input data"))
+                        .collect::<Vec<_>>()),
+                    pos,
+                )
+            })
+            // filter out singleton sites TODO: this should be done by a builder interface
+            .filter(|seq| seq.genotypes.iter().filter(|&state| state == DERIVED_STATE).count() > 1)
+            .collect::<Vec<_>>();
+
+        // according to tsinfer, we have 22 variant sites
+        assert_eq!(variant_sites.len(), 22);
+
+        let ag = AncestorGenerator {
+            sites: variant_sites
+        };
+
+        let ancestors = ag.generate_ancestors();
     }
 }
