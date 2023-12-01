@@ -214,10 +214,10 @@ mod tests {
 
     #[test]
     fn compute_trivial_ancestors() {
-        let site1 = BitVec::from_bits(&[0, 0, 1, 0, 1, 0]);
-        let site2 = BitVec::from_bits(&[0, 1, 1, 0, 0, 0]);
-        let site3 = BitVec::from_bits(&[0, 1, 0, 0, 1, 0]);
-        let site4 = BitVec::from_bits(&[0, 0, 0, 1, 1, 0]);
+        let site1 = BitVec::from_bits(&[0, 0, 1, 0, 1]);
+        let site2 = BitVec::from_bits(&[0, 1, 1, 0, 0]);
+        let site3 = BitVec::from_bits(&[0, 1, 0, 0, 1]);
+        let site4 = BitVec::from_bits(&[0, 0, 0, 1, 1]);
 
         let ag = AncestorGenerator {
             sites: vec![
@@ -304,5 +304,35 @@ mod tests {
         };
 
         let ancestors = ag.generate_ancestors();
+
+        let input =
+            File::open("testdata/chr20_40ancestors.txt").expect("could not find test results");
+        let reader = BufReader::new(input);
+        let mut tsinfer_ancestors = vec![BitVec::from_zeros(22); 22];
+        reader.lines().for_each(|line| {
+            let line = line.expect("unexpected IO error");
+            let mut line_parts = line.splitn(2, ": ");
+            let index: usize = line_parts
+                .next()
+                .expect("corrupted test results")
+                .parse()
+                .expect("corrupted test results");
+            line_parts
+                .next()
+                .expect("corrupted test results")
+                .trim()
+                .split(" ")
+                .enumerate()
+                .for_each(|(j, bit)| {
+                    tsinfer_ancestors[index]
+                        .set_unchecked(j, bit.parse().expect("corrupted test results"))
+                });
+        });
+
+        for (index, ancestor) in ancestors.iter().enumerate() {
+            for (pos, state) in ancestor.state.iter().enumerate() {
+                assert_eq!(state, tsinfer_ancestors[index].get_unchecked(pos));
+            }
+        }
     }
 }

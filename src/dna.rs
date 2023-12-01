@@ -13,11 +13,13 @@ pub(crate) struct PackedSequence {
 
 impl PackedSequence {
     pub(crate) fn get_unchecked(&self, index: usize) -> u64 {
-        self.sequence.get_bits_unchecked(index * self.encoding as usize, self.encoding as usize)
+        self.sequence
+            .get_bits_unchecked(index * self.encoding as usize, self.encoding as usize)
     }
 
     pub(crate) fn get(&self, index: usize) -> Option<u64> {
-        self.sequence.get_bits(index * self.encoding as usize, self.encoding as usize)
+        self.sequence
+            .get_bits(index * self.encoding as usize, self.encoding as usize)
     }
 }
 
