@@ -1,5 +1,6 @@
 use crate::dna::AncestralSequence;
 use crate::samples::VariantSite;
+use vers_vecs::BitVec;
 
 const ANCESTRAL_STATE: u64 = 0;
 const DERIVED_STATE: u64 = 1;
@@ -18,7 +19,8 @@ impl AncestorGenerator {
         let sites = self.sites.len();
 
         // extend ancestor to the left of the first focal site
-        self.extend_ancestor(
+        let start = focal_sites[0]
+            - self.extend_ancestor(
             &mut self
                 .sites
                 .iter()
@@ -49,7 +51,8 @@ impl AncestorGenerator {
 
         // extend ancestor to the right of the last focal site
         let last_focal_site = *focal_sites.last().unwrap();
-        self.extend_ancestor(
+        let end = last_focal_site
+            + self.extend_ancestor(
             &mut self.sites.iter().enumerate().skip(last_focal_site + 1),
             last_focal_site,
             &mut ancestral_sequence,
@@ -57,6 +60,8 @@ impl AncestorGenerator {
         );
 
         // TODO truncate ancestral sequence to save memory. this should be implemented using functionality from BitVec
+        ancestral_sequence.start = start;
+        ancestral_sequence.end = end;
 
         ancestral_sequence
     }
@@ -74,19 +79,25 @@ impl AncestorGenerator {
     /// - `ancestral_sequence` the haplotype that is being generated
     /// - `termination_condition` if true, the extension will be terminated once enough samples
     /// diverge from the common focal site.
+    ///
+    /// # Returns
+    /// Returns the number of continuous sites modified other than the focal site.
     fn extend_ancestor(
         &self,
         site_iter: &mut dyn Iterator<Item=(usize, &VariantSite)>,
         focal_site: usize,
         ancestral_sequence: &mut AncestralSequence,
         termination_condition: bool,
-    ) {
+    ) -> usize {
+        let mut modified_sites = 0;
         // the focal site is defined by its derived state
         ancestral_sequence.set_unchecked(focal_site, DERIVED_STATE);
 
         // the set of samples that are still considered part of the subtree derived from this ancestor
         // the generation process ends, once this set reaches half it's size
         let mut active_set = self.sites[focal_site].genotypes.clone();
+        let mut previous_deletion_marks = BitVec::from_zeros(active_set.len());
+
         let focal_site_age = self.sites[focal_site].relative_age;
         let active_set_start_size = active_set.count_ones();
 
@@ -96,12 +107,11 @@ impl AncestorGenerator {
         for (variant_index, site) in site_iter {
             if site.relative_age >= focal_site_age {
                 if termination_condition {
-                    // TODO we should only exclude sites if they fail to be in the set twice, so this masking is too early
                     // mask out the ones in the current site with the set of genotypes that derive from the ancestral sequence
                     let masked_set = site
                         .genotypes
                         .mask_and(&active_set)
-                        .expect("didn't expect different length variant sites")
+                        .expect("expect same length variant sites")
                         .to_bit_vec();
 
                     // compute ancestral state
@@ -112,15 +122,42 @@ impl AncestorGenerator {
                         // TODO technically we are supposed to set it to MISSING_DATA if there is no consensus
                         ANCESTRAL_STATE
                     };
+
+                    modified_sites += 1;
                     ancestral_sequence.set_unchecked(variant_index, ancestral_state);
 
                     // update the set of genotypes for next loop iteration
-                    active_set = masked_set;
-                    remaining_set_size = masked_ones;
+                    // TODO implement in-place masking in BitVec
+                    let deletion_marks = if ancestral_state == DERIVED_STATE {
+                        active_set
+                            .mask_custom(&masked_set, |a, b| a ^ b & a)
+                            .expect("expect same length variant sites")
+                            .to_bit_vec()
+                    } else {
+                        active_set
+                            .mask_custom(&masked_set, |a, b| a & b)
+                            .expect("expect same length variant sites")
+                            .to_bit_vec()
+                    };
 
-                    // todo make sure the proper termination condition is used
+                    let delete_set = deletion_marks
+                        .mask_and(&previous_deletion_marks)
+                        .expect("expect same length variant sites")
+                        .to_bit_vec();
+
+                    // TODO modify in-place
+                    let new_active_set = active_set
+                        .mask_custom(&delete_set, |a, b| a & !b)
+                        .expect("expect same length variant sites")
+                        .to_bit_vec();
+
+                    active_set = new_active_set;
+
+                    remaining_set_size = active_set.count_ones();
+
+                    previous_deletion_marks = deletion_marks;
+
                     if remaining_set_size < active_set_start_size / 2 {
-                        // todo remember where we stopped the ancestor
                         break;
                     }
                 } else {
@@ -133,12 +170,17 @@ impl AncestorGenerator {
                     } else {
                         0
                     };
+
+                    modified_sites += 1;
                     ancestral_sequence.set_unchecked(variant_index, ancestral_state);
                 }
             } else {
+                modified_sites += 1;
                 ancestral_sequence.set_unchecked(variant_index, ANCESTRAL_STATE);
             }
         }
+
+        modified_sites
     }
 
     pub fn generate_ancestors(&self) -> Vec<AncestralSequence> {
@@ -152,7 +194,7 @@ impl AncestorGenerator {
 
         for (focal_site, _) in self.sites.iter().enumerate() {
             let ancestral_sequence = self.generate_ancestor(&[focal_site]);
-            println!("Focal Site {}: {:?}", focal_site, ancestral_sequence);
+            println!("Focal Site {} (time: {}): {:?}", focal_site, self.sites[focal_site].relative_age, ancestral_sequence);
             ancestors.push(ancestral_sequence);
         }
 
@@ -231,23 +273,32 @@ mod tests {
             .enumerate()
             .map(|(pos, line)| {
                 VariantSite::new(
-                    BitVec::from_bits(&line.expect("unexpected io error")
-                        .trim()
-                        .split(" ")
-                        .map(|s| s.parse().expect("corrupt input data"))
-                        .collect::<Vec<_>>()),
+                    BitVec::from_bits(
+                        &line
+                            .expect("unexpected io error")
+                            .trim()
+                            .split(" ")
+                            .map(|s| s.parse().expect("corrupt input data"))
+                            .collect::<Vec<_>>(),
+                    ),
                     pos,
                 )
             })
             // filter out singleton sites TODO: this should be done by a builder interface
-            .filter(|seq| seq.genotypes.iter().filter(|&state| state == DERIVED_STATE).count() > 1)
+            .filter(|seq| {
+                seq.genotypes
+                    .iter()
+                    .filter(|&state| state == DERIVED_STATE)
+                    .count()
+                    > 1
+            })
             .collect::<Vec<_>>();
 
         // according to tsinfer, we have 22 variant sites
         assert_eq!(variant_sites.len(), 22);
 
         let ag = AncestorGenerator {
-            sites: variant_sites
+            sites: variant_sites,
         };
 
         let ancestors = ag.generate_ancestors();

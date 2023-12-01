@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-vers-vecs = { git = "https://github.com/Cydhra/vers", rev = "756c503" }
+vers-vecs = { git = "https://github.com/Cydhra/vers", rev = "6a2867e" }
 bio-seq = "0.10"

@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Formatter, Write};
 use vers_vecs::BitVec;
 
 // TODO benchmark if bio-seq is fast enough to replace this with a fully engineered version
@@ -29,12 +29,16 @@ impl PackedSequence {
 //  ancestral state
 pub(crate) struct AncestralSequence {
     pub(crate) state: BitVec,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
 }
 
 impl AncestralSequence {
     pub(crate) fn from_ancestral_state(len: usize) -> Self {
         AncestralSequence {
-            state: BitVec::from_zeros(len)
+            state: BitVec::from_zeros(len),
+            start: 0,
+            end: 0,
         }
     }
 
@@ -47,11 +51,19 @@ impl Debug for AncestralSequence {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str("AncestralSequence [")?;
         let mut iter = self.state.iter();
+        let mut idx = 0;
         while let Some(b) = iter.next() {
-            f.write_fmt(format_args!("{}", b))?;
+            if idx < self.start || idx > self.end {
+                f.write_str("-")?;
+            } else {
+                f.write_fmt(format_args!("{}", b))?;
+            }
+
             if iter.len() > 0 {
                 f.write_str(", ")?;
             }
+
+            idx += 1;
         }
         f.write_str("]")?;
         Ok(())
