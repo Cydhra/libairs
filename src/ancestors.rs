@@ -105,7 +105,7 @@ impl AncestorGenerator {
         let mut remaining_set_size = active_set_start_size;
 
         for (variant_index, site) in site_iter {
-            if site.relative_age >= focal_site_age {
+            if site.relative_age > focal_site_age {
                 if termination_condition {
                     // mask out the ones in the current site with the set of genotypes that derive from the ancestral sequence
                     let masked_set = site
@@ -129,7 +129,7 @@ impl AncestorGenerator {
                     // TODO implement in-place masking in BitVec
                     let deletion_marks = if ancestral_state == DERIVED_STATE {
                         active_set
-                            .mask_custom(&masked_set, |a, b| a ^ b & a)
+                            .mask_custom(&masked_set, |a, b| (a ^ b) & a)
                             .expect("expect same length variant sites")
                             .to_bit_vec()
                     } else {
