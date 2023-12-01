@@ -116,10 +116,9 @@ impl AncestorGenerator {
 
                     // compute ancestral state
                     let masked_ones = masked_set.count_ones();
-                    let ancestral_state = if masked_ones > remaining_set_size / 2 {
+                    let ancestral_state = if masked_ones >= remaining_set_size / 2 {
                         DERIVED_STATE
                     } else {
-                        // TODO technically we are supposed to set it to MISSING_DATA if there is no consensus
                         ANCESTRAL_STATE
                     };
 
@@ -194,7 +193,10 @@ impl AncestorGenerator {
 
         for (focal_site, _) in self.sites.iter().enumerate() {
             let ancestral_sequence = self.generate_ancestor(&[focal_site]);
-            println!("Focal Site {} (time: {}): {:?}", focal_site, self.sites[focal_site].relative_age, ancestral_sequence);
+            println!(
+                "Focal Site {} (time: {}): {:?}",
+                focal_site, self.sites[focal_site].relative_age, ancestral_sequence
+            );
             ancestors.push(ancestral_sequence);
         }
 
