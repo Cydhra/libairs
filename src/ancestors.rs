@@ -21,16 +21,16 @@ impl AncestorGenerator {
         // extend ancestor to the left of the first focal site
         let start = focal_sites[0]
             - self.extend_ancestor(
-            &mut self
-                .sites
-                .iter()
-                .enumerate()
-                .rev()
-                .skip(sites - focal_sites[0]),
-            focal_sites[0],
-            &mut ancestral_sequence,
-            true,
-        );
+                &mut self
+                    .sites
+                    .iter()
+                    .enumerate()
+                    .rev()
+                    .skip(sites - focal_sites[0]),
+                focal_sites[0],
+                &mut ancestral_sequence,
+                true,
+            );
 
         // infer ancestor between focal sites.
         for focal_site in 1..focal_sites.len() - 1 {
@@ -53,11 +53,11 @@ impl AncestorGenerator {
         let last_focal_site = *focal_sites.last().unwrap();
         let end = last_focal_site
             + self.extend_ancestor(
-            &mut self.sites.iter().enumerate().skip(last_focal_site + 1),
-            last_focal_site,
-            &mut ancestral_sequence,
-            true,
-        );
+                &mut self.sites.iter().enumerate().skip(last_focal_site + 1),
+                last_focal_site,
+                &mut ancestral_sequence,
+                true,
+            );
 
         // TODO truncate ancestral sequence to save memory. this should be implemented using functionality from BitVec
         ancestral_sequence.start = start;
@@ -84,7 +84,7 @@ impl AncestorGenerator {
     /// Returns the number of continuous sites modified other than the focal site.
     fn extend_ancestor(
         &self,
-        site_iter: &mut dyn Iterator<Item=(usize, &VariantSite)>,
+        site_iter: &mut dyn Iterator<Item = (usize, &VariantSite)>,
         focal_site: usize,
         ancestral_sequence: &mut AncestralSequence,
         termination_condition: bool,
@@ -95,83 +95,93 @@ impl AncestorGenerator {
 
         // the set of samples that are still considered part of the subtree derived from this ancestor
         // the generation process ends, once this set reaches half it's size
-        let mut active_set = self.sites[focal_site].genotypes.clone();
-        let mut previous_deletion_marks = BitVec::from_zeros(active_set.len());
+        let mut ancestor_set = &self.sites[focal_site].genotypes;
 
         let focal_site_age = self.sites[focal_site].relative_age;
-        let active_set_start_size = active_set.count_ones();
+        let ancestor_set_size = ancestor_set.rank1(ancestor_set.len());
+        let mut current_set = BitVec::from_ones(ancestor_set_size);
+        let mut active_samples_set = BitVec::from_ones(ancestor_set_size);
+        let mut deletion_marks = BitVec::from_zeros(ancestor_set_size);
 
         // the size of the current set of samples
-        let mut remaining_set_size = active_set_start_size;
+        let mut remaining_set_size = ancestor_set_size;
 
         for (variant_index, site) in site_iter {
             if site.relative_age > focal_site_age {
                 if termination_condition {
                     // mask out the ones in the current site with the set of genotypes that derive from the ancestral sequence
-                    let masked_set = site
-                        .genotypes
-                        .mask_and(&active_set)
-                        .expect("expect same length variant sites")
-                        .to_bit_vec();
+                    let mut ones = 0;
+                    ancestor_set.iter1().enumerate().for_each(|(i, sample)| {
+                        let state = site.genotypes.get_unchecked(sample);
+                        current_set.set_unchecked(i, state);
+
+                        if active_samples_set.get_unchecked(i) == 1 {
+                            if state == DERIVED_STATE {
+                                ones += 1;
+                            }
+                        }
+                    });
 
                     // compute ancestral state
-                    let masked_ones = masked_set.count_ones();
-                    let ancestral_state = if masked_ones >= remaining_set_size / 2 {
+                    let consensus_state = if ones >= remaining_set_size / 2 {
                         DERIVED_STATE
                     } else {
                         ANCESTRAL_STATE
                     };
 
                     modified_sites += 1;
-                    ancestral_sequence.set_unchecked(variant_index, ancestral_state);
+                    ancestral_sequence.set_unchecked(variant_index, consensus_state);
 
                     // update the set of genotypes for next loop iteration
                     // TODO implement in-place masking in BitVec
-                    let deletion_marks = if ancestral_state == DERIVED_STATE {
-                        active_set
-                            .mask_custom(&masked_set, |a, b| (a ^ b) & a)
+                    let new_deletion_marks = if consensus_state == DERIVED_STATE {
+                        deletion_marks
+                            .mask_custom(&current_set, |a, b| a & !b)
                             .expect("expect same length variant sites")
                             .to_bit_vec()
                     } else {
-                        active_set
-                            .mask_custom(&masked_set, |a, b| a & b)
+                        deletion_marks
+                            .mask_custom(&current_set, |a, b| a & b)
+                            .expect("expect same length variant sites")
+                            .to_bit_vec()
+                    };
+                    // TODO modify in-place
+                    let new_active_set = active_samples_set
+                        .mask_custom(&new_deletion_marks, |a, b| a & !b)
+                        .expect("expect same length variant sites")
+                        .to_bit_vec();
+
+                    active_samples_set = new_active_set;
+                    remaining_set_size = active_samples_set.count_ones() as usize;
+                    deletion_marks = if consensus_state == DERIVED_STATE {
+                        active_samples_set
+                            .mask_custom(&current_set, |a, b| a & !b)
+                            .expect("expect same length variant sites")
+                            .to_bit_vec()
+                    } else {
+                        active_samples_set
+                            .mask_custom(&current_set, |a, b| a & b)
                             .expect("expect same length variant sites")
                             .to_bit_vec()
                     };
 
-                    let delete_set = deletion_marks
-                        .mask_and(&previous_deletion_marks)
-                        .expect("expect same length variant sites")
-                        .to_bit_vec();
-
-                    // TODO modify in-place
-                    let new_active_set = active_set
-                        .mask_custom(&delete_set, |a, b| a & !b)
-                        .expect("expect same length variant sites")
-                        .to_bit_vec();
-
-                    active_set = new_active_set;
-
-                    remaining_set_size = active_set.count_ones();
-
-                    previous_deletion_marks = deletion_marks;
-
-                    if remaining_set_size < active_set_start_size / 2 {
+                    if remaining_set_size < ancestor_set_size / 2 {
                         break;
                     }
                 } else {
-                    let masked_set = site
-                        .genotypes
-                        .mask_and(&active_set)
-                        .expect("didn't expect different length variant sites");
-                    let ancestral_state = if masked_set.count_ones() > remaining_set_size / 2 {
-                        1
-                    } else {
-                        0
-                    };
+                    // TODO implement using the new iterators instead of masking the whole set
+                    // let masked_set = site
+                    //     .genotypes
+                    //     .mask_and(&active_set)
+                    //     .expect("didn't expect different length variant sites");
+                    // let ancestral_state = if masked_set.count_ones() > remaining_set_size / 2 {
+                    //     1
+                    // } else {
+                    //     0
+                    // };
 
-                    modified_sites += 1;
-                    ancestral_sequence.set_unchecked(variant_index, ancestral_state);
+                    // modified_sites += 1;
+                    // ancestral_sequence.set_unchecked(variant_index, ancestral_state);
                 }
             } else {
                 modified_sites += 1;
@@ -266,11 +276,12 @@ mod tests {
         assert_eq!(ancestors[2].state, BitVec::from_bits(&[1, 0, 0, 1]));
     }
 
-    #[test]
-    fn compute_chr20_40_variants() {
-        let input = File::open("testdata/chr20_40variants.txt").expect("could not find test data");
+    /// Reads a specially formatted text file that contains data about variant sites intended for
+    /// unit testing. The data was generated by dumping it from tsinfer.
+    fn read_variant_dump(path: &str) -> Vec<VariantSite> {
+        let input = File::open(path).expect("could not find test data");
         let reader = BufReader::new(input);
-        let variant_sites = reader
+        reader
             .lines()
             .enumerate()
             .map(|(pos, line)| {
@@ -294,21 +305,15 @@ mod tests {
                     .count()
                     > 1
             })
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
+    }
 
-        // according to tsinfer, we have 22 variant sites
-        assert_eq!(variant_sites.len(), 22);
-
-        let ag = AncestorGenerator {
-            sites: variant_sites,
-        };
-
-        let ancestors = ag.generate_ancestors();
-
-        let input =
-            File::open("testdata/chr20_40ancestors.txt").expect("could not find test results");
+    /// Reads a specially formatted text file that contains data about ancestral sequences intended
+    /// for unit testing. The data was generated by dumping it from tsinfer.
+    fn read_ancestor_dump(path: &str, sequences: usize, sequence_length: usize) -> Vec<BitVec> {
+        let input = File::open(path).expect("could not find test results");
         let reader = BufReader::new(input);
-        let mut tsinfer_ancestors = vec![BitVec::from_zeros(22); 22];
+        let mut tsinfer_ancestors = vec![BitVec::from_zeros(sequence_length); sequences];
         reader.lines().for_each(|line| {
             let line = line.expect("unexpected IO error");
             let mut line_parts = line.splitn(2, ": ");
@@ -328,11 +333,46 @@ mod tests {
                         .set_unchecked(j, bit.parse().expect("corrupted test results"))
                 });
         });
+        tsinfer_ancestors
+    }
+
+    #[test]
+    fn compute_chr20_40_variants() {
+        let variant_sites = read_variant_dump("testdata/chr20_40variants.txt");
+        // according to tsinfer, we have 22 variant sites
+        assert_eq!(variant_sites.len(), 22);
+
+        let ag = AncestorGenerator {
+            sites: variant_sites,
+        };
+
+        let ancestors = ag.generate_ancestors();
+
+        let tsinfer_ancestors = read_ancestor_dump("testdata/chr20_40ancestors.txt", 22, 22);
 
         for (index, ancestor) in ancestors.iter().enumerate() {
             for (pos, state) in ancestor.state.iter().enumerate() {
                 assert_eq!(state, tsinfer_ancestors[index].get_unchecked(pos));
             }
         }
+    }
+
+    #[test]
+    fn compute_chr20_10k_variants() {
+        let variant_sites = read_variant_dump("testdata/chr20_10k_variants.txt");
+
+        let ag = AncestorGenerator {
+            sites: variant_sites,
+        };
+
+        let ancestors = ag.generate_ancestors();
+
+        // let tsinfer_ancestors = read_ancestor_dump("testdata/chr20_10k_ancestors.txt", 5177, -1);
+        //
+        // for (index, ancestor) in ancestors.iter().enumerate() {
+        //     for (pos, state) in ancestor.state.iter().enumerate() {
+        //         assert_eq!(state, tsinfer_ancestors[index].get_unchecked(pos));
+        //     }
+        // }
     }
 }
