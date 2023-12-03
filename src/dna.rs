@@ -29,7 +29,7 @@ impl PackedSequence {
 // TODO: is this enough? If it isn't, this must be replaced with a packed sequence coding for whatever
 //  state we need, ideally with a optimization because we expect most of the entries to reference the
 //  ancestral state
-pub(crate) struct AncestralSequence {
+pub struct AncestralSequence {
     pub(crate) state: BitVec,
     pub(crate) start: usize,
     pub(crate) end: usize,
