@@ -96,23 +96,28 @@ impl AncestorGenerator {
 
         // the set of samples that are still considered part of the subtree derived from this ancestor
         // the generation process ends, once this set reaches half it's size
-        let mut ancestor_set = &self.sites[focal_site].genotypes;
+        let focal_set = self.sites[focal_site].genotypes.iter1().enumerate().collect::<Vec<_>>();
+        let focal_set_size = self.sites[focal_site].genotypes.rank1(self.sites[focal_site].genotypes.len());
+        let focal_age = self.sites[focal_site].relative_age;
 
-        let focal_site_age = self.sites[focal_site].relative_age;
-        let ancestor_set_size = ancestor_set.rank1(ancestor_set.len());
-        let mut current_set = BitVec::from_ones(ancestor_set_size);
-        let mut active_samples_set = BitVec::from_ones(ancestor_set_size);
-        let mut deletion_marks = BitVec::from_zeros(ancestor_set_size);
+        // the current set of genotype states for the current site
+        let mut current_set = BitVec::from_ones(focal_set_size);
+
+        // currently active samples. Initially, all samples that have the derived state at the focal site are active
+        let mut active_samples_set = BitVec::from_ones(focal_set_size);
+
+        // marked for deletion from the active samples set. Deleted if a marked elements gets marked again
+        let mut deletion_marks = BitVec::from_zeros(focal_set_size);
 
         // the size of the current set of samples
-        let mut remaining_set_size = ancestor_set_size;
+        let mut remaining_set_size = focal_set_size;
 
         for (variant_index, site) in site_iter {
-            if site.relative_age > focal_site_age {
+            if site.relative_age > focal_age {
                 if termination_condition {
                     // mask out the ones in the current site with the set of genotypes that derive from the ancestral sequence
                     let mut ones = 0;
-                    ancestor_set.iter1().enumerate().for_each(|(i, sample)| {
+                    focal_set.iter().for_each(|&(i, sample)| {
                         let state = site.genotypes.get_unchecked(sample);
                         current_set.set_unchecked(i, state);
 
@@ -154,7 +159,7 @@ impl AncestorGenerator {
                     // overwrite them with the current set in the next iteration.
                     mem::swap(&mut deletion_marks, &mut current_set);
 
-                    if remaining_set_size < ancestor_set_size / 2 {
+                    if remaining_set_size < focal_set_size / 2 {
                         break;
                     }
                 } else {
@@ -192,10 +197,10 @@ impl AncestorGenerator {
 
         for (focal_site, _) in self.sites.iter().enumerate() {
             let ancestral_sequence = self.generate_ancestor(&[focal_site]);
-            println!(
-                "Focal Site {} (time: {}): {:?}",
-                focal_site, self.sites[focal_site].relative_age, ancestral_sequence
-            );
+            // println!(
+            //     "Focal Site {} (time: {}): {:?}",
+            //     focal_site, self.sites[focal_site].relative_age, ancestral_sequence
+            // );
             ancestors.push(ancestral_sequence);
         }
 
