@@ -1,5 +1,6 @@
 use crate::dna::AncestralSequence;
 use crate::samples::VariantSite;
+use std::mem;
 use vers_vecs::BitVec;
 
 const ANCESTRAL_STATE: u64 = 0;
@@ -133,37 +134,25 @@ impl AncestorGenerator {
                     ancestral_sequence.set_unchecked(variant_index, consensus_state);
 
                     // update the set of genotypes for next loop iteration
-                    // TODO implement in-place masking in BitVec
-                    let new_deletion_marks = if consensus_state == DERIVED_STATE {
+                    if consensus_state == DERIVED_STATE {
                         deletion_marks
-                            .mask_custom(&current_set, |a, b| a & !b)
+                            .apply_mask_custom(&current_set, |a, b| a & !b)
                             .expect("expect same length variant sites")
-                            .to_bit_vec()
                     } else {
                         deletion_marks
-                            .mask_custom(&current_set, |a, b| a & b)
+                            .apply_mask_custom(&current_set, |a, b| a & b)
                             .expect("expect same length variant sites")
-                            .to_bit_vec()
-                    };
-                    // TODO modify in-place
-                    let new_active_set = active_samples_set
-                        .mask_custom(&new_deletion_marks, |a, b| a & !b)
-                        .expect("expect same length variant sites")
-                        .to_bit_vec();
+                    }
+                    active_samples_set
+                        .apply_mask_custom(&deletion_marks, |a, b| a & !b)
+                        .expect("expect same length variant sites");
 
-                    active_samples_set = new_active_set;
                     remaining_set_size = active_samples_set.count_ones() as usize;
-                    deletion_marks = if consensus_state == DERIVED_STATE {
-                        active_samples_set
-                            .mask_custom(&current_set, |a, b| a & !b)
-                            .expect("expect same length variant sites")
-                            .to_bit_vec()
-                    } else {
-                        active_samples_set
-                            .mask_custom(&current_set, |a, b| a & b)
-                            .expect("expect same length variant sites")
-                            .to_bit_vec()
-                    };
+
+                    // we don't need the current set anymore, so we can reuse it for the next iteration
+                    // as the deletion marks. We also don't need the deletion marks anymore, so we can
+                    // overwrite them with the current set in the next iteration.
+                    mem::swap(&mut deletion_marks, &mut current_set);
 
                     if remaining_set_size < ancestor_set_size / 2 {
                         break;
