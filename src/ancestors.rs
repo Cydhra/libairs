@@ -1,9 +1,9 @@
 use crate::dna::VariantSite;
-use std::fmt::{Debug, Formatter};
-use std::mem;
-use rayon::prelude::IntoParallelRefIterator;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::ParallelIterator;
+use rayon::prelude::IntoParallelRefIterator;
+use std::fmt::{Debug, Formatter};
+use std::mem;
 
 const ANCESTRAL_STATE: u8 = 0;
 const DERIVED_STATE: u8 = 1;
@@ -266,7 +266,9 @@ impl AncestorGenerator {
 
         // TODO make the parallelization optional
 
-        let ancestors = self.sites.par_iter()
+        let ancestors = self
+            .sites
+            .par_iter()
             .enumerate()
             .map(|(focal_site, _)| self.generate_ancestor(&[focal_site]))
             .collect();
@@ -284,7 +286,6 @@ mod tests {
     use std::fs::File;
     use std::io::{BufRead, BufReader};
     use std::time::Instant;
-    use vers_vecs::BitVec;
 
     #[test]
     fn compute_trivial_ancestors() {
