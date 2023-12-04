@@ -1,4 +1,4 @@
-use crate::dna::AncestralSequence;
+use std::fmt::{Debug, Formatter};
 use crate::samples::VariantSite;
 use std::mem;
 use vers_vecs::BitVec;
@@ -6,17 +6,68 @@ use vers_vecs::BitVec;
 const ANCESTRAL_STATE: u64 = 0;
 const DERIVED_STATE: u64 = 1;
 
+/// A DNA sequence expressed through a bit vector where each bit defines whether the DNA sequence at
+/// the given site has the ancestral state, or the derived state. This only works if we do not accept
+/// more than two variants (ancestral and one derived state) per site.
+// TODO: is this enough? If it isn't, this must be replaced with a packed sequence coding for whatever
+//  state we need, ideally with a optimization because we expect most of the entries to reference the
+//  ancestral state
+pub struct AncestralSequence {
+    state: BitVec,
+    start: usize,
+    end: usize,
+    age: f64,
+}
+
+impl AncestralSequence {
+    fn from_ancestral_state(len: usize, age: f64) -> Self {
+        AncestralSequence {
+            state: BitVec::from_zeros(len),
+            start: 0,
+            end: 0,
+            age,
+        }
+    }
+
+    fn set_unchecked(&mut self, index: usize, value: u64) {
+        self.state.set_unchecked(index, value);
+    }
+}
+
+impl Debug for AncestralSequence {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("AncestralSequence [")?;
+        let mut iter = self.state.iter();
+        let mut idx = 0;
+        while let Some(b) = iter.next() {
+            if idx < self.start || idx > self.end {
+                f.write_str("-")?;
+            } else {
+                f.write_fmt(format_args!("{}", b))?;
+            }
+
+            if iter.len() > 0 {
+                f.write_str(", ")?;
+            }
+
+            idx += 1;
+        }
+        f.write_str("]")?;
+        Ok(())
+    }
+}
+
 pub struct AncestorGenerator {
     sites: Vec<VariantSite>,
 }
 
 impl AncestorGenerator {
     /// For a given set of focal sites, compute an ancestor that uses those focal sites.
-    fn generate_ancestor(&self, focal_sites: &[usize]) -> AncestralSequence {
+    pub fn generate_ancestor(&self, focal_sites: &[usize]) -> AncestralSequence {
         debug_assert!(!focal_sites.is_empty());
         debug_assert!(focal_sites.windows(2).all(|sites| sites[0] < sites[1]));
 
-        let mut ancestral_sequence = AncestralSequence::from_ancestral_state(self.sites.len());
+        let mut ancestral_sequence = AncestralSequence::from_ancestral_state(self.sites.len(), self.sites[focal_sites[0]].relative_age);
         let sites = self.sites.len();
 
         // extend ancestor to the left of the first focal site
@@ -214,6 +265,7 @@ mod tests {
     use crate::samples::VariantSite;
     use std::fs::File;
     use std::io::{BufRead, BufReader};
+    use std::time::Instant;
     use vers_vecs::BitVec;
 
     #[test]
@@ -351,7 +403,7 @@ mod tests {
         }
     }
 
-    #[test]
+    // #[test]
     fn compute_chr20_10k_variants() {
         let variant_sites = read_variant_dump("testdata/chr20_10k_variants.txt");
 
@@ -359,7 +411,9 @@ mod tests {
             sites: variant_sites,
         };
 
+        let start = Instant::now();
         let ancestors = ag.generate_ancestors();
+        println!("time passed: {:?}", start.elapsed());
 
         // let tsinfer_ancestors = read_ancestor_dump("testdata/chr20_10k_ancestors.txt", 5177, -1);
         //
