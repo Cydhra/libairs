@@ -1,7 +1,9 @@
 use crate::dna::VariantSite;
 use std::fmt::{Debug, Formatter};
 use std::mem;
-use vers_vecs::BitVec;
+use rayon::prelude::IntoParallelRefIterator;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::ParallelIterator;
 
 const ANCESTRAL_STATE: u8 = 0;
 const DERIVED_STATE: u8 = 1;
@@ -256,22 +258,20 @@ impl AncestorGenerator {
     }
 
     pub fn generate_ancestors(&self) -> Vec<AncestralSequence> {
-        let mut ancestors = Vec::with_capacity(self.sites.len());
-
         // TODO we have to sort focal sites by time and group those with equal genotype distributions
         //  together
 
         // TODO we have to break apart ancestors that have older sites in between them where not all
         //  samples derived from the ancestor agree on the state (I'm unsure why though)
 
-        for (focal_site, _) in self.sites.iter().enumerate() {
-            let ancestral_sequence = self.generate_ancestor(&[focal_site]);
-            // println!(
-            //     "Focal Site {} (time: {}): {:?}",
-            //     focal_site, self.sites[focal_site].relative_age, ancestral_sequence
-            // );
-            ancestors.push(ancestral_sequence);
-        }
+        // TODO make the parallelization optional
+
+        let ancestors = self.sites.par_iter()
+            .enumerate()
+            .map(|(focal_site, _)| self.generate_ancestor(&[focal_site]))
+            .collect();
+
+        // TODO sort ancestors by age
 
         ancestors
     }

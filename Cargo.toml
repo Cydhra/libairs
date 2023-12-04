@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 vers-vecs = { git = "https://github.com/Cydhra/vers", rev = "5f22156" }
 bio-seq = "0.10"
+rayon = "1.8.0"
 
 [profile.release]
 debug = true
