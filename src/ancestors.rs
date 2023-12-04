@@ -1,10 +1,10 @@
+use crate::dna::VariantSite;
 use std::fmt::{Debug, Formatter};
 use std::mem;
 use vers_vecs::BitVec;
-use crate::dna::VariantSite;
 
-const ANCESTRAL_STATE: u64 = 0;
-const DERIVED_STATE: u64 = 1;
+const ANCESTRAL_STATE: u8 = 0;
+const DERIVED_STATE: u8 = 1;
 
 /// A DNA sequence expressed through a bit vector where each bit defines whether the DNA sequence at
 /// the given site has the ancestral state, or the derived state. This only works if we do not accept
@@ -13,7 +13,7 @@ const DERIVED_STATE: u64 = 1;
 //  state we need, ideally with a optimization because we expect most of the entries to reference the
 //  ancestral state
 pub struct AncestralSequence {
-    state: BitVec,
+    state: Vec<u8>,
     start: usize,
     end: usize,
     age: f64,
@@ -22,15 +22,15 @@ pub struct AncestralSequence {
 impl AncestralSequence {
     fn from_ancestral_state(len: usize, age: f64) -> Self {
         AncestralSequence {
-            state: BitVec::from_zeros(len),
+            state: vec![0u8; len],
             start: 0,
             end: 0,
             age,
         }
     }
 
-    fn set_unchecked(&mut self, index: usize, value: u64) {
-        self.state.set_unchecked(index, value);
+    fn set_unchecked(&mut self, index: usize, value: u8) {
+        self.state[index] = value;
     }
 }
 
@@ -67,7 +67,10 @@ impl AncestorGenerator {
         debug_assert!(!focal_sites.is_empty());
         debug_assert!(focal_sites.windows(2).all(|sites| sites[0] < sites[1]));
 
-        let mut ancestral_sequence = AncestralSequence::from_ancestral_state(self.sites.len(), self.sites[focal_sites[0]].relative_age);
+        let mut ancestral_sequence = AncestralSequence::from_ancestral_state(
+            self.sites.len(),
+            self.sites[focal_sites[0]].relative_age,
+        );
         let sites = self.sites.len();
 
         // extend ancestor to the left of the first focal site
@@ -147,8 +150,15 @@ impl AncestorGenerator {
 
         // the set of samples that are still considered part of the subtree derived from this ancestor
         // the generation process ends, once this set reaches half it's size
-        let focal_set = self.sites[focal_site].genotypes.iter1().enumerate().collect::<Vec<_>>();
-        let focal_set_size = self.sites[focal_site].genotypes.rank1(self.sites[focal_site].genotypes.len());
+        let focal_set = self.sites[focal_site]
+            .genotypes
+            .iter()
+            .enumerate()
+            .filter(|&(_, s)| *s > 0)
+            .map(|(i, _)| i)
+            .enumerate()
+            .collect::<Vec<_>>();
+        let focal_set_size = focal_set.len();
         let focal_age = self.sites[focal_site].relative_age;
 
         // the current set of genotype states for the current site
@@ -169,7 +179,7 @@ impl AncestorGenerator {
                     // mask out the ones in the current site with the set of genotypes that derive from the ancestral sequence
                     let mut ones = 0;
                     focal_set.iter().for_each(|&(i, sample)| {
-                        let state = site.genotypes.get_unchecked(sample);
+                        let state = site.genotypes[sample];
                         current_set[i] = state == DERIVED_STATE;
 
                         if active_samples_set[i] {
@@ -191,17 +201,24 @@ impl AncestorGenerator {
 
                     // update the set of genotypes for next loop iteration
                     if consensus_state == DERIVED_STATE {
-                        deletion_marks.iter_mut().zip(current_set.iter()).for_each(|(mark, state)| {
-                            *mark &= !*state;
-                        });
+                        deletion_marks.iter_mut().zip(current_set.iter()).for_each(
+                            |(mark, state)| {
+                                *mark &= !*state;
+                            },
+                        );
                     } else {
-                        deletion_marks.iter_mut().zip(current_set.iter()).for_each(|(mark, state)| {
-                            *mark &= *state;
-                        });
+                        deletion_marks.iter_mut().zip(current_set.iter()).for_each(
+                            |(mark, state)| {
+                                *mark &= *state;
+                            },
+                        );
                     }
-                    active_samples_set.iter_mut().zip(deletion_marks.iter()).for_each(|(active, mark)| {
-                        *active &= !*mark;
-                    });
+                    active_samples_set
+                        .iter_mut()
+                        .zip(deletion_marks.iter())
+                        .for_each(|(active, mark)| {
+                            *active &= !*mark;
+                        });
 
                     remaining_set_size = active_samples_set.iter().filter(|&s| *s).count();
 
@@ -216,7 +233,7 @@ impl AncestorGenerator {
                 } else {
                     let mut ones = 0;
                     focal_set.iter().for_each(|&(i, sample)| {
-                        if site.genotypes.get_unchecked(sample) == DERIVED_STATE {
+                        if site.genotypes[sample] == DERIVED_STATE {
                             ones += 1;
                         }
                     });
@@ -263,18 +280,18 @@ impl AncestorGenerator {
 #[cfg(test)]
 mod tests {
     use crate::ancestors::{AncestorGenerator, DERIVED_STATE};
+    use crate::dna::VariantSite;
     use std::fs::File;
     use std::io::{BufRead, BufReader};
     use std::time::Instant;
     use vers_vecs::BitVec;
-    use crate::dna::VariantSite;
 
     #[test]
     fn compute_trivial_ancestors() {
-        let site1 = BitVec::from_bits(&[0, 0, 1, 0, 1]);
-        let site2 = BitVec::from_bits(&[0, 1, 1, 0, 0]);
-        let site3 = BitVec::from_bits(&[0, 1, 0, 0, 1]);
-        let site4 = BitVec::from_bits(&[0, 0, 0, 1, 1]);
+        let site1 = vec![0, 0, 1, 0, 1];
+        let site2 = vec![0, 1, 1, 0, 0];
+        let site3 = vec![0, 1, 0, 0, 1];
+        let site4 = vec![0, 0, 0, 1, 1];
 
         let ag = AncestorGenerator {
             sites: vec![
@@ -291,18 +308,18 @@ mod tests {
         // TODO generate root ancestor
         assert_eq!(ancestors.len(), 4); // TODO 5
 
-        assert_eq!(ancestors[0].state, BitVec::from_bits(&[1, 0, 0, 0]));
-        assert_eq!(ancestors[1].state, BitVec::from_bits(&[0, 1, 0, 0]));
-        assert_eq!(ancestors[2].state, BitVec::from_bits(&[0, 0, 1, 0]));
-        assert_eq!(ancestors[3].state, BitVec::from_bits(&[0, 0, 0, 1]));
+        assert_eq!(ancestors[0].state, vec![1, 0, 0, 0]);
+        assert_eq!(ancestors[1].state, vec![0, 1, 0, 0]);
+        assert_eq!(ancestors[2].state, vec![0, 0, 1, 0]);
+        assert_eq!(ancestors[3].state, vec![0, 0, 0, 1]);
     }
 
     #[test]
     fn compute_multi_focal_ancestors() {
-        let site1 = BitVec::from_bits(&[0, 0, 0, 1, 1]);
-        let site2 = BitVec::from_bits(&[0, 1, 1, 0, 0]);
-        let site3 = BitVec::from_bits(&[0, 1, 1, 0, 0]);
-        let site4 = BitVec::from_bits(&[0, 0, 0, 1, 1]);
+        let site1 = vec![0, 0, 0, 1, 1];
+        let site2 = vec![0, 1, 1, 0, 0];
+        let site3 = vec![0, 1, 1, 0, 0];
+        let site4 = vec![0, 0, 0, 1, 1];
 
         let ag = AncestorGenerator {
             sites: vec![
@@ -319,8 +336,8 @@ mod tests {
         // TODO generate root ancestor
         assert_eq!(ancestors.len(), 2); // TODO 3
 
-        assert_eq!(ancestors[1].state, BitVec::from_bits(&[0, 1, 1, 0]));
-        assert_eq!(ancestors[2].state, BitVec::from_bits(&[1, 0, 0, 1]));
+        assert_eq!(ancestors[1].state, vec![0, 1, 1, 0]);
+        assert_eq!(ancestors[2].state, vec![1, 0, 0, 1]);
     }
 
     /// Reads a specially formatted text file that contains data about variant sites intended for
@@ -333,14 +350,11 @@ mod tests {
             .enumerate()
             .map(|(pos, line)| {
                 VariantSite::new(
-                    BitVec::from_bits(
-                        &line
-                            .expect("unexpected io error")
-                            .trim()
-                            .split(" ")
-                            .map(|s| s.parse().expect("corrupt input data"))
-                            .collect::<Vec<_>>(),
-                    ),
+                    line.expect("unexpected io error")
+                        .trim()
+                        .split(" ")
+                        .map(|s| s.parse().expect("corrupt input data"))
+                        .collect::<Vec<_>>(),
                     pos,
                 )
             })
@@ -348,7 +362,7 @@ mod tests {
             .filter(|seq| {
                 seq.genotypes
                     .iter()
-                    .filter(|&state| state == DERIVED_STATE)
+                    .filter(|&state| *state == DERIVED_STATE)
                     .count()
                     > 1
             })
@@ -357,10 +371,10 @@ mod tests {
 
     /// Reads a specially formatted text file that contains data about ancestral sequences intended
     /// for unit testing. The data was generated by dumping it from tsinfer.
-    fn read_ancestor_dump(path: &str, sequences: usize, sequence_length: usize) -> Vec<BitVec> {
+    fn read_ancestor_dump(path: &str, sequences: usize, sequence_length: usize) -> Vec<Vec<u8>> {
         let input = File::open(path).expect("could not find test results");
         let reader = BufReader::new(input);
-        let mut tsinfer_ancestors = vec![BitVec::from_zeros(sequence_length); sequences];
+        let mut tsinfer_ancestors = vec![vec![0; sequence_length]; sequences];
         reader.lines().for_each(|line| {
             let line = line.expect("unexpected IO error");
             let mut line_parts = line.splitn(2, ": ");
@@ -376,8 +390,7 @@ mod tests {
                 .split(" ")
                 .enumerate()
                 .for_each(|(j, bit)| {
-                    tsinfer_ancestors[index]
-                        .set_unchecked(j, bit.parse().expect("corrupted test results"))
+                    tsinfer_ancestors[index][j] = bit.parse().expect("corrupted test results")
                 });
         });
         tsinfer_ancestors
@@ -398,8 +411,8 @@ mod tests {
         let tsinfer_ancestors = read_ancestor_dump("testdata/chr20_40ancestors.txt", 22, 22);
 
         for (index, ancestor) in ancestors.iter().enumerate() {
-            for (pos, state) in ancestor.state.iter().enumerate() {
-                assert_eq!(state, tsinfer_ancestors[index].get_unchecked(pos));
+            for (pos, &state) in ancestor.state.iter().enumerate() {
+                assert_eq!(state, tsinfer_ancestors[index][pos]);
             }
         }
     }
@@ -416,12 +429,6 @@ mod tests {
         let ancestors = ag.generate_ancestors();
         println!("time passed: {:?}", start.elapsed());
 
-        // let tsinfer_ancestors = read_ancestor_dump("testdata/chr20_10k_ancestors.txt", 5177, -1);
-        //
-        // for (index, ancestor) in ancestors.iter().enumerate() {
-        //     for (pos, state) in ancestor.state.iter().enumerate() {
-        //         assert_eq!(state, tsinfer_ancestors[index].get_unchecked(pos));
-        //     }
-        // }
+        // TODO check with tsinfer results
     }
 }

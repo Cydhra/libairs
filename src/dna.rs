@@ -25,7 +25,7 @@ impl PackedSequence {
 /// A single variant site defined by the genotype state
 #[derive(Clone, Debug)]
 pub(crate) struct VariantSite {
-    pub(crate) genotypes: RsVec,
+    pub(crate) genotypes: Vec<u8>,
     // ancestral states per sample
     pub(crate) position: usize,
     // position in the genome
@@ -33,10 +33,10 @@ pub(crate) struct VariantSite {
 }
 
 impl VariantSite {
-    pub fn new(genotypes: BitVec, position: usize) -> Self {
-        let age = genotypes.count_ones() as f64 / genotypes.len() as f64;
+    pub fn new(genotypes: Vec<u8>, position: usize) -> Self {
+        let age = genotypes.iter().filter(|&s| *s > 0).count() as f64 / genotypes.len() as f64;
         VariantSite {
-            genotypes: RsVec::from_bit_vec(genotypes),
+            genotypes,
             position,
             relative_age: age,
         }
