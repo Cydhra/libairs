@@ -152,13 +152,13 @@ impl AncestorGenerator {
         let focal_age = self.sites[focal_site].relative_age;
 
         // the current set of genotype states for the current site
-        let mut current_set = BitVec::from_ones(focal_set_size);
+        let mut current_set = vec![true; focal_set_size];
 
         // currently active samples. Initially, all samples that have the derived state at the focal site are active
-        let mut active_samples_set = BitVec::from_ones(focal_set_size);
+        let mut active_samples_set = vec![true; focal_set_size];
 
         // marked for deletion from the active samples set. Deleted if a marked elements gets marked again
-        let mut deletion_marks = BitVec::from_zeros(focal_set_size);
+        let mut deletion_marks = vec![false; focal_set_size];
 
         // the size of the current set of samples
         let mut remaining_set_size = focal_set_size;
@@ -170,9 +170,9 @@ impl AncestorGenerator {
                     let mut ones = 0;
                     focal_set.iter().for_each(|&(i, sample)| {
                         let state = site.genotypes.get_unchecked(sample);
-                        current_set.set_unchecked(i, state);
+                        current_set[i] = state == DERIVED_STATE;
 
-                        if active_samples_set.get_unchecked(i) == 1 {
+                        if active_samples_set[i] {
                             if state == DERIVED_STATE {
                                 ones += 1;
                             }
@@ -191,19 +191,19 @@ impl AncestorGenerator {
 
                     // update the set of genotypes for next loop iteration
                     if consensus_state == DERIVED_STATE {
-                        deletion_marks
-                            .apply_mask_custom(&current_set, |a, b| a & !b)
-                            .expect("expect same length variant sites")
+                        deletion_marks.iter_mut().zip(current_set.iter()).for_each(|(mark, state)| {
+                            *mark &= !*state;
+                        });
                     } else {
-                        deletion_marks
-                            .apply_mask_custom(&current_set, |a, b| a & b)
-                            .expect("expect same length variant sites")
+                        deletion_marks.iter_mut().zip(current_set.iter()).for_each(|(mark, state)| {
+                            *mark &= *state;
+                        });
                     }
-                    active_samples_set
-                        .apply_mask_custom(&deletion_marks, |a, b| a & !b)
-                        .expect("expect same length variant sites");
+                    active_samples_set.iter_mut().zip(deletion_marks.iter()).for_each(|(active, mark)| {
+                        *active &= !*mark;
+                    });
 
-                    remaining_set_size = active_samples_set.count_ones() as usize;
+                    remaining_set_size = active_samples_set.iter().filter(|&s| *s).count();
 
                     // we don't need the current set anymore, so we can reuse it for the next iteration
                     // as the deletion marks. We also don't need the deletion marks anymore, so we can
@@ -214,19 +214,20 @@ impl AncestorGenerator {
                         break;
                     }
                 } else {
-                    // TODO implement using the new iterators instead of masking the whole set
-                    // let masked_set = site
-                    //     .genotypes
-                    //     .mask_and(&active_set)
-                    //     .expect("didn't expect different length variant sites");
-                    // let ancestral_state = if masked_set.count_ones() > remaining_set_size / 2 {
-                    //     1
-                    // } else {
-                    //     0
-                    // };
+                    let mut ones = 0;
+                    focal_set.iter().for_each(|&(i, sample)| {
+                        if site.genotypes.get_unchecked(sample) == DERIVED_STATE {
+                            ones += 1;
+                        }
+                    });
 
-                    // modified_sites += 1;
-                    // ancestral_sequence.set_unchecked(variant_index, ancestral_state);
+                    // compute ancestral state
+                    modified_sites += 1;
+                    if ones >= remaining_set_size / 2 {
+                        ancestral_sequence.set_unchecked(variant_index, DERIVED_STATE);
+                    } else {
+                        ancestral_sequence.set_unchecked(variant_index, ANCESTRAL_STATE);
+                    };
                 }
             } else {
                 modified_sites += 1;
@@ -403,7 +404,7 @@ mod tests {
         }
     }
 
-    // #[test]
+    #[test]
     fn compute_chr20_10k_variants() {
         let variant_sites = read_variant_dump("testdata/chr20_10k_variants.txt");
 
