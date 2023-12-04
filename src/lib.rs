@@ -1,4 +1,3 @@
-mod ancestors;
-mod samples;
+pub mod ancestors;
 
-mod dna;
+pub mod dna;

@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Formatter};
-use crate::samples::VariantSite;
 use std::mem;
 use vers_vecs::BitVec;
+use crate::dna::VariantSite;
 
 const ANCESTRAL_STATE: u64 = 0;
 const DERIVED_STATE: u64 = 1;
@@ -262,11 +262,11 @@ impl AncestorGenerator {
 #[cfg(test)]
 mod tests {
     use crate::ancestors::{AncestorGenerator, DERIVED_STATE};
-    use crate::samples::VariantSite;
     use std::fs::File;
     use std::io::{BufRead, BufReader};
     use std::time::Instant;
     use vers_vecs::BitVec;
+    use crate::dna::VariantSite;
 
     #[test]
     fn compute_trivial_ancestors() {
