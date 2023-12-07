@@ -14,15 +14,18 @@ const DERIVED_STATE: u8 = 1;
 // TODO: is this enough? If it isn't, this must be replaced with a packed sequence coding for whatever
 //  state we need, ideally with a optimization because we expect most of the entries to reference the
 //  ancestral state
+#[derive(Clone)]
 pub struct AncestralSequence {
-    state: Vec<u8>,
-    start: usize,
-    end: usize,
-    age: f64,
+    pub(crate) state: Vec<u8>,
+    pub(crate) focal_sites: Vec<usize>,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    pub(crate) age: f64,
 }
 
 impl AncestralSequence {
-    fn from_ancestral_state(len: usize, age: f64) -> Self {
+    // TODO shouldnt be public
+    pub fn from_ancestral_state(len: usize, age: f64) -> Self {
         AncestralSequence {
             state: vec![0u8; len],
             start: 0,
@@ -33,6 +36,10 @@ impl AncestralSequence {
 
     fn set_unchecked(&mut self, index: usize, value: u8) {
         self.state[index] = value;
+    }
+
+    pub fn len(&self) -> usize {
+        self.state.len()
     }
 }
 
@@ -64,6 +71,12 @@ pub struct AncestorGenerator {
 }
 
 impl AncestorGenerator {
+    pub fn new(sites: Vec<VariantSite>) -> Self {
+        Self {
+            sites
+        }
+    }
+
     /// For a given set of focal sites, compute an ancestor that uses those focal sites.
     pub fn generate_ancestor(&self, focal_sites: &[usize]) -> AncestralSequence {
         debug_assert!(!focal_sites.is_empty());
@@ -117,6 +130,7 @@ impl AncestorGenerator {
             );
 
         // TODO truncate ancestral sequence to save memory. this should be implemented using functionality from BitVec
+        ancestral_sequence.focal_sites = focal_sites.to_vec();
         ancestral_sequence.start = start;
         ancestral_sequence.end = end;
 
