@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::dna::VariantSite;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::ParallelIterator;
@@ -28,6 +29,7 @@ impl AncestralSequence {
     pub fn from_ancestral_state(len: usize, age: f64) -> Self {
         AncestralSequence {
             state: vec![0u8; len],
+            focal_sites: Vec::new(),
             start: 0,
             end: 0,
             age,
@@ -275,16 +277,37 @@ impl AncestorGenerator {
         // TODO we have to sort focal sites by time and group those with equal genotype distributions
         //  together
 
+        // fixme this entire process is inefficient, we should sort the original sites
+        let mut sites = self.sites.iter().enumerate().collect::<Vec<_>>();
+        sites.sort_unstable_by(|(_, a), (_, b)| a.relative_age.partial_cmp(&b.relative_age).unwrap());
+
+        let mut focal_sites: Vec<Vec<usize>> = Vec::new();
+        let mut current_age: f64 = -1f64;
+        let mut current_focal_sites = HashMap::<Vec<u8>, Vec<usize>>::new();
+        for (focal_site, site) in sites {
+            if f64::abs(site.relative_age - current_age) < 1e-6 {
+                if current_focal_sites.contains_key(&site.genotypes) {
+                    current_focal_sites.get_mut(&site.genotypes).expect("").push(focal_site);
+                } else {
+                    current_focal_sites.insert(site.genotypes.clone(), vec![focal_site]);
+                }
+            } else {
+                current_age = site.relative_age;
+                focal_sites.append(&mut current_focal_sites.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>());
+                current_focal_sites = HashMap::new();
+                current_focal_sites.insert(site.genotypes.clone(), vec![focal_site]);
+            }
+        }
+        focal_sites.append(&mut current_focal_sites.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>());
+
         // TODO we have to break apart ancestors that have older sites in between them where not all
         //  samples derived from the ancestor agree on the state (I'm unsure why though)
 
         // TODO make the parallelization optional
 
-        let ancestors = self
-            .sites
+        let ancestors = focal_sites
             .par_iter()
-            .enumerate()
-            .map(|(focal_site, _)| self.generate_ancestor(&[focal_site]))
+            .map(|focal_sites| self.generate_ancestor(focal_sites))
             .collect();
 
         // TODO sort ancestors by age
@@ -323,10 +346,10 @@ mod tests {
         // TODO generate root ancestor
         assert_eq!(ancestors.len(), 4); // TODO 5
 
-        assert_eq!(ancestors[0].state, vec![1, 0, 0, 0]);
-        assert_eq!(ancestors[1].state, vec![0, 1, 0, 0]);
-        assert_eq!(ancestors[2].state, vec![0, 0, 1, 0]);
-        assert_eq!(ancestors[3].state, vec![0, 0, 0, 1]);
+        assert!(ancestors.iter().any(|a| a.state == vec![1, 0, 0, 0]));
+        assert!(ancestors.iter().any(|a| a.state == vec![0, 1, 0, 0]));
+        assert!(ancestors.iter().any(|a| a.state == vec![0, 0, 1, 0]));
+        assert!(ancestors.iter().any(|a| a.state == vec![0, 0, 0, 1]));
     }
 
     #[test]
@@ -351,8 +374,8 @@ mod tests {
         // TODO generate root ancestor
         assert_eq!(ancestors.len(), 2); // TODO 3
 
-        assert_eq!(ancestors[1].state, vec![0, 1, 1, 0]);
-        assert_eq!(ancestors[2].state, vec![1, 0, 0, 1]);
+        assert!(ancestors.iter().any(|a| a.state == vec![1, 0, 0, 1]));
+        assert!(ancestors.iter().any(|a| a.state == vec![0, 1, 1, 0]));
     }
 
     /// Reads a specially formatted text file that contains data about variant sites intended for
@@ -426,8 +449,9 @@ mod tests {
         let tsinfer_ancestors = read_ancestor_dump("testdata/chr20_40ancestors.txt", 22, 22);
 
         for (index, ancestor) in ancestors.iter().enumerate() {
+            assert_eq!(ancestor.focal_sites.len(), 1);
             for (pos, &state) in ancestor.state.iter().enumerate() {
-                assert_eq!(state, tsinfer_ancestors[index][pos]);
+                assert_eq!(state, tsinfer_ancestors[ancestor.focal_sites[0]][pos]);
             }
         }
     }
