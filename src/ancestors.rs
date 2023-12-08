@@ -290,21 +290,76 @@ impl AncestorGenerator {
         for (focal_site, site) in sites {
             if f64::abs(site.relative_age - current_age) < 1e-6 {
                 if current_focal_sites.contains_key(&site.genotypes) {
-                    current_focal_sites.get_mut(&site.genotypes).expect("").push(focal_site);
+                    current_focal_sites
+                        .get_mut(&site.genotypes)
+                        .expect("")
+                        .push(focal_site);
                 } else {
                     current_focal_sites.insert(site.genotypes.clone(), vec![focal_site]);
                 }
             } else {
                 current_age = site.relative_age;
                 focal_sites.append(&mut current_focal_sites.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>());
+                focal_sites.append(
+                    &mut current_focal_sites
+                        .iter()
+                        .map(|(_, v)| v.clone())
+                        .collect::<Vec<_>>(),
+                );
                 current_focal_sites = HashMap::new();
                 current_focal_sites.insert(site.genotypes.clone(), vec![focal_site]);
             }
         }
-        focal_sites.append(&mut current_focal_sites.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>());
+        focal_sites.append(
+            &mut current_focal_sites
+                .iter()
+                .map(|(_, v)| v.clone())
+                .collect::<Vec<_>>(),
+        );
 
-        // TODO we have to break apart ancestors that have older sites in between them where not all
-        //  samples derived from the ancestor agree on the state (I'm unsure why though)
+        // break focal sites apart if they are interrupted by disagreeing old sites
+        // (i.e. if they are from different subtrees in the ancestry)
+        let mut broken_focal_sites = Vec::with_capacity((focal_sites.len() as f64 * 1.1) as usize);
+        for mut focal_site in focal_sites {
+            if focal_site.len() > 1 {
+                focal_site.sort_unstable();
+                let mut partial_focal_site = Vec::new();
+                for i in 0..focal_site.len() - 1 {
+                    partial_focal_site.push(focal_site[i]);
+                    let focal_site_size = self.sites[focal_site[i]]
+                        .genotypes
+                        .iter()
+                        .filter(|&&s| s == DERIVED_STATE)
+                        .count();
+
+                    let must_split = self.sites[focal_site[i] + 1..focal_site[i + 1]]
+                        .iter()
+                        .filter(|&site| site.relative_age > self.sites[focal_site[i]].relative_age)
+                        .any(|site| {
+                            let consensus = site
+                                .genotypes
+                                .iter()
+                                .zip(self.sites[focal_site[i]].genotypes.iter())
+                                .filter(|&(_, &focal_sample)| focal_sample == DERIVED_STATE)
+                                .filter(|&(sample, _)| *sample == DERIVED_STATE)
+                                .count();
+                            consensus != focal_site_size && consensus != 0
+                        });
+
+                    if must_split {
+                        broken_focal_sites.push(partial_focal_site);
+                        partial_focal_site = Vec::new();
+                    }
+                }
+
+                partial_focal_site.push(*focal_site.last().unwrap());
+                broken_focal_sites.push(partial_focal_site);
+            } else {
+                broken_focal_sites.push(focal_site);
+            }
+        }
+
+        let focal_sites = broken_focal_sites;
 
         // TODO make the parallelization optional
 
