@@ -47,7 +47,10 @@ impl AncestralSequence {
 
 impl Debug for AncestralSequence {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str("AncestralSequence [")?;
+        f.write_str("AncestralSequence { ")?;
+        f.write_fmt(format_args!("focal_sites={:?},\t", self.focal_sites))?;
+
+        f.write_str("genotype=[ ")?;
         let mut iter = self.state.iter();
         let mut idx = 0;
         while let Some(b) = iter.next() {
@@ -63,7 +66,7 @@ impl Debug for AncestralSequence {
 
             idx += 1;
         }
-        f.write_str("]")?;
+        f.write_str(" ] }")?;
         Ok(())
     }
 }
