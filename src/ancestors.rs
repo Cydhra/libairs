@@ -249,7 +249,7 @@ impl AncestorGenerator {
                     // overwrite them with the current set in the next iteration.
                     mem::swap(&mut deletion_marks, &mut current_set);
 
-                    if remaining_set_size < focal_set_size / 2 {
+                    if remaining_set_size <= focal_set_size / 2 {
                         break;
                     }
                 } else {
