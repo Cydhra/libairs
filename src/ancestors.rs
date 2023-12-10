@@ -1,8 +1,8 @@
-use std::collections::HashMap;
 use crate::dna::VariantSite;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelRefIterator;
+use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::mem;
 
@@ -79,9 +79,7 @@ pub struct AncestorGenerator {
 
 impl AncestorGenerator {
     pub fn new(sites: Vec<VariantSite>) -> Self {
-        Self {
-            sites
-        }
+        Self { sites }
     }
 
     /// For a given set of focal sites, compute an ancestor that uses those focal sites.
@@ -97,16 +95,16 @@ impl AncestorGenerator {
 
         // extend ancestor to the left of the first focal site
         let modified_left = self.extend_ancestor(
-                &mut self
-                    .sites
-                    .iter()
-                    .enumerate()
-                    .rev()
-                    .skip(sites - focal_sites[0]),
-                focal_sites[0],
-                &mut ancestral_sequence,
-                true,
-            );
+            &mut self
+                .sites
+                .iter()
+                .enumerate()
+                .rev()
+                .skip(sites - focal_sites[0]),
+            focal_sites[0],
+            &mut ancestral_sequence,
+            true,
+        );
 
         // infer ancestor between focal sites.
         for foc_index in 0..focal_sites.len() - 1 {
@@ -128,11 +126,11 @@ impl AncestorGenerator {
         // extend ancestor to the right of the last focal site
         let last_focal_site = *focal_sites.last().unwrap();
         let modified_right = self.extend_ancestor(
-                &mut self.sites.iter().enumerate().skip(last_focal_site + 1),
-                last_focal_site,
-                &mut ancestral_sequence,
-                true,
-            );
+            &mut self.sites.iter().enumerate().skip(last_focal_site + 1),
+            last_focal_site,
+            &mut ancestral_sequence,
+            true,
+        );
 
         // TODO truncate ancestral sequence to save memory. this should be implemented using functionality from BitVec
         ancestral_sequence.focal_sites = focal_sites.to_vec();
@@ -211,6 +209,8 @@ impl AncestorGenerator {
                     });
 
                     // compute ancestral state
+                    // tsinfer doesn't use integer division here, so subtraction is necessary
+                    // for result parity
                     let consensus_state = if ones >= remaining_set_size - ones {
                         DERIVED_STATE
                     } else {
@@ -222,12 +222,13 @@ impl AncestorGenerator {
 
                     // update the set of genotypes for next loop iteration
                     if consensus_state == DERIVED_STATE {
-                        deletion_marks.iter_mut().zip(current_set.iter_mut()).for_each(
-                            |(mark, state)| {
+                        deletion_marks
+                            .iter_mut()
+                            .zip(current_set.iter_mut())
+                            .for_each(|(mark, state)| {
                                 *state = !*state;
                                 *mark &= *state;
-                            },
-                        );
+                            });
                     } else {
                         deletion_marks.iter_mut().zip(current_set.iter()).for_each(
                             |(mark, state)| {
@@ -235,6 +236,7 @@ impl AncestorGenerator {
                             },
                         );
                     }
+
                     active_samples_set
                         .iter_mut()
                         .zip(deletion_marks.iter())
@@ -249,6 +251,8 @@ impl AncestorGenerator {
                     // overwrite them with the current set in the next iteration.
                     mem::swap(&mut deletion_marks, &mut current_set);
 
+                    // tsinfer uses integer division for this test, so rounding errors are required
+                    // for result parity
                     if remaining_set_size <= focal_set_size / 2 {
                         break;
                     }
@@ -283,7 +287,9 @@ impl AncestorGenerator {
 
         // fixme this entire process is inefficient, we should sort the original sites
         let mut sites = self.sites.iter().enumerate().collect::<Vec<_>>();
-        sites.sort_unstable_by(|(_, a), (_, b)| a.relative_age.partial_cmp(&b.relative_age).unwrap());
+        sites.sort_unstable_by(|(_, a), (_, b)| {
+            a.relative_age.partial_cmp(&b.relative_age).unwrap()
+        });
 
         let mut focal_sites: Vec<Vec<usize>> = Vec::new();
         let mut current_age: f64 = -1f64;
