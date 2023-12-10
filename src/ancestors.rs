@@ -19,7 +19,9 @@ const DERIVED_STATE: u8 = 1;
 pub struct AncestralSequence {
     pub(crate) state: Vec<u8>,
     pub(crate) focal_sites: Vec<usize>,
+    /// start of valid data in the state vector, inclusive
     pub(crate) start: usize,
+    /// end of valid data in the state vector, exclusive
     pub(crate) end: usize,
     pub(crate) age: f64,
 }
@@ -54,7 +56,7 @@ impl Debug for AncestralSequence {
         let mut iter = self.state.iter();
         let mut idx = 0;
         while let Some(b) = iter.next() {
-            if idx < self.start || idx > self.end {
+            if idx < self.start || idx >= self.end {
                 f.write_str("-")?;
             } else {
                 f.write_fmt(format_args!("{}", b))?;
@@ -94,8 +96,7 @@ impl AncestorGenerator {
         let sites = self.sites.len();
 
         // extend ancestor to the left of the first focal site
-        let start = focal_sites[0]
-            - self.extend_ancestor(
+        let modified_left = self.extend_ancestor(
                 &mut self
                     .sites
                     .iter()
@@ -126,8 +127,7 @@ impl AncestorGenerator {
 
         // extend ancestor to the right of the last focal site
         let last_focal_site = *focal_sites.last().unwrap();
-        let end = last_focal_site
-            + self.extend_ancestor(
+        let modified_right = self.extend_ancestor(
                 &mut self.sites.iter().enumerate().skip(last_focal_site + 1),
                 last_focal_site,
                 &mut ancestral_sequence,
@@ -136,8 +136,8 @@ impl AncestorGenerator {
 
         // TODO truncate ancestral sequence to save memory. this should be implemented using functionality from BitVec
         ancestral_sequence.focal_sites = focal_sites.to_vec();
-        ancestral_sequence.start = start;
-        ancestral_sequence.end = end;
+        ancestral_sequence.start = focal_sites[0] - modified_left;
+        ancestral_sequence.end = last_focal_site + modified_right + 1;
 
         ancestral_sequence
     }
