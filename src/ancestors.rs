@@ -108,10 +108,10 @@ impl AncestorGenerator {
             );
 
         // infer ancestor between focal sites.
-        for focal_site in 1..focal_sites.len() - 1 {
-            let focal_site_i = focal_sites[focal_site];
-            let focal_site_j = focal_sites[focal_site + 1];
-            self.extend_ancestor(
+        for foc_index in 0..focal_sites.len() - 1 {
+            let focal_site_i = focal_sites[foc_index];
+            let focal_site_j = focal_sites[foc_index + 1];
+            let extension = self.extend_ancestor(
                 &mut self
                     .sites
                     .iter()
