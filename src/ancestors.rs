@@ -211,7 +211,7 @@ impl AncestorGenerator {
                     });
 
                     // compute ancestral state
-                    let consensus_state = if ones >= remaining_set_size / 2 {
+                    let consensus_state = if ones >= remaining_set_size - ones {
                         DERIVED_STATE
                     } else {
                         ANCESTRAL_STATE
@@ -262,7 +262,7 @@ impl AncestorGenerator {
 
                     // compute ancestral state
                     modified_sites += 1;
-                    if ones >= remaining_set_size / 2 {
+                    if ones >= remaining_set_size - ones {
                         ancestral_sequence.set_unchecked(variant_index, DERIVED_STATE);
                     } else {
                         ancestral_sequence.set_unchecked(variant_index, ANCESTRAL_STATE);
