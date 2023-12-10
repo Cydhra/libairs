@@ -2,3 +2,5 @@
 
 perf.*
 flamegraph.svg
+
+testdata/*
