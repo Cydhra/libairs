@@ -222,9 +222,10 @@ impl AncestorGenerator {
 
                     // update the set of genotypes for next loop iteration
                     if consensus_state == DERIVED_STATE {
-                        deletion_marks.iter_mut().zip(current_set.iter()).for_each(
+                        deletion_marks.iter_mut().zip(current_set.iter_mut()).for_each(
                             |(mark, state)| {
-                                *mark &= !*state;
+                                *state = !*state;
+                                *mark &= *state;
                             },
                         );
                     } else {
@@ -299,7 +300,6 @@ impl AncestorGenerator {
                 }
             } else {
                 current_age = site.relative_age;
-                focal_sites.append(&mut current_focal_sites.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>());
                 focal_sites.append(
                     &mut current_focal_sites
                         .iter()
