@@ -13,22 +13,20 @@ const DERIVED_STATE: u8 = 1;
 /// A DNA sequence expressed through a bit vector where each bit defines whether the DNA sequence at
 /// the given site has the ancestral state, or the derived state. This only works if we do not accept
 /// more than two variants (ancestral and one derived state) per site.
-// TODO: is this enough? If it isn't, this must be replaced with a packed sequence coding for whatever
-//  state we need, ideally with a optimization because we expect most of the entries to reference the
-//  ancestral state
 #[derive(Clone)]
 pub struct AncestralSequence {
-    pub(crate) state: Vec<u8>,
-    pub(crate) focal_sites: Vec<usize>,
+    state: Vec<u8>,
+    focal_sites: Vec<usize>,
     /// start of valid data in the state vector, inclusive
-    pub(crate) start: usize,
+    start: usize,
     /// end of valid data in the state vector, exclusive
+    // TODO not public
     pub(crate) end: usize,
-    pub(crate) age: f64,
+    age: f64,
 }
 
 impl AncestralSequence {
-    // TODO shouldnt be public
+    // TODO shouldnt be public. instead a builder should be used, so the meta data can be calculated
     pub fn from_ancestral_state(len: usize, age: f64) -> Self {
         AncestralSequence {
             state: vec![0u8; len],
@@ -39,8 +37,43 @@ impl AncestralSequence {
         }
     }
 
+    /// Get the haplotype sequence for the ancestral sequence. This sequence starts at the first
+    /// known site and ends at the last known site. Where this sequence is located in the genome
+    /// is defined by [`start`] and [`end`] respectively.
+    ///
+    /// [`start`]: Self::start
+    /// [`end`]: Self::end
+    pub fn haplotype(&self) -> &[u8] {
+        &self.state[self.start..self.end]
+    }
+
+    /// Get the position of the first known site in the genome (inclusive), regarding the genome's variant site
+    /// vector (so it doesn't necessarily correspond to the actual position in the genome).
+    pub fn start(&self) -> usize {
+        self.start
+    }
+
+    /// Get the position of the last known site in the genome (exclusive), regarding the genome's variant site
+    /// vector (so it doesn't necessarily correspond to the actual position in the genome).
+    pub fn end(&self) -> usize {
+        self.end
+    }
+
+    /// Get the set of focal sites that were used to generate this ancestral sequence.
+    pub fn focal_sites(&self) -> &[usize] {
+        &self.focal_sites
+    }
+
+    /// Get the inferred relative age of the ancestral sequence. This is derived from the inferred
+    /// relative age of the focal sites that were used to infer this ancestor.
+    pub fn relative_age(&self) -> f64 {
+        self.age
+    }
+
+    /// Get the length of the ancestral sequence. Only known sites are considered, so the length
+    /// might be shorter than the length of the underlying DNA sequence.
     pub fn len(&self) -> usize {
-        self.state.len()
+        self.end - self.start
     }
 }
 
