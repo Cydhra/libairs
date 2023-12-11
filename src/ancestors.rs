@@ -39,10 +39,6 @@ impl AncestralSequence {
         }
     }
 
-    fn set_state(&mut self, index: usize, value: u8) {
-        self.state[index] = value;
-    }
-
     pub fn len(&self) -> usize {
         self.state.len()
     }
@@ -97,15 +93,10 @@ pub struct AncestorGenerator {
 }
 
 impl AncestorGenerator {
-    /// Create a new ancestor generator from a vector of variant sites.
-    pub fn new(sites: Vec<VariantSite>) -> Self {
-        Self { sites }
-    }
-
     /// Create a new ancestor generator from an iterator over variant sites.
     pub fn from_iter(iter: impl Iterator<Item=VariantSite>) -> Self {
         Self {
-            sites: iter.collect(),
+            sites: iter.filter(|site| Self::is_valid_site(site)).collect(),
         }
     }
 
@@ -121,9 +112,17 @@ impl AncestorGenerator {
         }
     }
 
+    /// Whether a site is valid for the generator. A site is valid if it is not a singleton and
+    /// is biallelic.
+    fn is_valid_site(site: &VariantSite) -> bool {
+        !site.is_singleton && site.is_biallelic
+    }
+
     /// Add a variant site to the generator.
     pub fn add_site(&mut self, site: VariantSite) {
-        self.sites.push(site);
+        if Self::is_valid_site(&site) {
+            self.sites.push(site);
+        }
     }
 
     /// For a given set of focal sites, compute an ancestor that uses those focal sites. The focal
@@ -311,15 +310,15 @@ impl AncestorGenerator {
 
                     // compute ancestral state
                     modified_sites += 1;
-                    if ones >= remaining_set_size - ones {
-                        ancestral_sequence.set_state(variant_index, DERIVED_STATE);
+                    ancestral_sequence[variant_index] = if ones >= remaining_set_size - ones {
+                        DERIVED_STATE
                     } else {
-                        ancestral_sequence.set_state(variant_index, ANCESTRAL_STATE);
+                        ANCESTRAL_STATE
                     };
                 }
             } else {
                 modified_sites += 1;
-                ancestral_sequence.set_state(variant_index, ANCESTRAL_STATE);
+                ancestral_sequence[variant_index] = ANCESTRAL_STATE;
             }
         }
 
