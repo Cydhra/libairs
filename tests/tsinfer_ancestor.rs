@@ -69,7 +69,7 @@ fn compute_chr20_40_variants() {
 
     let tsinfer_ancestors = read_ancestor_dump("testdata/chr20_40ancestors.txt");
 
-    for (index, ancestor) in ancestors.iter().enumerate() {
+    for (ancestor) in ancestors.iter() {
         assert_eq!(ancestor.focal_sites().len(), 1);
         for (pos, &state) in ancestor.haplotype().iter().enumerate() {
             assert_eq!(state, tsinfer_ancestors[ancestor.focal_sites()][pos]);

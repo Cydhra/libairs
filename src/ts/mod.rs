@@ -98,7 +98,7 @@ impl TreeSequenceGenerator {
         let mut ancestor_index = max_likelihoods[candidate.end() - 1 - candidate_start];
         let mut ancestor_coverage_end = candidate.end();
 
-        for (site, &state) in candidate.site_iter().rev().skip(1) {
+        for (site, _) in candidate.site_iter().rev().skip(1) {
             if recombination_points[site - candidate_start][ancestor_index] {
                 nodes.push((ancestor_index, site, ancestor_coverage_end));
                 assert_ne!(ancestor_index, max_likelihoods[site - 1 - candidate_start]);
@@ -134,7 +134,7 @@ impl TreeSequenceGenerator {
             }
 
             tree.push((
-                Vec::from(ancestor.haplotype().clone()),
+                Vec::from(ancestor.haplotype()),
                 self.find_hidden_path(&ancestor, &tableau),
             ));
             current_age_set.push(ancestor);

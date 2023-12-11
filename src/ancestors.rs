@@ -1,5 +1,4 @@
 use crate::dna::VariantSite;
-use rayon::iter::IndexedParallelIterator;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelRefIterator;
 use std::collections::HashMap;
@@ -40,11 +39,25 @@ impl AncestralSequence {
     /// Get the haplotype sequence for the ancestral sequence. This sequence starts at the first
     /// known site and ends at the last known site. Where this sequence is located in the genome
     /// is defined by [`start`] and [`end`] respectively.
+    /// This means that the indices of the haplotype sequence do not correspond to the indices of
+    /// the genome.
     ///
     /// [`start`]: Self::start
     /// [`end`]: Self::end
     pub fn haplotype(&self) -> &[u8] {
         &self.state[self.start..self.end]
+    }
+
+    /// Get an enumerated iterator over the haplotype sequence. This sequence starts at the first
+    /// known site and ends at the last known site. Each returned element also contains the index
+    /// of the site in the genome (regarding the genome's variant site vector, the actual genome
+    /// position will differ from this).
+    pub fn site_iter(&self) -> impl Iterator<Item=(usize, &'_ u8)> + DoubleEndedIterator + '_ {
+        self.state
+            .iter()
+            .enumerate()
+            .skip(self.start)
+            .take(self.end - self.start)
     }
 
     /// Get the position of the first known site in the genome (inclusive), regarding the genome's variant site
@@ -122,7 +135,7 @@ impl IndexMut<usize> for AncestralSequence {
 /// infer the ancestral state for surrounding sites. For each set of focal sites, a single ancestral
 /// sequence is generated.
 pub struct AncestorGenerator {
-    sites: Vec<VariantSite>,
+    pub(crate) sites: Vec<VariantSite>,
 }
 
 impl AncestorGenerator {
@@ -335,7 +348,7 @@ impl AncestorGenerator {
                     }
                 } else {
                     let mut ones = 0;
-                    focal_set.iter().for_each(|&(i, sample)| {
+                    focal_set.iter().for_each(|&(_, sample)| {
                         if site.genotypes[sample] == DERIVED_STATE {
                             ones += 1;
                         }
