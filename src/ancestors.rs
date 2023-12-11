@@ -5,6 +5,7 @@ use rayon::prelude::IntoParallelRefIterator;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::mem;
+use std::ops::{Index, IndexMut};
 
 const ANCESTRAL_STATE: u8 = 0;
 const DERIVED_STATE: u8 = 1;
@@ -38,7 +39,7 @@ impl AncestralSequence {
         }
     }
 
-    fn set_unchecked(&mut self, index: usize, value: u8) {
+    fn set_state(&mut self, index: usize, value: u8) {
         self.state[index] = value;
     }
 
@@ -73,17 +74,61 @@ impl Debug for AncestralSequence {
     }
 }
 
+impl Index<usize> for AncestralSequence {
+    type Output = u8;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.state[index]
+    }
+}
+
+impl IndexMut<usize> for AncestralSequence {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.state[index]
+    }
+}
+
+/// Generates ancestral sequences for a given set of variant sites. The ancestral sequences are
+/// generated using heuristic methods that use a small number of variant sites as focal sites and
+/// infer the ancestral state for surrounding sites. For each set of focal sites, a single ancestral
+/// sequence is generated.
 pub struct AncestorGenerator {
     sites: Vec<VariantSite>,
 }
 
 impl AncestorGenerator {
+    /// Create a new ancestor generator from a vector of variant sites.
     pub fn new(sites: Vec<VariantSite>) -> Self {
         Self { sites }
     }
 
-    /// For a given set of focal sites, compute an ancestor that uses those focal sites.
-    pub fn generate_ancestor(&self, focal_sites: &[usize]) -> AncestralSequence {
+    /// Create a new ancestor generator from an iterator over variant sites.
+    pub fn from_iter(iter: impl Iterator<Item=VariantSite>) -> Self {
+        Self {
+            sites: iter.collect(),
+        }
+    }
+
+    /// Create a new ancestor generator without variant sites.
+    pub fn empty() -> Self {
+        Self { sites: Vec::new() }
+    }
+
+    /// Create a new ancestor generator without variant site, but with a given capacity.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            sites: Vec::with_capacity(capacity),
+        }
+    }
+
+    /// Add a variant site to the generator.
+    pub fn add_site(&mut self, site: VariantSite) {
+        self.sites.push(site);
+    }
+
+    /// For a given set of focal sites, compute an ancestor that uses those focal sites. The focal
+    /// site is given by a sorted set of indices into the set of variant sites.
+    fn generate_ancestor(&self, focal_sites: &[usize]) -> AncestralSequence {
         debug_assert!(!focal_sites.is_empty());
         debug_assert!(focal_sites.windows(2).all(|sites| sites[0] < sites[1]));
 
@@ -110,7 +155,7 @@ impl AncestorGenerator {
         for foc_index in 0..focal_sites.len() - 1 {
             let focal_site_i = focal_sites[foc_index];
             let focal_site_j = focal_sites[foc_index + 1];
-            let extension = self.extend_ancestor(
+            self.extend_ancestor(
                 &mut self
                     .sites
                     .iter()
@@ -165,7 +210,7 @@ impl AncestorGenerator {
     ) -> usize {
         let mut modified_sites = 0;
         // the focal site is defined by its derived state
-        ancestral_sequence.set_unchecked(focal_site, DERIVED_STATE);
+        ancestral_sequence[focal_site] = DERIVED_STATE;
 
         // the set of samples that are still considered part of the subtree derived from this ancestor
         // the generation process ends, once this set reaches half it's size
@@ -218,7 +263,7 @@ impl AncestorGenerator {
                     };
 
                     modified_sites += 1;
-                    ancestral_sequence.set_unchecked(variant_index, consensus_state);
+                    ancestral_sequence[variant_index] = consensus_state;
 
                     // update the set of genotypes for next loop iteration
                     if consensus_state == DERIVED_STATE {
@@ -267,20 +312,21 @@ impl AncestorGenerator {
                     // compute ancestral state
                     modified_sites += 1;
                     if ones >= remaining_set_size - ones {
-                        ancestral_sequence.set_unchecked(variant_index, DERIVED_STATE);
+                        ancestral_sequence.set_state(variant_index, DERIVED_STATE);
                     } else {
-                        ancestral_sequence.set_unchecked(variant_index, ANCESTRAL_STATE);
+                        ancestral_sequence.set_state(variant_index, ANCESTRAL_STATE);
                     };
                 }
             } else {
                 modified_sites += 1;
-                ancestral_sequence.set_unchecked(variant_index, ANCESTRAL_STATE);
+                ancestral_sequence.set_state(variant_index, ANCESTRAL_STATE);
             }
         }
 
         modified_sites
     }
 
+    /// Generate a set of ancestral sequences with the variant sites added to the generator.
     pub fn generate_ancestors(&self) -> Vec<AncestralSequence> {
         // TODO we have to sort focal sites by time and group those with equal genotype distributions
         //  together
