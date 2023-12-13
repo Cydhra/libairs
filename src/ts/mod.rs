@@ -130,7 +130,7 @@ impl TreeSequenceGenerator {
         let mut tree: Vec<(Vec<u8>, Vec<(usize, usize, usize)>)> = Vec::new();
 
         // the first ancestor is the ancestral state and doesnt need to be processed
-        current_age_set.push((self.ancestor_sequences[0].clone(), 0));
+        current_age_set.push(0);
         tree.push((
             Vec::from(self.ancestor_sequences[0].haplotype()),
             vec![(0, 0, self.ancestor_sequences[0].len())],
@@ -138,8 +138,8 @@ impl TreeSequenceGenerator {
 
         for (ancestor_index, ancestor) in self.ancestor_sequences.iter().enumerate().skip(1) {
             if ancestor.relative_age() < current_age {
-                current_age_set.iter().for_each(|(ancestor, index): &(AncestralSequence, usize)| {
-                    sweep_line_queue.push(SweepEvent { position: ancestor.start(), ancestor_index: *index, is_start: true });
+                current_age_set.iter().for_each(|&index| {
+                    sweep_line_queue.push(SweepEvent { position: self.ancestor_sequences[index].start(), ancestor_index: index, is_start: true });
                 });
                 current_age_set.clear();
                 current_age = ancestor.relative_age();
@@ -150,8 +150,7 @@ impl TreeSequenceGenerator {
                 self.find_hidden_path(&ancestor, sweep_line_queue.clone()),
             ));
 
-            // todo can we replace move with index operations?
-            current_age_set.push((ancestor.clone(), ancestor_index));
+            current_age_set.push(ancestor_index);
         }
 
         tree
