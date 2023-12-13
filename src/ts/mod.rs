@@ -298,7 +298,7 @@ mod tests {
         for (expected_ancestor, expected_path) in expected {
             let (_, path) = ts.iter().find(|(ancestor, _)| ancestor == &expected_ancestor).unwrap();
             let mut path = path.clone();
-            path.sort_unstable_by(|(_, a_start, _), (_, b_start, _)| a_start.cmp(b_start));
+            path.sort_unstable_by(|(_, a_start, _), (_, b_start, _)| b_start.cmp(a_start));
             assert_eq!(path, expected_path);
         }
     }
