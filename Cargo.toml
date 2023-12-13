@@ -8,6 +8,8 @@ edition = "2021"
 [dependencies]
 bio-seq = "0.10"
 rayon = "1.8.0"
+puffin = "0.18.1"
+puffin_http = "0.15.0"
 
 [profile.release]
 debug = true

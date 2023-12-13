@@ -37,6 +37,7 @@ impl TreeSequenceGenerator {
         candidate: &AncestralSequence,
         mut sweep_line_queue: BinaryHeap<SweepEvent>,
     ) -> Vec<(usize, usize, usize)> {
+        puffin::profile_function!();
         let num_ancestors = sweep_line_queue.len();
         let mut active_ancestors = Vec::with_capacity(num_ancestors);
         let mut next_event_position = sweep_line_queue.peek().unwrap().position;
@@ -50,6 +51,7 @@ impl TreeSequenceGenerator {
         // println!("CALCULATING FOR ANCESTOR {:?}", candidate);
         for (site, &state) in candidate.site_iter() {
             // update active ancestors
+            puffin::profile_scope!("advance queue");
             while next_event_position <= site { // TODO we should probably seek ahead here
                 let event = sweep_line_queue.pop().unwrap();
                 if event.is_start {
@@ -72,6 +74,7 @@ impl TreeSequenceGenerator {
             let num_alleles = 2f64; // TODO we might not want to hard-code this
 
             debug_assert!(active_ancestors.len() > 0, "no active ancestors at {}", site);
+            puffin::profile_scope!("calculate likelihoods");
             for &ancestor_id in active_ancestors.iter() {
                 let ancestral_sequence = &self.ancestor_sequences[ancestor_id];
                 // println!("p_last: {}", likelihoods[ancestor]);
@@ -107,6 +110,7 @@ impl TreeSequenceGenerator {
             }
 
             // Apparently a measure to maintain numerical stability
+            puffin::profile_scope!("normalize likelihoods");
             for &ancestor in active_ancestors.iter() {
                 likelihoods[ancestor] /= max_site_likelihood;
             }
@@ -123,6 +127,7 @@ impl TreeSequenceGenerator {
         let mut ancestor_index = max_likelihoods[candidate.end() - 1 - candidate_start];
         let mut ancestor_coverage_end = candidate.end();
 
+        puffin::profile_scope!("tracebacks");
         for (site, _) in candidate.site_iter().rev().skip(1) {
             if recombination_points[site - candidate_start][ancestor_index] {
                 nodes.push((ancestor_index, site, ancestor_coverage_end));
