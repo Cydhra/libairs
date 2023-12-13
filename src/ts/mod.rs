@@ -50,7 +50,7 @@ impl TreeSequenceGenerator {
         // println!("CALCULATING FOR ANCESTOR {:?}", candidate);
         for (site, &state) in candidate.site_iter() {
             // update active ancestors
-            while next_event_position == site {
+            while next_event_position <= site { // TODO we should probably seek ahead here
                 let event = sweep_line_queue.pop().unwrap();
                 if event.is_start {
                     active_ancestors.push(event.ancestor_index);
@@ -71,6 +71,7 @@ impl TreeSequenceGenerator {
             let k = active_ancestors.len() as f64;
             let num_alleles = 2f64; // TODO we might not want to hard-code this
 
+            debug_assert!(active_ancestors.len() > 0, "no active ancestors at {}", site);
             for &ancestor_id in active_ancestors.iter() {
                 let ancestral_sequence = &self.ancestor_sequences[ancestor_id];
                 // println!("p_last: {}", likelihoods[ancestor]);
