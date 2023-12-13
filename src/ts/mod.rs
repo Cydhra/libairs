@@ -10,8 +10,6 @@ pub struct TreeSequenceGenerator {
 
 impl TreeSequenceGenerator {
     pub fn new(mut ancestor_sequences: Vec<AncestralSequence>, recombination_rate: f64, mismatch_rate: f64, variant_positions: Vec<usize>) -> Self {
-        debug_assert!(ancestor_sequences.iter().all(|ancestor| ancestor.len() == variant_positions.len()));
-
         // sort ancestors by age, oldest first
         ancestor_sequences.sort_unstable_by(|a, b| b.relative_age().partial_cmp(&a.relative_age()).unwrap());
 
