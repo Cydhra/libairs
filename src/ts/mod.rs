@@ -37,7 +37,6 @@ impl TreeSequenceGenerator {
         candidate: &AncestralSequence,
         mut sweep_line_queue: BinaryHeap<SweepEvent>,
     ) -> Vec<(usize, usize, usize)> {
-        puffin::profile_function!();
         let num_ancestors = sweep_line_queue.len();
         let mut active_ancestors = Vec::with_capacity(num_ancestors);
         let mut next_event_position = sweep_line_queue.peek().unwrap().position;
@@ -47,25 +46,19 @@ impl TreeSequenceGenerator {
         let mut max_likelihoods = vec![0; candidate.len()];
         let candidate_start = candidate.start();
 
-        // println!("=================================================================");
-        // println!("CALCULATING FOR ANCESTOR {:?}", candidate);
-
         for (site, &state) in candidate.site_iter() {
             // update active ancestors
-            {
-                puffin::profile_scope!("advance queue");
-                while next_event_position <= site { // TODO we should probably seek ahead here
-                    let event = sweep_line_queue.pop().unwrap();
-                    if event.is_start {
-                        active_ancestors.push(event.ancestor_index);
+            while next_event_position <= site {
+                let event = sweep_line_queue.pop().unwrap();
+                if event.is_start {
+                    active_ancestors.push(event.ancestor_index);
 
-                        let ancestor_end = SweepEvent { position: self.ancestor_sequences[event.ancestor_index].end, ancestor_index: event.ancestor_index, is_start: false };
-                        sweep_line_queue.push(ancestor_end)
-                    } else {
-                        active_ancestors.retain(|&ancestor| ancestor != event.ancestor_index);
-                    }
-                    next_event_position = sweep_line_queue.peek().map_or(usize::MAX, |e| e.position)
+                    let ancestor_end = SweepEvent { position: self.ancestor_sequences[event.ancestor_index].end, ancestor_index: event.ancestor_index, is_start: false };
+                    sweep_line_queue.push(ancestor_end)
+                } else {
+                    active_ancestors.retain(|&ancestor| ancestor != event.ancestor_index);
                 }
+                next_event_position = sweep_line_queue.peek().map_or(usize::MAX, |e| e.position)
             }
 
             let mut max_site_likelihood = -1f64;
@@ -78,71 +71,36 @@ impl TreeSequenceGenerator {
 
             debug_assert!(active_ancestors.len() > 0, "no active ancestors at {}", site);
             for &ancestor_id in active_ancestors.iter() {
-                puffin::profile_scope!("calculate likelihoods");
-                let ancestral_sequence = {
-                    puffin::profile_scope!("get ancestor");
-                    &self.ancestor_sequences[ancestor_id]
-                };
-                // println!("p_last: {}", likelihoods[ancestor]);
-                let prob_no_recomb = {
-                    puffin::profile_scope!("calculate prob_no_recomb");
-                    likelihoods[ancestor_id] * (1f64 - rho - rho / k)
-                };
-                // println!("prob_no_recomb: {}", prob_no_recomb);
-                let prob_recomb = {
-                    puffin::profile_scope!("calculate prob_recomb");
-                    rho / k
-                };
-                // println!("prob_recomb: {}", prob_recomb);
+                let ancestral_sequence = &self.ancestor_sequences[ancestor_id];
+                let prob_no_recomb = likelihoods[ancestor_id] * (1f64 - rho - rho / k);
+                let prob_recomb = rho / k;
 
-                let pt = {
-                    puffin::profile_scope!("calculate pt");
-                    if prob_no_recomb > prob_recomb {
-                        prob_no_recomb
-                    } else {
-                        recombination_points[site - candidate_start][ancestor_id] = true;
-                        prob_recomb
-                    }
+                let pt = if prob_no_recomb > prob_recomb {
+                    prob_no_recomb
+                } else {
+                    recombination_points[site - candidate_start][ancestor_id] = true;
+                    prob_recomb
                 };
 
-                // println!("mu: {}", mu);
-                let pe = {
-                    puffin::profile_scope!("calculate pe");
-                    if state == ancestral_sequence[site] {
-                        1f64 - (num_alleles - 1f64) * mu
-                    } else {
-                        mu
-                    }
+                let pe = if state == ancestral_sequence[site] {
+                    1f64 - (num_alleles - 1f64) * mu
+                } else {
+                    mu
                 };
-                // println!("pe: {}", pe);
 
-                {
-                    puffin::profile_scope!("update likelihood");
-                    likelihoods[ancestor_id] = pt * pe;
-                }
-                // println!(
-                //     "updated likelihood at {} to {}",
-                //     ancestor, likelihoods[ancestor]
-                // );
-                {
-                    puffin::profile_scope!("update max likelihood");
-                    if likelihoods[ancestor_id] > max_site_likelihood {
-                        max_site_likelihood = likelihoods[ancestor_id];
-                        max_site_likelihood_ancestor = Some(ancestor_id);
-                    }
+                likelihoods[ancestor_id] = pt * pe;
+
+                if likelihoods[ancestor_id] > max_site_likelihood {
+                    max_site_likelihood = likelihoods[ancestor_id];
+                    max_site_likelihood_ancestor = Some(ancestor_id);
                 }
             }
 
             // Apparently a measure to maintain numerical stability
             for &ancestor in active_ancestors.iter() {
-                puffin::profile_scope!("normalize likelihoods");
                 likelihoods[ancestor] /= max_site_likelihood;
             }
 
-            // println!(
-            //     "site {site} maximum likelihood: {max_site_likelihood} selecting ancestor {}",
-            //     max_site_likelihood_ancestor.unwrap()
-            // );
             max_likelihoods[site - candidate_start] =
                 max_site_likelihood_ancestor.expect("no max likelihood calculated");
         }
@@ -151,7 +109,6 @@ impl TreeSequenceGenerator {
         let mut ancestor_coverage_end = candidate.end();
 
         for (site, _) in candidate.site_iter().rev().skip(1) {
-            puffin::profile_scope!("tracebacks");
             if recombination_points[site - candidate_start][ancestor_index] {
                 nodes.push((ancestor_index, site, ancestor_coverage_end));
                 assert_ne!(ancestor_index, max_likelihoods[site - 1 - candidate_start], "recombination point {} is not a recombination point", site);
@@ -195,19 +152,8 @@ impl TreeSequenceGenerator {
 
             // todo can we replace move with index operations?
             current_age_set.push((ancestor.clone(), ancestor_index));
-            puffin::GlobalProfiler::lock().new_frame();
         }
 
-        // println!("=================================================================");
-        // println!("FINAL TREE");
-        // println!(
-        //     "ancestor: {:?}: \t{:?}",
-        //     ancestral_state.haplotype(),
-        //     vec![(-1, 0, 4)]
-        // );
-        // for (ancestor, path) in tree {
-        //     println!("ancestor: {:?}: \t{:?}", ancestor, path);
-        // }
         tree
     }
 }
