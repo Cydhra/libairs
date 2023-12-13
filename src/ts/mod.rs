@@ -138,7 +138,7 @@ impl TreeSequenceGenerator {
         nodes
     }
 
-    pub fn generate_tree_sequence(&self) {
+    pub fn generate_tree_sequence(&self) -> Vec<(Vec<u8>, Vec<(usize, usize, usize)>)> {
         let mut sweep_line_queue = BinaryHeap::new();
 
         let mut current_age = f64::INFINITY;
@@ -147,6 +147,10 @@ impl TreeSequenceGenerator {
 
         // the first ancestor is the ancestral state and doesnt need to be processed
         current_age_set.push((self.ancestor_sequences[0].clone(), 0));
+        tree.push((
+            Vec::from(self.ancestor_sequences[0].haplotype()),
+            vec![(0, 0, self.ancestor_sequences[0].len())],
+        ));
 
         for (ancestor_index, ancestor) in self.ancestor_sequences.iter().enumerate().skip(1) {
             if ancestor.relative_age() < current_age {
@@ -176,6 +180,7 @@ impl TreeSequenceGenerator {
         // for (ancestor, path) in tree {
         //     println!("ancestor: {:?}: \t{:?}", ancestor, path);
         // }
+        tree
     }
 }
 
@@ -201,7 +206,6 @@ impl Ord for SweepEvent {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Index;
     use crate::ancestors::{AncestorGenerator, AncestralSequence};
     use crate::dna::VariantSite;
     use crate::ts::TreeSequenceGenerator;
@@ -226,24 +230,28 @@ mod tests {
         );
 
         let mut ancestors = ag.generate_ancestors();
-
-
         ancestors.sort_unstable_by(|a, b| b.relative_age().partial_cmp(&a.relative_age()).unwrap());
-        for ancestor in &ancestors {
-            println!(
-                "ancestral sequence: {:?} has age {}",
-                ancestor,
-                ancestor.relative_age()
-            );
-        }
 
-        let mut ancestral_state = AncestralSequence::from_ancestral_state(6, 1.0);
-        ancestral_state.end = 6;
+        let ancestor_length = ancestors[0].len();
+        let mut ancestral_state = AncestralSequence::from_ancestral_state(ancestor_length, 1.0);
+        ancestral_state.end = ancestor_length;
         ancestors.insert(0, ancestral_state);
         let ancestor_matcher = TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 3, 4, 5, 6]);
-        ancestor_matcher.generate_tree_sequence();
+        let ts = ancestor_matcher.generate_tree_sequence();
 
-        // TODO verify results
+        // expected tree
+        let expected = vec![
+            (vec![0, 0, 0, 0, 0], vec![(0, 0, 5)]),
+            (vec![1, 0, 0, 1, 0], vec![(0, 0, 5)]),
+            (vec![0, 1, 1, 0, 0], vec![(0, 0, 5)]),
+            (vec![1, 0, 0, 1, 1], vec![(1, 0, 5)]),
+        ];
+
+        assert_eq!(ts.len(), expected.len());
+        for (expected_ancestor, expected_path) in expected {
+            let (_, path) = ts.iter().find(|(ancestor, _)| ancestor == &expected_ancestor).unwrap();
+            assert_eq!(path, &expected_path);
+        }
     }
 
     #[test]
@@ -268,22 +276,30 @@ mod tests {
         );
 
         let mut ancestors = ag.generate_ancestors();
-
         ancestors.sort_unstable_by(|a, b| b.relative_age().partial_cmp(&a.relative_age()).unwrap());
-        for ancestor in &ancestors {
-            println!(
-                "ancestral sequence: {:?} has age {}",
-                ancestor,
-                ancestor.relative_age()
-            );
-        }
 
-        let mut ancestral_state = AncestralSequence::from_ancestral_state(6, 1.0);
-        ancestral_state.end = 6;
+        let ancestor_length = ancestors[0].len();
+        let mut ancestral_state = AncestralSequence::from_ancestral_state(ancestor_length, 1.0);
+        ancestral_state.end = ancestor_length;
         ancestors.insert(0, ancestral_state);
         let ancestor_matcher = TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 4, 5, 6, 7]);
-        ancestor_matcher.generate_tree_sequence();
+        let ts = ancestor_matcher.generate_tree_sequence();
 
-        // TODO verify results
+        // expected tree
+        let expected = vec![
+            (vec![0, 0, 0, 0, 0, 0], vec![(0, 0, 6)]),
+            (vec![0, 0, 0, 0, 1, 1], vec![(0, 0, 6)]),
+            (vec![1, 1, 0, 0, 0, 0], vec![(0, 0, 6)]),
+            (vec![1, 1, 1, 0, 1, 1], vec![(2, 0, 4), (1, 4, 6)]),
+            (vec![1, 1, 0, 1, 0, 0], vec![(2, 0, 6)]),
+        ];
+
+        assert_eq!(ts.len(), expected.len());
+        for (expected_ancestor, expected_path) in expected {
+            let (_, path) = ts.iter().find(|(ancestor, _)| ancestor == &expected_ancestor).unwrap();
+            let mut path = path.clone();
+            path.sort_unstable_by(|(_, a_start, _), (_, b_start, _)| a_start.cmp(b_start));
+            assert_eq!(path, expected_path);
+        }
     }
 }
