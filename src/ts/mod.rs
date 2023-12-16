@@ -34,10 +34,18 @@ impl TreeSequenceNode {
             node_intervals,
         }
     }
+
+    pub fn empty(ancestor_index: usize) -> Self {
+        TreeSequenceNode {
+            ancestor_index,
+            node_intervals: Vec::new(),
+        }
+    }
 }
 
 pub struct TreeSequenceGenerator {
     ancestor_sequences: Vec<AncestralSequence>,
+    partial_tree_sequence: Vec<TreeSequenceNode>,
     recombination_probabilities: Vec<f64>,
     mismatch_probabilities: Vec<f64>,
 }
@@ -49,6 +57,7 @@ impl TreeSequenceGenerator {
         mismatch_rate: f64,
         variant_positions: Vec<usize>,
     ) -> Self {
+        let num_ancestors = ancestor_sequences.len();
         // sort ancestors by age, oldest first
         ancestor_sequences
             .sort_unstable_by(|a, b| b.relative_age().partial_cmp(&a.relative_age()).unwrap());
@@ -63,6 +72,9 @@ impl TreeSequenceGenerator {
 
         Self {
             ancestor_sequences,
+            partial_tree_sequence: (0..num_ancestors)
+                .map(|i| TreeSequenceNode::empty(i))
+                .collect(),
             recombination_probabilities,
             mismatch_probabilities,
         }
@@ -185,23 +197,21 @@ impl TreeSequenceGenerator {
         nodes
     }
 
-    pub fn generate_tree_sequence(&self) -> Vec<TreeSequenceNode> {
+    pub fn generate_tree_sequence(&mut self) -> Vec<TreeSequenceNode> {
         let mut sweep_line_queue = BinaryHeap::new();
 
         let mut current_age = f64::INFINITY;
         let mut current_age_set = Vec::new();
-        let mut tree = Vec::new();
 
         // the first ancestor is the ancestral state and doesnt need to be processed
         current_age_set.push(0);
-        tree.push(TreeSequenceNode::new(
-            0,
-            vec![TreeSequenceInterval::new(
+        self.partial_tree_sequence[0]
+            .node_intervals
+            .push(TreeSequenceInterval::new(
                 0,
                 0,
                 self.ancestor_sequences[0].len(),
-            )],
-        ));
+            ));
 
         for (ancestor_index, ancestor) in self.ancestor_sequences.iter().enumerate().skip(1) {
             if ancestor.relative_age() < current_age {
@@ -216,15 +226,16 @@ impl TreeSequenceGenerator {
                 current_age = ancestor.relative_age();
             }
 
-            tree.push(TreeSequenceNode::new(
-                ancestor_index,
-                self.find_hidden_path(&ancestor, sweep_line_queue.clone()),
-            ));
+            let intervals = self.find_hidden_path(ancestor, sweep_line_queue.clone());
+            self.partial_tree_sequence[ancestor_index]
+                .node_intervals
+                .extend(intervals);
 
             current_age_set.push(ancestor_index);
         }
 
-        tree
+        // TODO dont need to clone here if we consume the generator
+        self.partial_tree_sequence.clone()
     }
 }
 
@@ -290,7 +301,7 @@ mod tests {
         ancestral_state.end = ancestor_length;
         ancestors.insert(0, ancestral_state);
         let ancestors_copy = ancestors.clone();
-        let ancestor_matcher =
+        let mut ancestor_matcher =
             TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 3, 4, 5, 6]);
         let ts = ancestor_matcher.generate_tree_sequence();
 
@@ -350,7 +361,7 @@ mod tests {
         ancestral_state.end = ancestor_length;
         ancestors.insert(0, ancestral_state);
         let ancestors_copy = ancestors.clone();
-        let ancestor_matcher =
+        let mut ancestor_matcher =
             TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 4, 5, 6, 7]);
         let ts = ancestor_matcher.generate_tree_sequence();
 
