@@ -82,8 +82,6 @@ impl TreeSequenceGenerator {
 
     /// For a given [`AncestralSequence`] and a set of ancestor sequences, calculate the most likely
     /// copying path within the LS model using the Viterbi algorithm.
-    // TODO the ancestors are probably required to be packed sequences instead of ancestral sequences
-    // TODO ancestors are required to be TSNodeSequences, but those dont work yet
     fn find_hidden_path(
         &self,
         candidate: &AncestralSequence,
@@ -107,14 +105,30 @@ impl TreeSequenceGenerator {
 
                     let ancestor_end = SweepEvent {
                         kind: SweepEventKind::End {
-                            interval_index: self.ancestor_sequences[event.ancestor_index].end,
+                            next_interval_index: 1,
                         },
-                        position: self.ancestor_sequences[event.ancestor_index].end,
+                        position: self.partial_tree_sequence[event.ancestor_index].node_intervals[0].end,
                         ancestor_index: event.ancestor_index,
                     };
                     sweep_line_queue.push(ancestor_end)
-                } else {
-                    active_ancestors.retain(|&ancestor| ancestor != event.ancestor_index);
+                } else if let _end_event @ &SweepEventKind::End { next_interval_index } = &event.kind {
+                    let node = &self.partial_tree_sequence[event.ancestor_index];
+                    if node.node_intervals.len() > next_interval_index {
+                        let next_interval_end_event = SweepEvent {
+                            kind: SweepEventKind::End {
+                                next_interval_index: next_interval_index + 1,
+                            },
+                            position: node.node_intervals[next_interval_index].end,
+                            ancestor_index: event.ancestor_index,
+                        };
+                        sweep_line_queue.push(next_interval_end_event);
+
+                        // todo
+                        //  clear L-cache
+                        //  change tree topology
+                    } else {
+                        active_ancestors.retain(|&ancestor| ancestor != event.ancestor_index);
+                    }
                 }
                 next_event_position = sweep_line_queue.peek().map_or(usize::MAX, |e| e.position)
             }
@@ -250,7 +264,7 @@ struct SweepEvent {
 #[derive(Debug, Eq, PartialEq, Clone)]
 enum SweepEventKind {
     Start,
-    End { interval_index: usize },
+    End { next_interval_index: usize },
 }
 
 impl PartialOrd<Self> for SweepEvent {
