@@ -1,6 +1,7 @@
+use crate::ancestors::AncestralSequence;
+use crate::ts::SweepEventKind::Start;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
-use crate::ancestors::AncestralSequence;
 
 pub struct TreeSequenceGenerator {
     ancestor_sequences: Vec<AncestralSequence>,
@@ -9,9 +10,15 @@ pub struct TreeSequenceGenerator {
 }
 
 impl TreeSequenceGenerator {
-    pub fn new(mut ancestor_sequences: Vec<AncestralSequence>, recombination_rate: f64, mismatch_rate: f64, variant_positions: Vec<usize>) -> Self {
+    pub fn new(
+        mut ancestor_sequences: Vec<AncestralSequence>,
+        recombination_rate: f64,
+        mismatch_rate: f64,
+        variant_positions: Vec<usize>,
+    ) -> Self {
         // sort ancestors by age, oldest first
-        ancestor_sequences.sort_unstable_by(|a, b| b.relative_age().partial_cmp(&a.relative_age()).unwrap());
+        ancestor_sequences
+            .sort_unstable_by(|a, b| b.relative_age().partial_cmp(&a.relative_age()).unwrap());
 
         // TODO those values are only tsinfer's defaults, the actual calculation of the values
         //  works differently
@@ -50,10 +57,16 @@ impl TreeSequenceGenerator {
             // update active ancestors
             while next_event_position <= site {
                 let event = sweep_line_queue.pop().unwrap();
-                if event.is_start {
+                if event.kind == Start {
                     active_ancestors.push(event.ancestor_index);
 
-                    let ancestor_end = SweepEvent { position: self.ancestor_sequences[event.ancestor_index].end, ancestor_index: event.ancestor_index, is_start: false };
+                    let ancestor_end = SweepEvent {
+                        kind: SweepEventKind::End {
+                            interval_index: self.ancestor_sequences[event.ancestor_index].end,
+                        },
+                        position: self.ancestor_sequences[event.ancestor_index].end,
+                        ancestor_index: event.ancestor_index,
+                    };
                     sweep_line_queue.push(ancestor_end)
                 } else {
                     active_ancestors.retain(|&ancestor| ancestor != event.ancestor_index);
@@ -69,7 +82,11 @@ impl TreeSequenceGenerator {
             let k = active_ancestors.len() as f64;
             let num_alleles = 2f64; // TODO we might not want to hard-code this
 
-            debug_assert!(active_ancestors.len() > 0, "no active ancestors at {}", site);
+            debug_assert!(
+                active_ancestors.len() > 0,
+                "no active ancestors at {}",
+                site
+            );
             for &ancestor_id in active_ancestors.iter() {
                 let ancestral_sequence = &self.ancestor_sequences[ancestor_id];
                 let prob_no_recomb = likelihoods[ancestor_id] * (1f64 - rho - rho / k);
@@ -111,7 +128,12 @@ impl TreeSequenceGenerator {
         for (site, _) in candidate.site_iter().rev().skip(1) {
             if recombination_points[site - candidate_start][ancestor_index] {
                 nodes.push((ancestor_index, site, ancestor_coverage_end));
-                assert_ne!(ancestor_index, max_likelihoods[site - 1 - candidate_start], "recombination point {} is not a recombination point", site);
+                assert_ne!(
+                    ancestor_index,
+                    max_likelihoods[site - 1 - candidate_start],
+                    "recombination point {} is not a recombination point",
+                    site
+                );
                 ancestor_index = max_likelihoods[site - 1 - candidate_start];
                 ancestor_coverage_end = site;
             }
@@ -139,7 +161,11 @@ impl TreeSequenceGenerator {
         for (ancestor_index, ancestor) in self.ancestor_sequences.iter().enumerate().skip(1) {
             if ancestor.relative_age() < current_age {
                 current_age_set.iter().for_each(|&index| {
-                    sweep_line_queue.push(SweepEvent { position: self.ancestor_sequences[index].start(), ancestor_index: index, is_start: true });
+                    sweep_line_queue.push(SweepEvent {
+                        kind: Start,
+                        position: self.ancestor_sequences[index].start(),
+                        ancestor_index: index,
+                    });
                 });
                 current_age_set.clear();
                 current_age = ancestor.relative_age();
@@ -160,9 +186,15 @@ impl TreeSequenceGenerator {
 /// A single event in the sweep line algorithm.
 #[derive(Debug, Eq, PartialEq, Clone)]
 struct SweepEvent {
+    kind: SweepEventKind,
     position: usize,
     ancestor_index: usize,
-    is_start: bool,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+enum SweepEventKind {
+    Start,
+    End { interval_index: usize },
 }
 
 impl PartialOrd<Self> for SweepEvent {
@@ -173,7 +205,10 @@ impl PartialOrd<Self> for SweepEvent {
 
 impl Ord for SweepEvent {
     fn cmp(&self, other: &Self) -> Ordering {
-        other.position.cmp(&self.position).then(other.ancestor_index.cmp(&self.ancestor_index))
+        other
+            .position
+            .cmp(&self.position)
+            .then(other.ancestor_index.cmp(&self.ancestor_index))
     }
 }
 
@@ -199,7 +234,7 @@ mod tests {
                 VariantSite::new(site4, 4),
                 VariantSite::new(site5, 5),
             ]
-                .into_iter(),
+            .into_iter(),
         );
 
         let mut ancestors = ag.generate_ancestors();
@@ -209,7 +244,8 @@ mod tests {
         let mut ancestral_state = AncestralSequence::from_ancestral_state(ancestor_length, 1.0);
         ancestral_state.end = ancestor_length;
         ancestors.insert(0, ancestral_state);
-        let ancestor_matcher = TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 3, 4, 5, 6]);
+        let ancestor_matcher =
+            TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 3, 4, 5, 6]);
         let ts = ancestor_matcher.generate_tree_sequence();
 
         // expected tree
@@ -222,7 +258,10 @@ mod tests {
 
         assert_eq!(ts.len(), expected.len());
         for (expected_ancestor, expected_path) in expected {
-            let (_, path) = ts.iter().find(|(ancestor, _)| ancestor == &expected_ancestor).unwrap();
+            let (_, path) = ts
+                .iter()
+                .find(|(ancestor, _)| ancestor == &expected_ancestor)
+                .unwrap();
             assert_eq!(path, &expected_path);
         }
     }
@@ -245,7 +284,7 @@ mod tests {
                 VariantSite::new(site6, 6),
                 VariantSite::new(site7, 7),
             ]
-                .into_iter(),
+            .into_iter(),
         );
 
         let mut ancestors = ag.generate_ancestors();
@@ -255,7 +294,8 @@ mod tests {
         let mut ancestral_state = AncestralSequence::from_ancestral_state(ancestor_length, 1.0);
         ancestral_state.end = ancestor_length;
         ancestors.insert(0, ancestral_state);
-        let ancestor_matcher = TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 4, 5, 6, 7]);
+        let ancestor_matcher =
+            TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 4, 5, 6, 7]);
         let ts = ancestor_matcher.generate_tree_sequence();
 
         // expected tree
@@ -269,7 +309,10 @@ mod tests {
 
         assert_eq!(ts.len(), expected.len());
         for (expected_ancestor, expected_path) in expected {
-            let (_, path) = ts.iter().find(|(ancestor, _)| ancestor == &expected_ancestor).unwrap();
+            let (_, path) = ts
+                .iter()
+                .find(|(ancestor, _)| ancestor == &expected_ancestor)
+                .unwrap();
             let mut path = path.clone();
             path.sort_unstable_by(|(_, a_start, _), (_, b_start, _)| b_start.cmp(a_start));
             assert_eq!(path, expected_path);

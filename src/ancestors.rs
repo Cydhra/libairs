@@ -52,7 +52,7 @@ impl AncestralSequence {
     /// known site and ends at the last known site. Each returned element also contains the index
     /// of the site in the genome (regarding the genome's variant site vector, the actual genome
     /// position will differ from this).
-    pub fn site_iter(&self) -> impl Iterator<Item=(usize, &'_ u8)> + DoubleEndedIterator + '_ {
+    pub fn site_iter(&self) -> impl Iterator<Item = (usize, &'_ u8)> + DoubleEndedIterator + '_ {
         self.state
             .iter()
             .enumerate()
@@ -140,7 +140,7 @@ pub struct AncestorGenerator {
 
 impl AncestorGenerator {
     /// Create a new ancestor generator from an iterator over variant sites.
-    pub fn from_iter(iter: impl Iterator<Item=VariantSite>) -> Self {
+    pub fn from_iter(iter: impl Iterator<Item = VariantSite>) -> Self {
         Self {
             sites: iter.filter(|site| Self::is_valid_site(site)).collect(),
         }
