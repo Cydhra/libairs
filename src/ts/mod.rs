@@ -3,6 +3,39 @@ use crate::ts::SweepEventKind::Start;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
+/// An interval in an ancestor that is covered by a parent node in the tree sequence.
+/// The interval is defined by the start and (exclusive) end position of the interval and the index of the
+/// parent node.
+#[derive(Debug, Clone)]
+pub struct TreeSequenceInterval {
+    parent: usize,
+    start: usize,
+    end: usize,
+}
+
+impl TreeSequenceInterval {
+    pub fn new(parent: usize, start: usize, end: usize) -> Self {
+        Self { parent, start, end }
+    }
+}
+
+/// A node in the tree sequence. The node is defined by the index of the ancestor sequence it
+/// represents and a list of intervals that define what parent nodes cover the ancestor sequence.
+#[derive(Debug, Clone)]
+pub struct TreeSequenceNode {
+    ancestor_index: usize,
+    node_intervals: Vec<TreeSequenceInterval>,
+}
+
+impl TreeSequenceNode {
+    pub fn new(ancestor_index: usize, node_intervals: Vec<TreeSequenceInterval>) -> Self {
+        TreeSequenceNode {
+            ancestor_index,
+            node_intervals,
+        }
+    }
+}
+
 pub struct TreeSequenceGenerator {
     ancestor_sequences: Vec<AncestralSequence>,
     recombination_probabilities: Vec<f64>,
@@ -43,7 +76,7 @@ impl TreeSequenceGenerator {
         &self,
         candidate: &AncestralSequence,
         mut sweep_line_queue: BinaryHeap<SweepEvent>,
-    ) -> Vec<(usize, usize, usize)> {
+    ) -> Vec<TreeSequenceInterval> {
         let num_ancestors = sweep_line_queue.len();
         let mut active_ancestors = Vec::with_capacity(num_ancestors);
         let mut next_event_position = sweep_line_queue.peek().unwrap().position;
@@ -127,7 +160,11 @@ impl TreeSequenceGenerator {
 
         for (site, _) in candidate.site_iter().rev().skip(1) {
             if recombination_points[site - candidate_start][ancestor_index] {
-                nodes.push((ancestor_index, site, ancestor_coverage_end));
+                nodes.push(TreeSequenceInterval::new(
+                    ancestor_index,
+                    site,
+                    ancestor_coverage_end,
+                ));
                 assert_ne!(
                     ancestor_index,
                     max_likelihoods[site - 1 - candidate_start],
@@ -138,24 +175,32 @@ impl TreeSequenceGenerator {
                 ancestor_coverage_end = site;
             }
         }
-        nodes.push((ancestor_index, 0, ancestor_coverage_end));
+        nodes.push(TreeSequenceInterval::new(
+            ancestor_index,
+            0,
+            ancestor_coverage_end,
+        ));
 
         nodes.reverse();
         nodes
     }
 
-    pub fn generate_tree_sequence(&self) -> Vec<(Vec<u8>, Vec<(usize, usize, usize)>)> {
+    pub fn generate_tree_sequence(&self) -> Vec<TreeSequenceNode> {
         let mut sweep_line_queue = BinaryHeap::new();
 
         let mut current_age = f64::INFINITY;
         let mut current_age_set = Vec::new();
-        let mut tree: Vec<(Vec<u8>, Vec<(usize, usize, usize)>)> = Vec::new();
+        let mut tree = Vec::new();
 
         // the first ancestor is the ancestral state and doesnt need to be processed
         current_age_set.push(0);
-        tree.push((
-            Vec::from(self.ancestor_sequences[0].haplotype()),
-            vec![(0, 0, self.ancestor_sequences[0].len())],
+        tree.push(TreeSequenceNode::new(
+            0,
+            vec![TreeSequenceInterval::new(
+                0,
+                0,
+                self.ancestor_sequences[0].len(),
+            )],
         ));
 
         for (ancestor_index, ancestor) in self.ancestor_sequences.iter().enumerate().skip(1) {
@@ -171,8 +216,8 @@ impl TreeSequenceGenerator {
                 current_age = ancestor.relative_age();
             }
 
-            tree.push((
-                Vec::from(ancestor.haplotype()),
+            tree.push(TreeSequenceNode::new(
+                ancestor_index,
                 self.find_hidden_path(&ancestor, sweep_line_queue.clone()),
             ));
 
@@ -244,26 +289,36 @@ mod tests {
         let mut ancestral_state = AncestralSequence::from_ancestral_state(ancestor_length, 1.0);
         ancestral_state.end = ancestor_length;
         ancestors.insert(0, ancestral_state);
+        let ancestors_copy = ancestors.clone();
         let ancestor_matcher =
             TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 3, 4, 5, 6]);
         let ts = ancestor_matcher.generate_tree_sequence();
 
-        // expected tree
-        let expected = vec![
-            (vec![0, 0, 0, 0, 0], vec![(0, 0, 5)]),
-            (vec![1, 0, 0, 1, 0], vec![(0, 0, 5)]),
-            (vec![0, 1, 1, 0, 0], vec![(0, 0, 5)]),
-            (vec![1, 0, 0, 1, 1], vec![(1, 0, 5)]),
-        ];
+        assert_eq!(ts.len(), 4);
+        assert_eq!(ts[0].ancestor_index, 0);
+        assert_eq!(ts[0].node_intervals.len(), 1);
+        assert_eq!(ts[0].node_intervals[0].parent, 0);
 
-        assert_eq!(ts.len(), expected.len());
-        for (expected_ancestor, expected_path) in expected {
-            let (_, path) = ts
-                .iter()
-                .find(|(ancestor, _)| ancestor == &expected_ancestor)
-                .unwrap();
-            assert_eq!(path, &expected_path);
-        }
+        let seq = ts
+            .iter()
+            .find(|n| ancestors_copy[n.ancestor_index].haplotype() == vec![1, 0, 0, 1, 0])
+            .unwrap();
+        assert_eq!(seq.node_intervals.len(), 1);
+        assert_eq!(seq.node_intervals[0].parent, 0);
+
+        let seq = ts
+            .iter()
+            .find(|n| ancestors_copy[n.ancestor_index].haplotype() == vec![1, 0, 0, 1, 1])
+            .unwrap();
+        assert_eq!(seq.node_intervals.len(), 1);
+        assert_eq!(seq.node_intervals[0].parent, 1);
+
+        let seq = ts
+            .iter()
+            .find(|n| ancestors_copy[n.ancestor_index].haplotype() == vec![0, 1, 1, 0, 0])
+            .unwrap();
+        assert_eq!(seq.node_intervals.len(), 1);
+        assert_eq!(seq.node_intervals[0].parent, 0);
     }
 
     #[test]
@@ -294,28 +349,43 @@ mod tests {
         let mut ancestral_state = AncestralSequence::from_ancestral_state(ancestor_length, 1.0);
         ancestral_state.end = ancestor_length;
         ancestors.insert(0, ancestral_state);
+        let ancestors_copy = ancestors.clone();
         let ancestor_matcher =
             TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 4, 5, 6, 7]);
         let ts = ancestor_matcher.generate_tree_sequence();
 
-        // expected tree
-        let expected = vec![
-            (vec![0, 0, 0, 0, 0, 0], vec![(0, 0, 6)]),
-            (vec![0, 0, 0, 0, 1, 1], vec![(0, 0, 6)]),
-            (vec![1, 1, 0, 0, 0, 0], vec![(0, 0, 6)]),
-            (vec![1, 1, 1, 0, 1, 1], vec![(2, 0, 4), (1, 4, 6)]),
-            (vec![1, 1, 0, 1, 0, 0], vec![(2, 0, 6)]),
-        ];
+        assert_eq!(ts.len(), 5);
 
-        assert_eq!(ts.len(), expected.len());
-        for (expected_ancestor, expected_path) in expected {
-            let (_, path) = ts
-                .iter()
-                .find(|(ancestor, _)| ancestor == &expected_ancestor)
-                .unwrap();
-            let mut path = path.clone();
-            path.sort_unstable_by(|(_, a_start, _), (_, b_start, _)| b_start.cmp(a_start));
-            assert_eq!(path, expected_path);
-        }
+        assert_eq!(ts[0].ancestor_index, 0);
+        assert_eq!(ts[0].node_intervals.len(), 1);
+
+        let seq = ts
+            .iter()
+            .find(|n| ancestors_copy[n.ancestor_index].haplotype() == vec![1, 1, 0, 0, 0, 0])
+            .unwrap();
+        assert_eq!(seq.node_intervals.len(), 1);
+        assert_eq!(seq.node_intervals[0].parent, 0);
+
+        let seq = ts
+            .iter()
+            .find(|n| ancestors_copy[n.ancestor_index].haplotype() == vec![0, 0, 0, 0, 1, 1])
+            .unwrap();
+        assert_eq!(seq.node_intervals.len(), 1);
+        assert_eq!(seq.node_intervals[0].parent, 0);
+
+        let seq = ts
+            .iter()
+            .find(|n| ancestors_copy[n.ancestor_index].haplotype() == vec![1, 1, 1, 0, 1, 1])
+            .unwrap();
+        assert_eq!(seq.node_intervals.len(), 2);
+        assert_eq!(seq.node_intervals[0].parent, 1);
+        assert_eq!(seq.node_intervals[1].parent, 2);
+
+        let seq = ts
+            .iter()
+            .find(|n| ancestors_copy[n.ancestor_index].haplotype() == vec![1, 1, 0, 1, 0, 0])
+            .unwrap();
+        assert_eq!(seq.node_intervals.len(), 1);
+        assert_eq!(seq.node_intervals[0].parent, 1);
     }
 }
