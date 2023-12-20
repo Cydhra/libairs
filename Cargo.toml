@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 rayon = "1.8.0"
+radix-heap = "0.3.7" # 0.3.7 was the last one that supported peek_key
 
 [profile.release]
 debug = true
