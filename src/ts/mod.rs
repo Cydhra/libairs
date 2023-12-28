@@ -2,7 +2,7 @@ use crate::ancestors::AncestralSequence;
 use crate::ts::SweepEventKind::Start;
 use radix_heap::RadixHeapMap;
 use std::cmp::{Ordering, Reverse};
-use std::collections::BinaryHeap;
+use std::io::Write;
 
 /// An interval in an ancestor that is covered by a parent node in the tree sequence.
 /// The interval is defined by the start and (exclusive) end position of the interval and the index of the
@@ -61,7 +61,9 @@ impl TreeSequenceGenerator {
         let num_ancestors = ancestor_sequences.len();
         // sort ancestors by age, oldest first
         ancestor_sequences
-            .sort_unstable_by(|a, b| b.relative_age().partial_cmp(&a.relative_age()).unwrap());
+            .sort_unstable_by(|a, b| b.relative_age()
+                .partial_cmp(&a.relative_age()).unwrap()
+            );
 
         // TODO those values are only tsinfer's defaults, the actual calculation of the values
         //  works differently

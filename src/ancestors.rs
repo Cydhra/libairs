@@ -3,8 +3,10 @@ use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelRefIterator;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
+use std::hash::BuildHasherDefault;
 use std::mem;
 use std::ops::{Index, IndexMut};
+use twox_hash::XxHash64;
 
 const ANCESTRAL_STATE: u8 = 0;
 const DERIVED_STATE: u8 = 1;
@@ -384,7 +386,9 @@ impl AncestorGenerator {
 
         let mut focal_sites: Vec<Vec<usize>> = Vec::new();
         let mut current_age: f64 = -1f64;
-        let mut current_focal_sites = HashMap::<Vec<u8>, Vec<usize>>::new();
+
+        // Todo we are reconstructing the hashmap a lot, this seems unnecessary
+        let mut current_focal_sites: HashMap<Vec<u8>, Vec<usize>, BuildHasherDefault<XxHash64>> = Default::default();
         for (focal_site, site) in sites {
             if f64::abs(site.relative_age - current_age) < 1e-6 {
                 if current_focal_sites.contains_key(&site.genotypes) {
@@ -403,7 +407,7 @@ impl AncestorGenerator {
                         .map(|(_, v)| v.clone())
                         .collect::<Vec<_>>(),
                 );
-                current_focal_sites = HashMap::new();
+                current_focal_sites = Default::default();
                 current_focal_sites.insert(site.genotypes.clone(), vec![focal_site]);
             }
         }
@@ -461,7 +465,7 @@ impl AncestorGenerator {
         // TODO make the parallelization optional
 
         let ancestors = focal_sites
-            .par_iter()
+            .iter()
             .map(|focal_sites| self.generate_ancestor(focal_sites))
             .collect();
 
