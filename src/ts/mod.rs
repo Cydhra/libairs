@@ -86,12 +86,11 @@ impl TreeSequenceGenerator {
     fn find_hidden_path(
         &self,
         candidate: &AncestralSequence,
-        mut sweep_line_queue: BinaryHeap<SweepEvent>,
-    ) -> Vec<TreeSequenceInterval> {
         mut sweep_line_queue: RadixHeapMap<Reverse<usize>, SweepEvent>,
+    ) -> Vec<TreeSequenceInterval> {
         let num_ancestors = sweep_line_queue.len();
         let mut active_ancestors = Vec::with_capacity(num_ancestors);
-        let mut next_event_position = sweep_line_queue.peek().unwrap().position;
+        let mut next_event_position = sweep_line_queue.peek_key().unwrap().0;
 
         let mut likelihoods = vec![1f64; num_ancestors];
         let mut recombination_points = vec![vec![false; num_ancestors]; candidate.len()];
@@ -101,7 +100,7 @@ impl TreeSequenceGenerator {
         for (site, &state) in candidate.site_iter() {
             // update active ancestors
             while next_event_position <= site {
-                let event = sweep_line_queue.pop().unwrap();
+                let (_, event) = sweep_line_queue.pop().unwrap();
                 if event.kind == Start {
                     active_ancestors.push(event.ancestor_index);
 
@@ -112,7 +111,7 @@ impl TreeSequenceGenerator {
                         position: self.partial_tree_sequence[event.ancestor_index].node_intervals[0].end,
                         ancestor_index: event.ancestor_index,
                     };
-                    sweep_line_queue.push(ancestor_end)
+                    sweep_line_queue.push(Reverse(self.partial_tree_sequence[event.ancestor_index].node_intervals[0].end), ancestor_end)
                 } else if let _end_event @ &SweepEventKind::End { next_interval_index } = &event.kind {
                     let node = &self.partial_tree_sequence[event.ancestor_index];
                     if node.node_intervals.len() > next_interval_index {
@@ -135,7 +134,7 @@ impl TreeSequenceGenerator {
                         active_ancestors.retain(|&ancestor| ancestor != event.ancestor_index);
                     }
                 }
-                next_event_position = sweep_line_queue.peek().map_or(usize::MAX, |e| e.position)
+                next_event_position = sweep_line_queue.peek_key().map_or(usize::MAX, |e| e.0)
             }
 
             let mut max_site_likelihood = -1f64;
