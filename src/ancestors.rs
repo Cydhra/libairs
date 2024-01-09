@@ -462,14 +462,19 @@ impl AncestorGenerator {
 
         let focal_sites = broken_focal_sites;
 
-        // TODO make the parallelization optional
-
-        let ancestors = focal_sites
+        // TODO make the parallelization optional (par_iter)
+        let mut ancestors: Vec<_> = focal_sites
             .iter()
             .map(|focal_sites| self.generate_ancestor(focal_sites))
             .collect();
 
-        // TODO sort ancestors by age
+        // TODO parallel sort ancestors by age (par_sort_unstable_by)
+        ancestors.sort_unstable_by(|a, b| {
+            a.relative_age()
+                .partial_cmp(&b.relative_age())
+                .unwrap()
+                .reverse()
+        });
 
         ancestors
     }

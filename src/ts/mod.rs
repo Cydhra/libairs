@@ -315,7 +315,6 @@ mod tests {
         );
 
         let mut ancestors = ag.generate_ancestors();
-        ancestors.sort_unstable_by(|a, b| b.relative_age().partial_cmp(&a.relative_age()).unwrap());
 
         let ancestor_length = ancestors[0].len();
         let mut ancestral_state = AncestralSequence::from_ancestral_state(ancestor_length, 1.0);
