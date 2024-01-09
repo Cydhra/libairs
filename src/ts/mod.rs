@@ -47,8 +47,8 @@ impl TreeSequenceNode {
 pub struct TreeSequenceGenerator {
     ancestor_sequences: Vec<AncestralSequence>,
     partial_tree_sequence: Vec<TreeSequenceNode>,
-    recombination_probabilities: Vec<f64>,
-    mismatch_probabilities: Vec<f64>,
+    recombination_prob: f64,
+    mismatch_prob: f64,
 }
 
 impl TreeSequenceGenerator {
@@ -68,18 +68,13 @@ impl TreeSequenceGenerator {
         // TODO those values are only tsinfer's defaults, the actual calculation of the values
         //  works differently
 
-        let mut recombination_probabilities = vec![recombination_rate; variant_positions.len()];
-        recombination_probabilities[0] = 0f64;
-
-        let mismatch_probabilities = vec![mismatch_rate; variant_positions.len()];
-
         Self {
             ancestor_sequences,
             partial_tree_sequence: (0..num_ancestors)
                 .map(|i| TreeSequenceNode::empty(i))
                 .collect(),
-            recombination_probabilities,
-            mismatch_probabilities,
+            recombination_prob: recombination_rate,
+            mismatch_prob: mismatch_rate,
         }
     }
 
@@ -98,6 +93,9 @@ impl TreeSequenceGenerator {
         let mut recombination_points = vec![vec![false; num_ancestors]; candidate.len()];
         let mut max_likelihoods = vec![0; candidate.len()];
         let candidate_start = candidate.start();
+
+        let rho = self.recombination_prob;
+        let mu = self.mismatch_prob;
 
         for (site, &state) in candidate.site_iter() {
             // update active ancestors
@@ -142,10 +140,12 @@ impl TreeSequenceGenerator {
             let mut max_site_likelihood = -1f64;
             let mut max_site_likelihood_ancestor: Option<usize> = None;
 
-            let rho = self.recombination_probabilities[site];
-            let mu = self.mismatch_probabilities[site];
             let k = active_ancestors.len() as f64;
+            let prob_recomb = rho / k;
+            let prob_no_recomb = 1f64 - rho - rho / k;
+
             let num_alleles = 2f64; // TODO we might not want to hard-code this
+            let rev_mu = 1f64 - (num_alleles - 1f64) * mu;
 
             debug_assert!(
                 active_ancestors.len() > 0,
@@ -154,8 +154,7 @@ impl TreeSequenceGenerator {
             );
             for &ancestor_id in active_ancestors.iter() {
                 let ancestral_sequence = &self.ancestor_sequences[ancestor_id];
-                let prob_no_recomb = likelihoods[ancestor_id] * (1f64 - rho - rho / k);
-                let prob_recomb = rho / k;
+                let prob_no_recomb = likelihoods[ancestor_id] * prob_no_recomb;
 
                 let pt = if prob_no_recomb > prob_recomb {
                     prob_no_recomb
@@ -164,11 +163,7 @@ impl TreeSequenceGenerator {
                     prob_recomb
                 };
 
-                let pe = if state == ancestral_sequence[site] {
-                    1f64 - (num_alleles - 1f64) * mu
-                } else {
-                    mu
-                };
+                let pe = if state == ancestral_sequence[site] { rev_mu } else { mu };
 
                 likelihoods[ancestor_id] = pt * pe;
 
