@@ -216,7 +216,7 @@ impl TreeSequenceGenerator {
         }
 
         // TODO dont need to clone here if we consume the generator
-        TreeSequence(self.partial_tree_sequence)
+        TreeSequence(self.partial_tree_sequence, self.ancestor_sequences)
     }
 }
 

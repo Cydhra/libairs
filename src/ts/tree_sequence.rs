@@ -1,6 +1,7 @@
 use std::io;
 use std::io::Write;
 use std::path::Path;
+use crate::ancestors::AncestralSequence;
 
 /// An interval in an ancestor that is covered by a parent node in the tree sequence.
 /// The interval is defined by the start and (exclusive) end position of the interval and the index of the
@@ -42,12 +43,12 @@ impl TreeSequenceNode {
         }
     }
 
-    pub fn tskit_format_node(&self, writer: &mut dyn Write) -> io::Result<()> {
+    pub fn tskit_format_node(&self, ancestor: &AncestralSequence, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_fmt(format_args!(
             "{id}\t{is_sample}\t{time}\n",
             id = self.ancestor_index,
             is_sample = 0, // todo samples are not supported yet
-            time = 0.0, // todo get the relative time of the ancestor
+            time = ancestor.relative_age(),
         ))
     }
 
@@ -66,7 +67,7 @@ impl TreeSequenceNode {
 }
 
 // todo this should probably be a proper struct with hidden fields
-pub struct TreeSequence(pub Vec<TreeSequenceNode>);
+pub struct TreeSequence(pub Vec<TreeSequenceNode>, pub Vec<AncestralSequence>);
 
 impl TreeSequence {
     pub fn tskit_export(&self, path: &Path) -> io::Result<()> {
@@ -78,7 +79,7 @@ impl TreeSequence {
             "id\tis_sample\ttime\n"
         ))?;
         for node in &self.0 {
-            node.tskit_format_node(&mut writer)?;
+            node.tskit_format_node(&self.1[node.ancestor_index], &mut writer)?;
         }
 
         let mut edge_file = path.to_path_buf();
@@ -88,7 +89,8 @@ impl TreeSequence {
         writer.write_fmt(format_args!(
             "left\tright\tparent\tchild\n"
         ))?;
-        for node in &self.0 {
+        // skip first because tskit doesn't like the root node to have an edge to itself. TODO we can remove this anyway at some point
+        for node in &self.0.iter().skip(1) {
             node.tskit_format_edges(&mut writer)?;
         }
         Ok(())
