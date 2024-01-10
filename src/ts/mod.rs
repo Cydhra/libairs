@@ -405,7 +405,11 @@ mod tests {
     fn compute_chr20_10k_variants() {
         let variant_sites = read_variant_dump("testdata/chr20_10k_variants.txt");
         let ag = AncestorGenerator::from_iter(variant_sites);
-        let ancestors = ag.generate_ancestors();
+        let mut ancestors = ag.generate_ancestors();
+
+        let mut ancestral_state = AncestralSequence::from_ancestral_state(ag.sites.len(), 1.0);
+        ancestral_state.end = ag.sites.len();
+        ancestors.insert(0, ancestral_state);
 
         let mut ancestor_matcher = TreeSequenceGenerator::new(
             ancestors,
@@ -414,5 +418,6 @@ mod tests {
             ag.sites.iter().map(|s| s.position).collect(),
         );
         let ts = ancestor_matcher.generate_tree_sequence();
+        ts.tskit_export("testdata/results".as_ref()).expect("failed to export tree sequence");
     }
 }
