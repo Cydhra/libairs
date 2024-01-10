@@ -1,9 +1,11 @@
 /// A single variant site defined by the genotype state.
 #[derive(Clone, Debug)]
 pub struct VariantSite {
+    // todo hide most fields
+
     pub(crate) genotypes: Vec<u8>,
     // ancestral states per sample
-    pub(crate) position: usize,
+    pub position: usize,
     // position in the genome
     pub(crate) relative_age: f64,
     // whether the site is bi-allelic or not

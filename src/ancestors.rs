@@ -137,7 +137,8 @@ impl IndexMut<usize> for AncestralSequence {
 /// infer the ancestral state for surrounding sites. For each set of focal sites, a single ancestral
 /// sequence is generated.
 pub struct AncestorGenerator {
-    pub(crate) sites: Vec<VariantSite>,
+    // todo hide fields?
+    pub sites: Vec<VariantSite>,
 }
 
 impl AncestorGenerator {
