@@ -1,3 +1,7 @@
+use std::io;
+use std::io::Write;
+use std::path::Path;
+
 /// An interval in an ancestor that is covered by a parent node in the tree sequence.
 /// The interval is defined by the start and (exclusive) end position of the interval and the index of the
 /// parent node.
@@ -36,5 +40,57 @@ impl TreeSequenceNode {
             ancestor_index,
             node_intervals: Vec::new(),
         }
+    }
+
+    pub fn tskit_format_node(&self, writer: &mut dyn Write) -> io::Result<()> {
+        writer.write_fmt(format_args!(
+            "{id}\t{is_sample}\t{time}\n",
+            id = self.ancestor_index,
+            is_sample = 0, // todo samples are not supported yet
+            time = 0.0, // todo get the relative time of the ancestor
+        ))
+    }
+
+    pub fn tskit_format_edges(&self, writer: &mut dyn Write) -> io::Result<()> {
+        for interval in &self.node_intervals {
+            writer.write_fmt(format_args!(
+                "{left}\t{right}\t{parent}\t{child}\n",
+                left = interval.start, // todo get the actual genomic position instead of the index into the variant sites
+                right = interval.end, // same here
+                parent = interval.parent,
+                child = self.ancestor_index,
+            ))?;
+        }
+        Ok(())
+    }
+}
+
+// todo this should probably be a proper struct with hidden fields
+pub struct TreeSequence(pub Vec<TreeSequenceNode>);
+
+impl TreeSequence {
+    pub fn tskit_export(&self, path: &Path) -> io::Result<()> {
+        let mut node_file = path.to_path_buf();
+        node_file.push("nodes.tsv");
+        let mut writer = std::fs::File::create(node_file)?;
+
+        writer.write_fmt(format_args!(
+            "id\tis_sample\ttime\n"
+        ))?;
+        for node in &self.0 {
+            node.tskit_format_node(&mut writer)?;
+        }
+
+        let mut edge_file = path.to_path_buf();
+        edge_file.push("edges.tsv");
+        let mut writer = std::fs::File::create(edge_file)?;
+
+        writer.write_fmt(format_args!(
+            "left\tright\tparent\tchild\n"
+        ))?;
+        for node in &self.0 {
+            node.tskit_format_edges(&mut writer)?;
+        }
+        Ok(())
     }
 }

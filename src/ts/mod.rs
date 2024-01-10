@@ -5,7 +5,7 @@ use crate::ts::SweepEventKind::Start;
 use radix_heap::RadixHeapMap;
 use std::cmp::{Ordering, Reverse};
 use std::io::Write;
-use crate::ts::tree_sequence::{TreeSequenceInterval, TreeSequenceNode};
+use crate::ts::tree_sequence::{TreeSequence, TreeSequenceInterval, TreeSequenceNode};
 
 pub struct TreeSequenceGenerator {
     ancestor_sequences: Vec<AncestralSequence>,
@@ -175,7 +175,7 @@ impl TreeSequenceGenerator {
         nodes
     }
 
-    pub fn generate_tree_sequence(&mut self) -> Vec<TreeSequenceNode> {
+    pub fn generate_tree_sequence(mut self) -> TreeSequence {
         let mut sweep_line_queue = RadixHeapMap::<Reverse<usize>, SweepEvent>::new();
 
         let mut current_age = f64::INFINITY;
@@ -216,7 +216,7 @@ impl TreeSequenceGenerator {
         }
 
         // TODO dont need to clone here if we consume the generator
-        self.partial_tree_sequence.clone()
+        TreeSequence(self.partial_tree_sequence)
     }
 }
 
@@ -286,7 +286,7 @@ mod tests {
         let ancestors_copy = ancestors.clone();
         let mut ancestor_matcher =
             TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 3, 4, 5, 6]);
-        let ts = ancestor_matcher.generate_tree_sequence();
+        let ts = ancestor_matcher.generate_tree_sequence().0;
 
         assert_eq!(ts.len(), 4);
         assert_eq!(ts[0].ancestor_index, 0);
@@ -346,7 +346,7 @@ mod tests {
         let ancestors_copy = ancestors.clone();
         let mut ancestor_matcher =
             TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 4, 5, 6, 7]);
-        let ts = ancestor_matcher.generate_tree_sequence();
+        let ts = ancestor_matcher.generate_tree_sequence().0;
 
         assert_eq!(ts.len(), 5);
 
@@ -414,6 +414,5 @@ mod tests {
             ag.sites.iter().map(|s| s.position).collect(),
         );
         let ts = ancestor_matcher.generate_tree_sequence();
-        black_box(ts);
     }
 }
