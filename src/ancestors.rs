@@ -469,6 +469,11 @@ impl AncestorGenerator {
             .map(|focal_sites| self.generate_ancestor(focal_sites))
             .collect();
 
+        // artificially add the root ancestor
+        let mut ancestral_state = AncestralSequence::from_ancestral_state(self.sites.len(), 1.0);
+        ancestral_state.end = self.sites.len();
+        ancestors.push(ancestral_state);
+
         // TODO parallel sort ancestors by age (par_sort_unstable_by)
         ancestors.sort_unstable_by(|a, b| {
             a.relative_age()

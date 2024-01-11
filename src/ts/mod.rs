@@ -253,11 +253,10 @@ impl Ord for SweepEvent {
 
 #[cfg(test)]
 mod tests {
-    use crate::ancestors::{AncestorGenerator, AncestralSequence};
+    use crate::ancestors::AncestorGenerator;
     use crate::dna::VariantSite;
     use crate::ts::TreeSequenceGenerator;
     use std::fs::File;
-    use std::hint::black_box;
     use std::io::{BufRead, BufReader};
 
     #[test]
@@ -280,11 +279,6 @@ mod tests {
         );
 
         let mut ancestors = ag.generate_ancestors();
-
-        let ancestor_length = ancestors[0].len();
-        let mut ancestral_state = AncestralSequence::from_ancestral_state(ancestor_length, 1.0);
-        ancestral_state.end = ancestor_length;
-        ancestors.insert(0, ancestral_state);
         let ancestors_copy = ancestors.clone();
         let mut ancestor_matcher =
             TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 3, 4, 5, 6]);
@@ -338,13 +332,7 @@ mod tests {
             .into_iter(),
         );
 
-        let mut ancestors = ag.generate_ancestors();
-        ancestors.sort_unstable_by(|a, b| b.relative_age().partial_cmp(&a.relative_age()).unwrap());
-
-        let ancestor_length = ancestors[0].len();
-        let mut ancestral_state = AncestralSequence::from_ancestral_state(ancestor_length, 1.0);
-        ancestral_state.end = ancestor_length;
-        ancestors.insert(0, ancestral_state);
+        let ancestors = ag.generate_ancestors();
         let ancestors_copy = ancestors.clone();
         let mut ancestor_matcher =
             TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 4, 5, 6, 7]);
@@ -407,11 +395,7 @@ mod tests {
     fn compute_chr20_10k_variants() {
         let variant_sites = read_variant_dump("testdata/chr20_10k_variants.txt");
         let ag = AncestorGenerator::from_iter(variant_sites);
-        let mut ancestors = ag.generate_ancestors();
-
-        let mut ancestral_state = AncestralSequence::from_ancestral_state(ag.sites.len(), 1.0);
-        ancestral_state.end = ag.sites.len();
-        ancestors.insert(0, ancestral_state);
+        let ancestors = ag.generate_ancestors();
 
         let mut ancestor_matcher = TreeSequenceGenerator::new(
             ancestors,
