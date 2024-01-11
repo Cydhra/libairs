@@ -104,8 +104,10 @@ impl TreeSequenceGenerator {
             let mut max_site_likelihood_ancestor: Option<usize> = None;
 
             let k = active_ancestors.len() as f64;
+            // probability that any one specific ancestor recombines to the current ancestors
             let prob_recomb = rho / k;
-            let prob_no_recomb = 1f64 - rho - rho / k;
+            // probability that none of the k-1 active ancestors recombines to the current ancestor
+            let prob_no_recomb = 1f64 - rho + rho / k;
 
             let num_alleles = 2f64; // TODO we might not want to hard-code this
             let rev_mu = 1f64 - (num_alleles - 1f64) * mu;
