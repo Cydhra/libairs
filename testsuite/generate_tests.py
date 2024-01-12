@@ -42,14 +42,15 @@ print(ts)
 output_file = open(f"simulation-{seed}/sim{seed}.vcf", "w")
 ts.write_vcf(output_file)
 
-with tsinfer.SampleData(path=f"simulation-{seed}/sim{seed}.samples", sequence_length=seq_length) as sample_data:
+with tsinfer.SampleData(path=f"simulation-{seed}/sim{seed}.samples", sequence_length=seq_length, max_file_size=2**20) as sample_data:
     for variant in ts.variants():
         sample_data.add_site(variant.position, variant.genotypes, variant.alleles)
 
     sample_data.finalise()
     ancestor_data = tsinfer.generate_ancestors(
         sample_data,
-        path=f"simulation-{seed}/sim{seed}.ancestors"
+        path=f"simulation-{seed}/sim{seed}.ancestors",
+        max_file_size=2**20,
     )
     ancestor_tree = tsinfer.match_ancestors(sample_data, ancestor_data)
     ancestor_tree.dump(f"simulation-{seed}/sim{seed}.ancestors.trees")
