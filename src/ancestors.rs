@@ -389,7 +389,8 @@ impl AncestorGenerator {
         let mut current_age: f64 = -1f64;
 
         // Todo we are reconstructing the hashmap a lot, this seems unnecessary
-        let mut current_focal_sites: HashMap<Vec<u8>, Vec<usize>, BuildHasherDefault<XxHash64>> = Default::default();
+        let mut current_focal_sites: HashMap<Vec<u8>, Vec<usize>, BuildHasherDefault<XxHash64>> =
+            Default::default();
         for (focal_site, site) in sites {
             if f64::abs(site.relative_age - current_age) < 1e-6 {
                 if current_focal_sites.contains_key(&site.genotypes) {

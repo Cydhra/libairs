@@ -8,7 +8,10 @@ use std::path::PathBuf;
 
 fn main() {
     if env::args().len() < 2 {
-        println!("usage: {} <vcf file> [<compressed>]", env::args().nth(0).unwrap());
+        println!(
+            "usage: {} <vcf file> [<compressed>]",
+            env::args().nth(0).unwrap()
+        );
         return;
     }
     let vcf = env::args().nth(1).unwrap();
@@ -35,7 +38,7 @@ fn main() {
             .map(|s| s.position)
             .collect(),
     )
-        .generate_tree_sequence();
+    .generate_tree_sequence();
 
     let mut target_file = PathBuf::from(vcf);
     target_file.set_extension("trees");

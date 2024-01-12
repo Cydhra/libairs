@@ -1,7 +1,7 @@
+use crate::ancestors::AncestralSequence;
 use std::io;
 use std::io::Write;
 use std::path::Path;
-use crate::ancestors::AncestralSequence;
 
 /// An interval in an ancestor that is covered by a parent node in the tree sequence.
 /// The interval is defined by the start and (exclusive) end position of the interval and the index of the
@@ -43,7 +43,11 @@ impl TreeSequenceNode {
         }
     }
 
-    pub fn tskit_format_node(&self, ancestor: &AncestralSequence, writer: &mut dyn Write) -> io::Result<()> {
+    pub fn tskit_format_node(
+        &self,
+        ancestor: &AncestralSequence,
+        writer: &mut dyn Write,
+    ) -> io::Result<()> {
         writer.write_fmt(format_args!(
             "{id}\t{is_sample}\t{time}\n",
             id = self.ancestor_index,
@@ -57,7 +61,7 @@ impl TreeSequenceNode {
             writer.write_fmt(format_args!(
                 "{left}\t{right}\t{parent}\t{child}\n",
                 left = interval.start, // todo get the actual genomic position instead of the index into the variant sites
-                right = interval.end, // same here
+                right = interval.end,  // same here
                 parent = interval.parent,
                 child = self.ancestor_index,
             ))?;
@@ -75,9 +79,7 @@ impl TreeSequence {
         node_file.push("nodes.tsv");
         let mut writer = std::fs::File::create(node_file)?;
 
-        writer.write_fmt(format_args!(
-            "id\tis_sample\ttime\n"
-        ))?;
+        writer.write_fmt(format_args!("id\tis_sample\ttime\n"))?;
         for node in &self.0 {
             node.tskit_format_node(&self.1[node.ancestor_index], &mut writer)?;
         }
@@ -86,9 +88,7 @@ impl TreeSequence {
         edge_file.push("edges.tsv");
         let mut writer = std::fs::File::create(edge_file)?;
 
-        writer.write_fmt(format_args!(
-            "left\tright\tparent\tchild\n"
-        ))?;
+        writer.write_fmt(format_args!("left\tright\tparent\tchild\n"))?;
         // skip first because tskit doesn't like the root node to have an edge to itself. TODO we can remove this anyway at some point
         for node in self.0.iter().skip(1) {
             node.tskit_format_edges(&mut writer)?;

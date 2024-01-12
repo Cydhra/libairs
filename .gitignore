@@ -1,6 +1,10 @@
 /target
+Cargo.lock
+
+/.idea
 
 perf.*
 flamegraph.svg
 
 testdata/*
+!testdata/.gitkeep

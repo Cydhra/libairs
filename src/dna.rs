@@ -2,7 +2,6 @@
 #[derive(Clone, Debug)]
 pub struct VariantSite {
     // todo hide most fields
-
     pub(crate) genotypes: Vec<u8>,
     // ancestral states per sample
     pub position: usize,
