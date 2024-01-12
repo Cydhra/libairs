@@ -9,6 +9,9 @@ exit_on_error() {
   exit 1
 }
 
+number_tests=0
+failed_tests=0
+
 # arguments: $1 = seed, $2 = population size, $3 = sequence length, $4 = number of samples
 run_test() {
   target_dir="simulation-$1"
@@ -21,7 +24,10 @@ run_test() {
   fi
 
   py ../testsuite/generate_tests.py $1 -p $2 -s $3 -i $4 && \
-    RUSTFLAGS="-C target-cpu=native" cargo run --release --example match_ancestors -- $target_file 2> /dev/null || exit_on_error "failed to run match_ancestors"
+    RUSTFLAGS="-C target-cpu=native" cargo run --release --example match_ancestors -- $target_file 2> /dev/null && \
+    py ../testsuite/evaluate_tests.py $1 || ((failed_tests++))
+
+  ((number_tests++))
 
   printf "\n"
 }
@@ -36,4 +42,5 @@ pushd testdata > /dev/null
 run_test 10000 10000 400000 4
 run_test 20000 10000 800000 16
 
+printf "Ran $number_tests tests, $failed_tests failed\n"
 popd > /dev/null
