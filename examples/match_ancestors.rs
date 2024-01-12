@@ -41,7 +41,7 @@ fn main() {
     .generate_tree_sequence();
 
     let mut target_file = PathBuf::from(vcf);
-    target_file.set_extension("trees");
+    target_file.pop();
     tree_sequence
         .tskit_export(&target_file)
         .expect("failed to export tree sequence");
