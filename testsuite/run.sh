@@ -3,17 +3,26 @@ if [ ! -d "testdata" ]; then
     exit 1
 fi
 
+run_test() {
+  target_dir="simulation-$1"
+  target_file="$target_dir/sim$1.vcf"
+  echo "Running test $target_dir"
+
+  # delete old test data
+  if [ -d "$target_dir" ]; then
+      rm -rf "$target_dir"
+  fi
+
+  py ../testsuite/generate_tests.py $1 -p $2 -s $3 -i $4 && \
+    cargo run --release --example match_ancestors -- $target_file
+}
+
 # setup cargo
 export RUSTFLAGS="-C target-cpu=native"
 
-pushd testdata
+pushd testdata > /dev/null
 
-# delete old test data
-if [ -d "simulation-10000" ]; then
-    rm -rf simulation-10000
-fi
+run_test 10000 10000 400000 4
+run_test 20000 10000 800000 16
 
-py ../testsuite/generate_tests.py 10000 -p 10000 -s 400000
-cargo run --release --example match_ancestors -- ./simulation-10000/sim10000.vcf
-
-popd
+popd > /dev/null
