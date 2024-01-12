@@ -9,6 +9,7 @@ use std::cmp::{Ordering, Reverse};
 pub struct TreeSequenceGenerator {
     ancestor_sequences: Vec<AncestralSequence>,
     partial_tree_sequence: Vec<TreeSequenceNode>,
+    variant_positions: Vec<usize>,
     recombination_prob: f64,
     mismatch_prob: f64,
 }
@@ -33,6 +34,7 @@ impl TreeSequenceGenerator {
             partial_tree_sequence: (0..num_ancestors)
                 .map(|i| TreeSequenceNode::empty(i))
                 .collect(),
+            variant_positions,
             recombination_prob: recombination_rate,
             mismatch_prob: mismatch_rate,
         }
@@ -159,18 +161,18 @@ impl TreeSequenceGenerator {
         }
         let mut nodes = Vec::new();
         let mut ancestor_index = max_likelihoods[candidate.end() - 1 - candidate_start];
-        let mut ancestor_coverage_end = candidate.end();
+        let mut ancestor_coverage_end = self.variant_positions[candidate.end() - 1];
 
         for (site, _) in candidate.site_iter().rev() {
             if recombination_points[site - candidate_start][ancestor_index] && max_likelihoods[site - 1 - candidate_start] != ancestor_index {
                 nodes.push(TreeSequenceInterval::new(
                     ancestor_index,
-                    site,
+                    self.variant_positions[site],
                     ancestor_coverage_end,
                 ));
 
                 ancestor_index = max_likelihoods[site - 1 - candidate_start];
-                ancestor_coverage_end = site;
+                ancestor_coverage_end = self.variant_positions[site];
             }
         }
         nodes.push(TreeSequenceInterval::new(
@@ -285,7 +287,7 @@ mod tests {
         let ancestors = ag.generate_ancestors();
         let ancestors_copy = ancestors.clone();
         let ancestor_matcher =
-            TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 3, 4, 5, 6]);
+            TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 3, 4, 5]);
         let ts = ancestor_matcher.generate_tree_sequence().0;
 
         assert_eq!(ts.len(), 4);
