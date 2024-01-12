@@ -510,9 +510,10 @@ mod tests {
 
         let ancestors = ag.generate_ancestors();
 
-        // TODO find out why tsinfer generates the root ancestor twice
-        // TODO generate root ancestor
-        assert_eq!(ancestors.len(), 4); // TODO 5
+        assert_eq!(ancestors.len(), 5);
+
+        // root ancestor
+        assert_eq!(ancestors[0].state, vec![0, 0, 0, 0]);
 
         assert!(ancestors.iter().any(|a| a.state == vec![1, 0, 0, 0]));
         assert!(ancestors.iter().any(|a| a.state == vec![0, 1, 0, 0]));
@@ -538,9 +539,10 @@ mod tests {
 
         let ancestors = ag.generate_ancestors();
 
-        // TODO find out why tsinfer generates the root ancestor twice
-        // TODO generate root ancestor
-        assert_eq!(ancestors.len(), 2); // TODO 3
+        assert_eq!(ancestors.len(), 3);
+
+        // root ancestor
+        assert_eq!(ancestors[0].state, vec![0, 0, 0, 0]);
 
         assert!(ancestors.iter().any(|a| a.state == vec![1, 0, 0, 1]));
         assert!(ancestors.iter().any(|a| a.state == vec![0, 1, 1, 0]));
