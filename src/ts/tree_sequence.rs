@@ -90,7 +90,7 @@ impl TreeSequence {
             "left\tright\tparent\tchild\n"
         ))?;
         // skip first because tskit doesn't like the root node to have an edge to itself. TODO we can remove this anyway at some point
-        for node in &self.0.iter().skip(1) {
+        for node in self.0.iter().skip(1) {
             node.tskit_format_edges(&mut writer)?;
         }
         Ok(())

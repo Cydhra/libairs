@@ -5,20 +5,22 @@ use vcfire::VcfFile;
 
 pub fn from_vcf(file: &str, compressed: bool) -> io::Result<AncestorGenerator> {
     let input = VcfFile::parse(file, compressed)?;
-    Ok(AncestorGenerator::from_iter(input.records()?.map(
+    let generator = AncestorGenerator::from_iter(input.records()?.map(
         |record| {
+            let record = record.ok().unwrap();
             VariantSite::new(
-                record?
+                record
                     .sample_info
                     .iter()
                     .flat_map(|sample_info| {
                         sample_info
                             .samples()
-                            .map(|s| s.get_genotype().unwrap().split('|'))
+                            .flat_map(|s| s.get_genotype().unwrap().split('|').map(|s| s.parse::<u8>().unwrap()).collect::<Vec<_>>())
                     })
                     .collect(),
-                record?.position as usize,
+                record.position as usize,
             )
         },
-    )))
+    ));
+    Ok(generator)
 }
