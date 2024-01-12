@@ -1,5 +1,4 @@
 import sys
-import tsinfer
 import tskit
 import argparse
 
@@ -7,7 +6,7 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 if len(sys.argv) < 2:
-    print("Usage: python evaluate_tests.py <seed>")
+    print("Usage: python evaluate_tests.py <seed> <sequence_length>")
     sys.exit()
 
 parser = argparse.ArgumentParser(
@@ -15,10 +14,12 @@ parser = argparse.ArgumentParser(
     description='Generate test cases for a tskit / libairs test suite')
 
 parser.add_argument('seed', type=int, help='test case seed')
+parser.add_argument('sequence_length', type=int, help='sequence length')
 
 args = parser.parse_args()
 
 seed = args.seed
+sequence_length = args.sequence_length
 simulation_dir = f"simulation-{seed}"
 simulation_filename = f"{simulation_dir}/sim{seed}"
 
@@ -26,7 +27,7 @@ tsinfer_ts = tskit.load(f"{simulation_filename }.ancestors.trees")
 
 nodes = open(f"{simulation_dir}/nodes.tsv")
 edges = open(f"{simulation_dir}/edges.tsv")
-airs_ts = tskit.load_text(nodes, edges)
+airs_ts = tskit.load_text(nodes, edges, sequence_length=sequence_length)
 
 tree_sequence_length = len(airs_ts.trees())
 

@@ -5,6 +5,7 @@
 
 use std::env;
 use std::path::PathBuf;
+use vcfire::VcfFile;
 
 fn main() {
     if env::args().len() < 2 {
@@ -26,10 +27,29 @@ fn main() {
         false
     };
 
+    let vcf_header = VcfFile::parse(&vcf, compressed).unwrap().header;
+    let contig_config = vcf_header
+        .values
+        .iter()
+        .find(|(key, _)| key == "contig")
+        .unwrap()
+        .1
+        .clone();
+    let sequence_length = contig_config[1..contig_config.len() - 1]
+        .split(',')
+        .find(|s| s.starts_with("length="))
+        .unwrap()
+        .split('=')
+        .nth(1)
+        .unwrap()
+        .parse::<usize>()
+        .unwrap();
+
     let ancestor_generator = libairs::convenience::from_vcf(&vcf, compressed).unwrap();
     let ancestors = ancestor_generator.generate_ancestors();
     let tree_sequence = libairs::ts::TreeSequenceGenerator::new(
         ancestors,
+        sequence_length,
         1e-2,
         1e-20,
         ancestor_generator

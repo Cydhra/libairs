@@ -10,6 +10,7 @@ pub struct TreeSequenceGenerator {
     ancestor_sequences: Vec<AncestralSequence>,
     partial_tree_sequence: Vec<TreeSequenceNode>,
     variant_positions: Vec<usize>,
+    sequence_length: usize,
     recombination_prob: f64,
     mismatch_prob: f64,
 }
@@ -17,6 +18,7 @@ pub struct TreeSequenceGenerator {
 impl TreeSequenceGenerator {
     pub fn new(
         mut ancestor_sequences: Vec<AncestralSequence>,
+        sequence_length: usize,
         recombination_rate: f64,
         mismatch_rate: f64,
         variant_positions: Vec<usize>,
@@ -35,6 +37,7 @@ impl TreeSequenceGenerator {
                 .map(|i| TreeSequenceNode::empty(i))
                 .collect(),
             variant_positions,
+            sequence_length,
             recombination_prob: recombination_rate,
             mismatch_prob: mismatch_rate,
         }
@@ -164,7 +167,9 @@ impl TreeSequenceGenerator {
         let mut ancestor_coverage_end = self.variant_positions[candidate.end() - 1];
 
         for (site, _) in candidate.site_iter().rev() {
-            if recombination_points[site - candidate_start][ancestor_index] && max_likelihoods[site - 1 - candidate_start] != ancestor_index {
+            if recombination_points[site - candidate_start][ancestor_index]
+                && max_likelihoods[site - 1 - candidate_start] != ancestor_index
+            {
                 nodes.push(TreeSequenceInterval::new(
                     ancestor_index,
                     self.variant_positions[site],
@@ -287,7 +292,7 @@ mod tests {
         let ancestors = ag.generate_ancestors();
         let ancestors_copy = ancestors.clone();
         let ancestor_matcher =
-            TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 3, 4, 5]);
+            TreeSequenceGenerator::new(ancestors, 5, 1e-2, 1e-20, vec![1, 2, 3, 4, 5]);
         let ts = ancestor_matcher.generate_tree_sequence().0;
 
         assert_eq!(ts.len(), 4);
@@ -341,7 +346,7 @@ mod tests {
         let ancestors = ag.generate_ancestors();
         let ancestors_copy = ancestors.clone();
         let ancestor_matcher =
-            TreeSequenceGenerator::new(ancestors, 1e-2, 1e-20, vec![1, 2, 4, 5, 6, 7]);
+            TreeSequenceGenerator::new(ancestors, 7,1e-2, 1e-20, vec![1, 2, 4, 5, 6, 7]);
         let ts = ancestor_matcher.generate_tree_sequence().0;
 
         assert_eq!(ts.len(), 5);

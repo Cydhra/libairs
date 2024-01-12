@@ -25,7 +25,7 @@ run_test() {
 
   py ../testsuite/generate_tests.py $1 -p $2 -s $3 -i $4 && \
     RUSTFLAGS="-C target-cpu=native" cargo run --release --example match_ancestors -- $target_file 2> /dev/null && \
-    py ../testsuite/evaluate_tests.py $1 || ((failed_tests++))
+    py ../testsuite/evaluate_tests.py $1 $3 || ((failed_tests++))
 
   ((number_tests++))
 
