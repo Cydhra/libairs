@@ -40,7 +40,7 @@ ts = msprime.sim_ancestry(
 # Optionally add finite-site mutations to the ts using the Jukes & Cantor model, creating SNPs
 ts = msprime.sim_mutations(ts, rate=1e-8, random_seed=seed)
 
-print(ts)
+print("msprime generated tree sequence with", len(ts.trees()), "trees")
 
 output_file = open(f"simulation-{seed}/sim{seed}.vcf", "w")
 ts.write_vcf(output_file)
@@ -57,3 +57,4 @@ with tsinfer.SampleData(path=f"simulation-{seed}/sim{seed}.samples", sequence_le
     )
     ancestor_tree = tsinfer.match_ancestors(sample_data, ancestor_data)
     ancestor_tree.dump(f"simulation-{seed}/sim{seed}.ancestors.trees")
+    print("tsinfer generated tree sequence with", len(ancestor_tree.trees()), "trees")

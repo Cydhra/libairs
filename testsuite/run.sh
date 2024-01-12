@@ -1,12 +1,19 @@
 if [ ! -d "testdata" ]; then
-    echo "Please run this script from the repository root directory"
+    printf "Please run this script from the repository root directory\n"
     exit 1
 fi
 
+# exit function for error reporting
+exit_on_error() {
+  printf "$1\n"
+  exit 1
+}
+
+# arguments: $1 = seed, $2 = population size, $3 = sequence length, $4 = number of samples
 run_test() {
   target_dir="simulation-$1"
   target_file="$target_dir/sim$1.vcf"
-  echo "Running test $target_dir"
+  printf "Running test $target_dir\n"
 
   # delete old test data
   if [ -d "$target_dir" ]; then
@@ -14,12 +21,16 @@ run_test() {
   fi
 
   py ../testsuite/generate_tests.py $1 -p $2 -s $3 -i $4 && \
-    cargo run --release --example match_ancestors -- $target_file
+    RUSTFLAGS="-C target-cpu=native" cargo run --release --example match_ancestors -- $target_file 2> /dev/null || exit_on_error "failed to run match_ancestors"
+
+  printf "\n"
 }
 
-# setup cargo
-export RUSTFLAGS="-C target-cpu=native"
+# check if cargo is installed and python venv is available
+cargo --version &> /dev/null || exit_on_error "cargo not installed"
+py --version &> /dev/null || exit_on_error "no python virtual env available"
 
+# run tests
 pushd testdata > /dev/null
 
 run_test 10000 10000 400000 4
