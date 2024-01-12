@@ -162,18 +162,13 @@ impl TreeSequenceGenerator {
         let mut ancestor_coverage_end = candidate.end();
 
         for (site, _) in candidate.site_iter().rev() {
-            if recombination_points[site - candidate_start][ancestor_index] {
+            if recombination_points[site - candidate_start][ancestor_index] && max_likelihoods[site - 1 - candidate_start] != ancestor_index {
                 nodes.push(TreeSequenceInterval::new(
                     ancestor_index,
                     site,
                     ancestor_coverage_end,
                 ));
-                // assert_ne!(
-                //     ancestor_index,
-                //     max_likelihoods[site - 1 - candidate_start],
-                //     "recombination point {} is not a recombination point",
-                //     site
-                // );
+
                 ancestor_index = max_likelihoods[site - 1 - candidate_start];
                 ancestor_coverage_end = site;
             }
