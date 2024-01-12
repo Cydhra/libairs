@@ -13,13 +13,16 @@ parser = argparse.ArgumentParser(
     description='Generate test cases for a tskit / libairs test suite')
 
 parser.add_argument('seed', type=int, help='test case seed')
-parser.add_argument('-p', '--pop_size', type=int, help='population size')
-parser.add_argument('-s', '--seq_length', type=int, help='sequence length')
+parser.add_argument('-p', '--pop_size', type=int, help='population size', default=1e4)
+parser.add_argument('-s', '--seq_length', type=int, help='sequence length', default=1e5)
+parser.add_argument('-i', '--samples', type=int, help='number of haploid samples', default=4)
+
 args = parser.parse_args()
 
 seed = args.seed
 pop_size = args.pop_size
 seq_length = args.seq_length
+samples = args.samples
 
 os.mkdir(f"simulation-{seed}")
 
@@ -27,7 +30,7 @@ sweep_model = msprime.SweepGenicSelection(
     position=seq_length / 2, start_frequency=0.0001, end_frequency=0.9999, s=0.25, dt=1e-6)
 
 ts = msprime.sim_ancestry(
-    4,
+    samples,
     model=[sweep_model, msprime.StandardCoalescent()],
     population_size=pop_size,
     sequence_length=seq_length,
