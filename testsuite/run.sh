@@ -13,7 +13,7 @@ if [ -d "simulation-10000" ]; then
     rm -rf simulation-10000
 fi
 
-python ../testsuite/generate_tests.py 10000 -p 10000 -s 400000
+py ../testsuite/generate_tests.py 10000 -p 10000 -s 400000
 cargo run --release --example match_ancestors -- ./simulation-10000/sim10000.vcf
 
 popd
