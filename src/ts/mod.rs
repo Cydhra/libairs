@@ -164,7 +164,11 @@ impl TreeSequenceGenerator {
         }
         let mut nodes = Vec::new();
         let mut ancestor_index = max_likelihoods[candidate.end() - 1 - candidate_start];
-        let mut ancestor_coverage_end = self.variant_positions[candidate.end() - 1];
+        let mut ancestor_coverage_end = if candidate.end() == self.variant_positions.len() {
+            self.sequence_length
+        } else {
+            self.variant_positions[candidate.end() - 1]
+        };
 
         for (site, _) in candidate.site_iter().rev() {
             if recombination_points[site - candidate_start][ancestor_index]
@@ -182,7 +186,7 @@ impl TreeSequenceGenerator {
         }
         nodes.push(TreeSequenceInterval::new(
             ancestor_index,
-            0,
+            if candidate.start() == 0 { 0 } else { self.variant_positions[candidate.start()] },
             ancestor_coverage_end,
         ));
 
@@ -346,7 +350,7 @@ mod tests {
         let ancestors = ag.generate_ancestors();
         let ancestors_copy = ancestors.clone();
         let ancestor_matcher =
-            TreeSequenceGenerator::new(ancestors, 7,1e-2, 1e-20, vec![1, 2, 4, 5, 6, 7]);
+            TreeSequenceGenerator::new(ancestors, 7, 1e-2, 1e-20, vec![1, 2, 4, 5, 6, 7]);
         let ts = ancestor_matcher.generate_tree_sequence().0;
 
         assert_eq!(ts.len(), 5);
