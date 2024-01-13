@@ -51,7 +51,7 @@ impl TreeSequenceNode {
         writer.write_fmt(format_args!(
             "{id}\t{is_sample}\t{time}\n",
             id = self.ancestor_index + 1, // add one to the node index because tskit uses the virtual root node, so we encode the root twice
-            is_sample = 0, // todo samples are not supported yet
+            is_sample = 1, // todo samples are not supported yet
             time = ancestor.relative_age(),
         ))
     }
@@ -82,7 +82,12 @@ impl TreeSequence {
 
         writer.write_fmt(format_args!("id\tis_sample\ttime\n"))?;
         // write root node twice, because tskit uses the virtual root
-        writer.write_fmt(format_args!("0\t0\t1.2\n"))?;
+        writer.write_fmt(format_args!(
+            "{id}\t{is_sample}\t{time}\n",
+            id = 0,
+            is_sample = 1,
+            time = 2.0,
+        ))?;
 
         for node in &self.0 {
             node.tskit_format_node(&self.1[node.ancestor_index], &mut writer)?;
