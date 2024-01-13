@@ -1,4 +1,5 @@
 import sys
+import tsinfer
 import tskit
 import argparse
 
@@ -32,6 +33,39 @@ airs_ts = tskit.load_text(nodes, edges, sequence_length=sequence_length)
 tree_sequence_length = airs_ts.num_trees
 
 print("airs generated tree sequence with", tree_sequence_length, "trees")
+
+# Check the ancestors are equal
+tsinfer_ancestors = tsinfer.load(f"{simulation_filename}.ancestors")
+airs_ancestor_file = open(f"{simulation_dir}/ancestors.tsv", 'r')
+lines = [line.rstrip() for line in airs_ancestor_file]
+
+# Check that the number of ancestors is the same (minus the header for lines, and minus the tsinfer virtual root ancestor)
+if len(lines) - 1 != tsinfer_ancestors.num_ancestors - 1:
+    eprint("airs and tsinfer disagree on number of ancestors: (airs:", len(lines) - 1, ", tsi: ",
+           tsinfer_ancestors.num_ancestors - 1, ")")
+    sys.exit(1)
+
+# Check that the ancestors are the same
+for line in lines[1:]:
+    # extract ancestor definition
+    start, end, age, focal_sites, genotypes = line.split('\t')
+    # convert focal sites in int array
+    focal_sites = list(map(lambda s: int(s), filter(lambda s: s != "", focal_sites[1:-1].split(', '))))
+
+    # convert genotypes in int array
+    genotypes = list(map(lambda s: int(s), list(genotypes)))
+
+    # find ancestor in tsinfer ancestors using focal site
+    ts_anc = next(a for a in tsinfer_ancestors.ancestors() if
+                  len(a.focal_sites) == len(focal_sites) and all(x == y for x, y in zip(a.focal_sites, focal_sites)))
+
+    # check if ancestors are equal
+    if len(genotypes) == len(ts_anc.haplotype) and all(x == y for x, y in zip(genotypes, ts_anc.haplotype)):
+        continue
+    else:
+        eprint("airs and tsinfer disagree on ancestor: (airs: ", focal_sites, ": ", genotypes, ", tsi: ", ts_anc, ")")
+        sys.exit(1)
+
 
 # Check that the tree sequences have the same number of trees
 if tree_sequence_length != tsinfer_ts.num_trees:
