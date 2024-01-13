@@ -39,7 +39,7 @@ impl VariantSite {
         // TODO technically this is not correct, since there could be a derived allele that isn't
         //  represented with a 1.
         let is_biallelic = highest_state == 1;
-        let is_singleton = derived_sites == 1 || derived_sites == genotypes.len() - 1;
+        let is_singleton = derived_sites == 1;
         VariantSite {
             genotypes,
             position,
