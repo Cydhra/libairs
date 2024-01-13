@@ -62,8 +62,9 @@ impl TreeSequenceNode {
                 "{left}\t{right}\t{parent}\t{child}\n",
                 left = interval.start, // todo get the actual genomic position instead of the index into the variant sites
                 right = interval.end,  // same here
-                parent = interval.parent,
-                child = self.ancestor_index,
+                // add one to the node index because tskit uses the virtual root node, so we encode the root twice
+                parent = interval.parent + 1,
+                child = self.ancestor_index + 1,
             ))?;
         }
         Ok(())
@@ -80,6 +81,9 @@ impl TreeSequence {
         let mut writer = std::fs::File::create(node_file)?;
 
         writer.write_fmt(format_args!("id\tis_sample\ttime\n"))?;
+        // write root node twice, because tskit uses the virtual root
+        self.0[0].tskit_format_node(&self.1[0], &mut writer)?;
+
         for node in &self.0 {
             node.tskit_format_node(&self.1[node.ancestor_index], &mut writer)?;
         }
