@@ -5,9 +5,13 @@ use crate::ts::tree_sequence::{TreeSequence, TreeSequenceInterval, TreeSequenceN
 use crate::ts::SweepEventKind::Start;
 use radix_heap::RadixHeapMap;
 use std::cmp::{Ordering, Reverse};
+use std::fs::File;
+use std::io;
+use std::io::Write;
+use std::path::Path;
 
 pub struct TreeSequenceGenerator {
-    ancestor_sequences: Vec<AncestralSequence>,
+    pub ancestor_sequences: Vec<AncestralSequence>,
     partial_tree_sequence: Vec<TreeSequenceNode>,
     variant_positions: Vec<usize>,
     sequence_length: usize,
@@ -236,6 +240,20 @@ impl TreeSequenceGenerator {
 
         // TODO dont need to clone here if we consume the generator
         TreeSequence(self.partial_tree_sequence, self.ancestor_sequences)
+    }
+
+    /// Export the tree sequence in a TSV format that can be read by the test suite
+    pub fn export_ancestors(&self, path: &Path) -> io::Result<()> {
+        let mut node_file = path.to_path_buf();
+        node_file.push("ancestors.tsv");
+        let mut writer = File::create(node_file)?;
+
+        writer.write_fmt(format_args!("start\tend\tage\tfocal_sites\tstate\n"))?;
+        for ancestor in &self.ancestor_sequences {
+            ancestor.export(&mut writer)?;
+        }
+
+        Ok(())
     }
 }
 

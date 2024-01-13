@@ -4,8 +4,9 @@ use rayon::prelude::IntoParallelRefIterator;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::hash::BuildHasherDefault;
-use std::mem;
+use std::io::Write;
 use std::ops::{Index, IndexMut};
+use std::{io, mem};
 use twox_hash::XxHash64;
 
 const ANCESTRAL_STATE: u8 = 0;
@@ -89,6 +90,24 @@ impl AncestralSequence {
     /// might be shorter than the length of the underlying DNA sequence.
     pub fn len(&self) -> usize {
         self.end - self.start
+    }
+
+    /// Dump the ancestral sequence into a text file for the testing suite.
+    pub fn export(&self, writer: &mut dyn Write) -> io::Result<()> {
+        writer.write_fmt(format_args!(
+            "{start}\t{end}\t{age}\t{focal_sites:?}\t",
+            start = self.start,
+            end = self.end,
+            age = self.age,
+            focal_sites = self.focal_sites
+        ))?;
+
+        for b in &self.state[self.start..self.end] {
+            writer.write_fmt(format_args!("{}", b))?;
+        }
+
+        writer.write_fmt(format_args!("\n"))?;
+        Ok(())
     }
 }
 
