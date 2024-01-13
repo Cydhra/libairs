@@ -29,14 +29,23 @@ nodes = open(f"{simulation_dir}/nodes.tsv")
 edges = open(f"{simulation_dir}/edges.tsv")
 airs_ts = tskit.load_text(nodes, edges, sequence_length=sequence_length)
 
-tree_sequence_length = len(airs_ts.trees())
+tree_sequence_length = airs_ts.num_trees
 
 print("airs generated tree sequence with", tree_sequence_length, "trees")
 
-if tree_sequence_length != len(tsinfer_ts.trees()):
-    eprint("airs and tsinfer disagree on number of trees")
+# Check that the tree sequences have the same number of trees
+if tree_sequence_length != tsinfer_ts.num_trees:
+    eprint("airs and tsinfer disagree on number of trees: (airs:", tree_sequence_length, ", tsi: ",
+           tsinfer_ts.num_trees, ")")
     sys.exit(1)
 
+# Check that the tree sequences have the same number of nodes (ancestors)
+if airs_ts.num_nodes != tsinfer_ts.num_nodes:
+    eprint("airs and tsinfer disagree on number of nodes: (airs:", airs_ts.num_nodes, ", tsi: ", tsinfer_ts.num_nodes,
+           ")")
+    sys.exit(1)
+
+# Check that the tree sequences have the same trees by comparing the kc_distance of corresponding trees
 for tree in range(tree_sequence_length):
     airs_tree = airs_ts.at(tree)
     tsinfer_tree = tsinfer_ts.at(tree)
