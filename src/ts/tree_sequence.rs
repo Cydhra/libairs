@@ -50,7 +50,7 @@ impl TreeSequenceNode {
     ) -> io::Result<()> {
         writer.write_fmt(format_args!(
             "{id}\t{is_sample}\t{time}\n",
-            id = self.ancestor_index,
+            id = self.ancestor_index + 1, // add one to the node index because tskit uses the virtual root node, so we encode the root twice
             is_sample = 0, // todo samples are not supported yet
             time = ancestor.relative_age(),
         ))
@@ -82,7 +82,7 @@ impl TreeSequence {
 
         writer.write_fmt(format_args!("id\tis_sample\ttime\n"))?;
         // write root node twice, because tskit uses the virtual root
-        self.0[0].tskit_format_node(&self.1[0], &mut writer)?;
+        writer.write_fmt(format_args!("0\t0\t1.2\n"))?;
 
         for node in &self.0 {
             node.tskit_format_node(&self.1[node.ancestor_index], &mut writer)?;
@@ -93,7 +93,10 @@ impl TreeSequence {
         let mut writer = std::fs::File::create(edge_file)?;
 
         writer.write_fmt(format_args!("left\tright\tparent\tchild\n"))?;
-        // skip first because tskit doesn't like the root node to have an edge to itself. TODO we can remove this anyway at some point
+        // write edge from virtual root to root
+        writer.write_fmt(format_args!("0\t{}\t0\t1\n", self.0[1].node_intervals[0].end))?;
+
+        // skip first edge because tskit doesn't like the root node to have an edge to itself. TODO we can remove this anyway at some point
         for node in self.0.iter().skip(1) {
             node.tskit_format_edges(&mut writer)?;
         }
