@@ -27,7 +27,9 @@ tsinfer_ts = tskit.load(f"{simulation_filename}.ancestors.trees")
 
 nodes = open(f"{simulation_dir}/nodes.tsv")
 edges = open(f"{simulation_dir}/edges.tsv")
-airs_ts = tskit.load_text(nodes, edges)
+mutations = open(f"{simulation_dir}/mutations.tsv")
+sites = open(f"{simulation_dir}/sites.tsv")
+airs_ts = tskit.load_text(nodes, edges, mutations=mutations, sites=sites)
 
 output = open(f"{simulation_dir}/tsinfer.svg", "w+")
 svg_size = (1024, 250)

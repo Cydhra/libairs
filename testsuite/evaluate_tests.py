@@ -28,7 +28,10 @@ tsinfer_ts = tskit.load(f"{simulation_filename }.ancestors.trees")
 
 nodes = open(f"{simulation_dir}/nodes.tsv")
 edges = open(f"{simulation_dir}/edges.tsv")
-airs_ts = tskit.load_text(nodes, edges, sequence_length=sequence_length)
+mutations = open(f"{simulation_dir}/mutations.tsv")
+sites = open(f"{simulation_dir}/sites.tsv")
+print("sequence_length", sequence_length)
+airs_ts = tskit.load_text(nodes, edges, mutations=mutations, sites=sites, sequence_length=sequence_length)
 
 tree_sequence_length = airs_ts.num_trees
 
@@ -83,6 +86,11 @@ if airs_ts.num_nodes != tsinfer_ts.num_nodes:
 for tree in range(tree_sequence_length):
     airs_tree = airs_ts.at(tree)
     tsinfer_tree = tsinfer_ts.at(tree)
+
+    # print(airs_tree)
+    # print()
+    # print(tsinfer_tree)
+
     if airs_tree.interval != tsinfer_tree.interval:
         eprint(f"airs and tsinfer disagree on {tree}. tree interval (airs: {airs_tree.interval}, tsi: {tsinfer_tree.interval})")
         sys.exit(1)
