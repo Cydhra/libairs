@@ -26,13 +26,15 @@ pub struct TreeSequenceNode {
     // todo hide fields
     pub(crate) ancestor_index: usize,
     pub(crate) node_intervals: Vec<TreeSequenceInterval>,
+    pub(crate) mutations: Vec<usize>,
 }
 
 impl TreeSequenceNode {
-    pub fn new(ancestor_index: usize, node_intervals: Vec<TreeSequenceInterval>) -> Self {
+    pub fn new(ancestor_index: usize, node_intervals: Vec<TreeSequenceInterval>, mutations: Vec<usize>) -> Self {
         TreeSequenceNode {
             ancestor_index,
             node_intervals,
+            mutations,
         }
     }
 
@@ -40,6 +42,7 @@ impl TreeSequenceNode {
         TreeSequenceNode {
             ancestor_index,
             node_intervals: Vec::new(),
+            mutations: Vec::new(),
         }
     }
 
@@ -65,6 +68,18 @@ impl TreeSequenceNode {
                 // add one to the node index because tskit uses the virtual root node, so we encode the root twice
                 parent = interval.parent + 1,
                 child = self.ancestor_index + 1,
+            ))?;
+        }
+        Ok(())
+    }
+
+    pub fn tskit_format_mutations(&self, writer: &mut dyn Write) -> io::Result<()> {
+        for mutation in &self.mutations {
+            writer.write_fmt(format_args!(
+                "{site}\t{node}\t{derived_state}\n",
+                site = mutation, // add one to the node index because tskit uses the virtual root node, so we encode the root twice
+                node = self.ancestor_index + 1,
+                derived_state = 'A', // todo get the actual derived state
             ))?;
         }
         Ok(())
@@ -104,6 +119,15 @@ impl TreeSequence {
         // skip first edge because tskit doesn't like the root node to have an edge to itself. TODO we can remove this anyway at some point
         for node in self.0.iter().skip(1) {
             node.tskit_format_edges(&mut writer)?;
+        }
+
+        let mut mutation_file = path.to_path_buf();
+        mutation_file.push("mutations.tsv");
+        let mut writer = std::fs::File::create(mutation_file)?;
+
+        writer.write_fmt(format_args!("site\tnode\tderived_state\n"))?;
+        for node in &self.0 {
+            node.tskit_format_mutations(&mut writer)?;
         }
         Ok(())
     }

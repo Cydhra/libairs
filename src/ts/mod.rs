@@ -53,13 +53,15 @@ impl TreeSequenceGenerator {
         &self,
         candidate: &AncestralSequence,
         mut sweep_line_queue: RadixHeapMap<Reverse<usize>, SweepEvent>,
-    ) -> Vec<TreeSequenceInterval> {
+    ) -> (Vec<TreeSequenceInterval>, Vec<usize>) {
         let num_ancestors = sweep_line_queue.len();
         let mut active_ancestors = Vec::with_capacity(num_ancestors);
         let mut next_event_position = sweep_line_queue.peek_key().unwrap().0;
 
         let mut likelihoods = vec![1f64; num_ancestors];
         let mut recombination_points = vec![vec![false; num_ancestors]; candidate.len()];
+        let mut mutation_points = vec![vec![false; num_ancestors]; candidate.len()];
+
         let mut max_likelihoods = vec![0; candidate.len()];
         let candidate_start = candidate.start();
 
@@ -147,6 +149,7 @@ impl TreeSequenceGenerator {
                 let pe = if state == ancestral_sequence[site] {
                     rev_mu
                 } else {
+                    mutation_points[site - candidate_start][ancestor_id] = true;
                     mu
                 };
 
@@ -167,6 +170,8 @@ impl TreeSequenceGenerator {
                 max_site_likelihood_ancestor.expect("no max likelihood calculated");
         }
         let mut nodes = Vec::new();
+        let mut mutations = Vec::new();
+
         let mut ancestor_index = max_likelihoods[candidate.end() - 1 - candidate_start];
         let mut ancestor_coverage_end = if candidate.end() == self.variant_positions.len() {
             self.sequence_length
@@ -187,6 +192,10 @@ impl TreeSequenceGenerator {
                 ancestor_index = max_likelihoods[site - 1 - candidate_start];
                 ancestor_coverage_end = self.variant_positions[site];
             }
+
+            if mutation_points[site - candidate_start][ancestor_index] {
+                mutations.push(site);
+            }
         }
         nodes.push(TreeSequenceInterval::new(
             ancestor_index,
@@ -195,7 +204,8 @@ impl TreeSequenceGenerator {
         ));
 
         nodes.reverse();
-        nodes
+        mutations.reverse();
+        (nodes, mutations)
     }
 
     pub fn generate_tree_sequence(mut self) -> TreeSequence {
@@ -230,10 +240,9 @@ impl TreeSequenceGenerator {
                 current_age = ancestor.relative_age();
             }
 
-            let intervals = self.find_hidden_path(ancestor, sweep_line_queue.clone());
-            self.partial_tree_sequence[ancestor_index]
-                .node_intervals
-                .extend(intervals);
+            let (intervals, mutations) = self.find_hidden_path(ancestor, sweep_line_queue.clone());
+            self.partial_tree_sequence[ancestor_index].node_intervals = intervals;
+            self.partial_tree_sequence[ancestor_index].mutations = mutations;
 
             current_age_set.push(ancestor_index);
         }
