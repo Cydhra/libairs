@@ -7,6 +7,7 @@ use std::hash::BuildHasherDefault;
 use std::io::Write;
 use std::ops::{Index, IndexMut};
 use std::{io, mem};
+use std::path::Path;
 use twox_hash::XxHash64;
 
 const ANCESTRAL_STATE: u8 = 0;
@@ -503,6 +504,23 @@ impl AncestorGenerator {
         });
 
         ancestors
+    }
+
+    pub fn tskit_export_sites(&self, path: &Path) -> io::Result<()> {
+        let mut site_file = path.to_path_buf();
+        site_file.push("sites.tsv");
+        let mut writer = std::fs::File::create(site_file)?;
+        writer.write_fmt(format_args!("id\tposition\tancestral_state\n"))?;
+
+        for (i, site) in self.sites.iter().enumerate() {
+            writer.write_fmt(format_args!(
+                "{id}\t{position}\t{ancestral_state}\n",
+                id = i,
+                position = site.position,
+                ancestral_state = 'C', // TODO encode actual ancestral state
+            ))?;
+        }
+        Ok(())
     }
 }
 

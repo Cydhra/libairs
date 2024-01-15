@@ -68,4 +68,6 @@ fn main() {
     tree_sequence
         .tskit_export(&target_file)
         .expect("failed to export tree sequence");
+
+    ancestor_generator.tskit_export_sites(&target_file.as_path()).expect("failed to export sites");
 }
