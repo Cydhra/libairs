@@ -24,7 +24,7 @@ impl TreeSequenceInterval {
 #[derive(Debug, Clone)]
 pub struct TreeSequenceNode {
     // todo hide fields
-    pub(crate) ancestor_index: usize,
+    pub ancestor_index: usize,
     pub node_intervals: Vec<TreeSequenceInterval>,
     pub mutations: Vec<usize>,
 }

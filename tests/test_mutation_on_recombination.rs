@@ -19,10 +19,6 @@ fn test_mutation_on_recombination_site() {
 
     let ancestors = ag.generate_ancestors();
 
-    for (i, ancestor) in ancestors.iter().enumerate() {
-        println!("{}: {:?}", i, ancestor);
-    }
-
     let ancestor_matcher = TreeSequenceGenerator::new(
         ancestors,
         4,
