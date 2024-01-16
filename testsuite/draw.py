@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser(
     prog='generate_tests.py',
     description='Generate test cases for a tskit / libairs test suite')
 
-parser.add_argument('seed', type=int, help='test case seed')
+parser.add_argument('seed', type=str, help='test case seed')
 
 args = parser.parse_args()
 
