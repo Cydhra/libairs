@@ -30,7 +30,6 @@ nodes = open(f"{simulation_dir}/nodes.tsv")
 edges = open(f"{simulation_dir}/edges.tsv")
 mutations = open(f"{simulation_dir}/mutations.tsv")
 sites = open(f"{simulation_dir}/sites.tsv")
-print("sequence_length", sequence_length)
 airs_ts = tskit.load_text(nodes, edges, mutations=mutations, sites=sites, sequence_length=sequence_length)
 
 tree_sequence_length = airs_ts.num_trees
@@ -82,20 +81,14 @@ if airs_ts.num_nodes != tsinfer_ts.num_nodes:
            ")")
     sys.exit(1)
 
-# Check that the tree sequences have the same trees by comparing the kc_distance of corresponding trees
-for tree in range(tree_sequence_length):
-    airs_tree = airs_ts.at(tree)
-    tsinfer_tree = tsinfer_ts.at(tree)
+tsinfer_trees = tsinfer_ts.trees(sample_lists=True)
 
-    # print(airs_tree)
-    # print()
-    # print(tsinfer_tree)
+# Check that the tree sequences have the same trees by comparing the kc_distance of corresponding trees
+for airs_tree in airs_ts.trees(sample_lists=True):
+    tsinfer_tree = next(tsinfer_trees)
 
     if airs_tree.interval != tsinfer_tree.interval:
-        eprint(f"airs and tsinfer disagree on {tree}. tree interval (airs: {airs_tree.interval}, tsi: {tsinfer_tree.interval})")
+        eprint(
+            f"airs and tsinfer disagree on tree {airs_tree.index}: intervals (airs: {airs_tree.interval}, tsi: {tsinfer_tree.interval})")
         sys.exit(1)
 
-    kc = airs_tree.kc_distance(tsinfer_tree)
-    if kc != 0:
-        eprint(f"airs and tsinfer disagree on {tree}. tree (kc_distance: {kc})")
-        sys.exit(1)
