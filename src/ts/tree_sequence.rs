@@ -8,7 +8,7 @@ use std::path::Path;
 /// parent node.
 #[derive(Debug, Clone)]
 pub struct TreeSequenceInterval {
-    pub(crate) parent: usize,
+    pub parent: usize,
     pub(crate) start: usize,
     pub(crate) end: usize,
 }
@@ -25,8 +25,8 @@ impl TreeSequenceInterval {
 pub struct TreeSequenceNode {
     // todo hide fields
     pub(crate) ancestor_index: usize,
-    pub(crate) node_intervals: Vec<TreeSequenceInterval>,
-    pub(crate) mutations: Vec<usize>,
+    pub node_intervals: Vec<TreeSequenceInterval>,
+    pub mutations: Vec<usize>,
 }
 
 impl TreeSequenceNode {
