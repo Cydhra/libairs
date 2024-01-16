@@ -180,6 +180,10 @@ impl TreeSequenceGenerator {
         };
 
         for (site, _) in candidate.site_iter().rev() {
+            if mutation_points[site - candidate_start][ancestor_index] {
+                mutations.push(site);
+            }
+
             if recombination_points[site - candidate_start][ancestor_index]
                 && max_likelihoods[site - 1 - candidate_start] != ancestor_index
             {
@@ -193,9 +197,6 @@ impl TreeSequenceGenerator {
                 ancestor_coverage_end = self.variant_positions[site];
             }
 
-            if mutation_points[site - candidate_start][ancestor_index] {
-                mutations.push(site);
-            }
         }
         nodes.push(TreeSequenceInterval::new(
             ancestor_index,

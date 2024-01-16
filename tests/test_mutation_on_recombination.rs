@@ -1,12 +1,13 @@
-//! This tests a regression where airs infers more mutations than tsinfer
-//! TODO describe the bug
+//! This tests a regression where airs infers more mutations than tsinfer when mutations happened on sites of recombination
+//! This happened because airs checked for a mutation on the ancestor we were recombing from,
+//! but not on the ancestor we were recombing to at that site
 
 use libairs::ancestors::AncestorGenerator;
 use libairs::dna::VariantSite;
 use libairs::ts::TreeSequenceGenerator;
 
 #[test]
-fn unknown_regression_test() {
+fn test_mutation_on_recombination_site() {
     let sites = [[0, 1, 1, 0, 1, 1], [0, 1, 1, 1, 1, 1], [1, 1, 1, 1, 0, 1]];
 
     let ag = AncestorGenerator::from_iter(
@@ -17,6 +18,10 @@ fn unknown_regression_test() {
     );
 
     let ancestors = ag.generate_ancestors();
+
+    for (i, ancestor) in ancestors.iter().enumerate() {
+        println!("{}: {:?}", i, ancestor);
+    }
 
     let ancestor_matcher = TreeSequenceGenerator::new(
         ancestors,
