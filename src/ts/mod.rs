@@ -170,7 +170,8 @@ impl TreeSequenceGenerator {
         let mut ancestor_coverage_end = if candidate.end() == self.variant_positions.len() {
             self.sequence_length
         } else {
-            self.variant_positions[candidate.end() - 1]
+            // convert exclusive site index to exclusive site position
+            self.variant_positions[candidate.end()]
         };
 
         for (site, _) in candidate.site_iter().rev() {
@@ -190,11 +191,14 @@ impl TreeSequenceGenerator {
                 ancestor_index = max_likelihoods[site - 1 - candidate_start];
                 ancestor_coverage_end = self.variant_positions[site];
             }
-
         }
         nodes.push(TreeSequenceInterval::new(
             ancestor_index,
-            if candidate.start() == 0 { 0 } else { self.variant_positions[candidate.start()] },
+            if candidate.start() == 0 {
+                0
+            } else {
+                self.variant_positions[candidate.start()]
+            },
             ancestor_coverage_end,
         ));
 

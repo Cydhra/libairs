@@ -9,8 +9,8 @@ use std::path::Path;
 #[derive(Debug, Clone)]
 pub struct TreeSequenceInterval {
     pub parent: usize,
-    pub(crate) start: usize,
-    pub(crate) end: usize,
+    pub start: usize,
+    pub end: usize,
 }
 
 impl TreeSequenceInterval {
@@ -30,7 +30,11 @@ pub struct TreeSequenceNode {
 }
 
 impl TreeSequenceNode {
-    pub fn new(ancestor_index: usize, node_intervals: Vec<TreeSequenceInterval>, mutations: Vec<usize>) -> Self {
+    pub fn new(
+        ancestor_index: usize,
+        node_intervals: Vec<TreeSequenceInterval>,
+        mutations: Vec<usize>,
+    ) -> Self {
         TreeSequenceNode {
             ancestor_index,
             node_intervals,
@@ -54,7 +58,7 @@ impl TreeSequenceNode {
         writer.write_fmt(format_args!(
             "{id}\t{is_sample}\t{time}\n",
             id = self.ancestor_index + 1, // add one to the node index because tskit uses the virtual root node, so we encode the root twice
-            is_sample = 1, // todo samples are not supported yet
+            is_sample = 1,                // todo samples are not supported yet
             time = ancestor.relative_age(),
         ))
     }
@@ -114,7 +118,10 @@ impl TreeSequence {
 
         writer.write_fmt(format_args!("left\tright\tparent\tchild\n"))?;
         // write edge from virtual root to root
-        writer.write_fmt(format_args!("0\t{}\t0\t1\n", self.0[1].node_intervals[0].end))?;
+        writer.write_fmt(format_args!(
+            "0\t{}\t0\t1\n",
+            self.0[1].node_intervals[0].end
+        ))?;
 
         // skip first edge because tskit doesn't like the root node to have an edge to itself. TODO we can remove this anyway at some point
         for node in self.0.iter().skip(1) {
