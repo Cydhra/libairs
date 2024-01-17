@@ -21,7 +21,7 @@ pub struct TreeSequenceGenerator {
 
 impl TreeSequenceGenerator {
     pub fn new(
-        mut ancestor_sequences: Vec<AncestralSequence>,
+        ancestor_sequences: Vec<AncestralSequence>,
         sequence_length: usize,
         recombination_rate: f64,
         mismatch_rate: f64,
@@ -150,6 +150,12 @@ impl TreeSequenceGenerator {
                 likelihoods[ancestor_id] = pt * pe;
 
                 if likelihoods[ancestor_id] > max_site_likelihood {
+                    max_site_likelihood = likelihoods[ancestor_id];
+                    max_site_likelihood_ancestor = Some(ancestor_id);
+                } else if likelihoods[ancestor_id] == max_site_likelihood && self.ancestor_sequences[ancestor_id].relative_age() > self.ancestor_sequences[max_site_likelihood_ancestor.unwrap()].relative_age() {
+                    // TODO this is a hack to make sure that the oldest ancestor is chosen in case of a tie,
+                    //  because this is what tsinfer does implicitly does by not calculating the likelihoods
+                    //  of ancestors with equal sequences.
                     max_site_likelihood = likelihoods[ancestor_id];
                     max_site_likelihood_ancestor = Some(ancestor_id);
                 }
