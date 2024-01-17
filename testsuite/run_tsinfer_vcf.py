@@ -49,6 +49,6 @@ with tsinfer.SampleData(path=f"{test_dir}/sim{seed}.samples", sequence_length=se
         max_file_size=2 ** 20,
     )
 
-    ancestor_tree = tsinfer.match_ancestors(sample_data, ancestor_data, path_compression=False)
+    ancestor_tree = tsinfer.match_ancestors(sample_data, ancestor_data, path_compression=False, precision=20)
     ancestor_tree.dump(f"{test_dir}/sim{seed}.ancestors.trees")
     print("tsinfer generated tree sequence with", len(ancestor_tree.trees()), "trees")
