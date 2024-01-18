@@ -115,7 +115,7 @@ impl TreeSequenceGenerator {
             let mut max_site_likelihood = -1f64;
             let mut max_site_likelihood_ancestor: Option<usize> = None;
 
-            let k = active_ancestors.len() as f64;
+            let k = (active_ancestors.len() + 1) as f64; // number of ancestors in tableau plus the current ancestor
             // probability that any one specific ancestor recombines to the current ancestors
             let prob_recomb = rho / k;
             // probability that none of the k-1 active ancestors recombines to the current ancestor
