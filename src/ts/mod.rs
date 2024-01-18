@@ -68,48 +68,21 @@ impl TreeSequenceGenerator {
                 let (_, event) = sweep_line_queue.pop().unwrap();
                 if event.kind == Start {
                     active_ancestors.push(event.ancestor_index);
+                    let end_event_pos = self.ancestor_sequences[event.ancestor_index].end();
 
                     let ancestor_end = SweepEvent {
-                        kind: SweepEventKind::End {
-                            next_interval_index: 1,
-                        },
-                        position: self.partial_tree_sequence[event.ancestor_index].node_intervals
-                            [0]
-                        .end,
+                        kind: SweepEventKind::End,
+                        position: end_event_pos,
                         ancestor_index: event.ancestor_index,
                     };
                     sweep_line_queue.push(
-                        Reverse(
-                            self.partial_tree_sequence[event.ancestor_index].node_intervals[0].end,
-                        ),
+                        Reverse(end_event_pos),
                         ancestor_end,
                     )
-                } else if let _end_event @ &SweepEventKind::End {
-                    next_interval_index,
-                } = &event.kind
-                {
-                    let node = &self.partial_tree_sequence[event.ancestor_index];
-                    if node.node_intervals.len() > next_interval_index {
-                        let next_interval_end_event = SweepEvent {
-                            kind: SweepEventKind::End {
-                                next_interval_index: next_interval_index + 1,
-                            },
-                            position: node.node_intervals[next_interval_index].end,
-                            ancestor_index: event.ancestor_index,
-                        };
-                        sweep_line_queue.push(
-                            Reverse(node.node_intervals[next_interval_index].end),
-                            next_interval_end_event,
-                        );
-
-                        // todo
-                        //  clear L-cache
-                        //  change tree topology
-                    } else {
-                        active_ancestors.retain(|&ancestor| ancestor != event.ancestor_index);
-                    }
+                } else {
+                    active_ancestors.retain(|&ancestor| ancestor != event.ancestor_index);
                 }
-                next_event_position = sweep_line_queue.peek_key().map_or(usize::MAX, |e| e.0)
+                next_event_position = sweep_line_queue.peek_key().map_or(usize::MAX, |e| e.0);
             }
 
             let mut max_site_likelihood = -1f64;
@@ -282,7 +255,7 @@ struct SweepEvent {
 #[derive(Debug, Eq, PartialEq, Clone)]
 enum SweepEventKind {
     Start,
-    End { next_interval_index: usize },
+    End,
 }
 
 impl PartialOrd<Self> for SweepEvent {
