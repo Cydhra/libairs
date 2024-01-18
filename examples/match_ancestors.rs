@@ -3,6 +3,7 @@
 //! The tree sequence is exported to a file matching the VCF file but with the extension `.trees`.
 //! It can be imported into tskit using [`tskit.load_text()`](https://tskit.dev/tskit/docs/stable/python-api.html#tskit.load_text).
 
+use libairs::dna::SequencePosition;
 use std::env;
 use std::path::PathBuf;
 use vcfire::VcfFile;
@@ -35,15 +36,17 @@ fn main() {
         .unwrap()
         .1
         .clone();
-    let sequence_length = contig_config[1..contig_config.len() - 1]
-        .split(',')
-        .find(|s| s.starts_with("length="))
-        .unwrap()
-        .split('=')
-        .nth(1)
-        .unwrap()
-        .parse::<usize>()
-        .unwrap();
+    let sequence_length = SequencePosition::from_usize(
+        contig_config[1..contig_config.len() - 1]
+            .split(',')
+            .find(|s| s.starts_with("length="))
+            .unwrap()
+            .split('=')
+            .nth(1)
+            .unwrap()
+            .parse::<usize>()
+            .unwrap(),
+    );
 
     let mut target_file = PathBuf::from(&vcf);
 
@@ -61,7 +64,9 @@ fn main() {
             .collect(),
     );
     target_file.pop();
-    matcher.export_ancestors(&target_file).expect("failed to export ancestors");
+    matcher
+        .export_ancestors(&target_file)
+        .expect("failed to export ancestors");
 
     let tree_sequence = matcher.generate_tree_sequence();
 
@@ -69,5 +74,7 @@ fn main() {
         .tskit_export(&target_file)
         .expect("failed to export tree sequence");
 
-    ancestor_generator.tskit_export_sites(&target_file.as_path()).expect("failed to export sites");
+    ancestor_generator
+        .tskit_export_sites(&target_file.as_path())
+        .expect("failed to export sites");
 }

@@ -4,7 +4,7 @@
 //! which copies from the incomplete ancestor, stops copying from it before the incomplete ancestor ends
 
 use libairs::ancestors::AncestorGenerator;
-use libairs::dna::VariantSite;
+use libairs::dna::{SequencePosition, VariantSite};
 use libairs::ts::TreeSequenceGenerator;
 
 #[test]
@@ -29,21 +29,29 @@ fn test_incomplete_inner_nodes() {
     let ancestors = ag.generate_ancestors();
     assert_eq!(ancestors[5].len(), 6); // only 6 sites, instead of 7
 
-    let ancestor_matcher =
-        TreeSequenceGenerator::new(ancestors, 8, 1e-2, 1e-20, vec![1, 2, 3, 4, 5, 6, 7]);
+    let ancestor_matcher = TreeSequenceGenerator::new(
+        ancestors,
+        SequencePosition::from_usize(8),
+        1e-2,
+        1e-20,
+        SequencePosition::from_vec(vec![1, 2, 3, 4, 5, 6, 7]),
+    );
     let ts = ancestor_matcher.generate_tree_sequence().0;
 
     assert_eq!(ts.len(), 7);
 
     // test that the incomplete ancestor copies from another one and stops at the site where it has no more state
     assert_eq!(ts[5].node_intervals.len(), 1);
-    assert_eq!(ts[5].node_intervals[0].end, 7); // not equal to the sequence-length 8, because the ancestor doesnt have state for the last site
+    assert_eq!(ts[5].node_intervals[0].end, SequencePosition::from_usize(7)); // not equal to the sequence-length 8, because the ancestor doesnt have state for the last site
 
     assert_eq!(ts[6].node_intervals.len(), 2);
     assert_eq!(ts[6].node_intervals[0].parent, 5); // check that it copies from the incomplete ancestor
-    assert_eq!(ts[6].node_intervals[0].end, 7);
+    assert_eq!(ts[6].node_intervals[0].end, SequencePosition::from_usize(7));
 
     // check that it copies from somewhere else
-    assert_eq!(ts[6].node_intervals[1].start, 7);
-    assert_eq!(ts[6].node_intervals[1].end, 8);
+    assert_eq!(
+        ts[6].node_intervals[1].start,
+        SequencePosition::from_usize(7)
+    );
+    assert_eq!(ts[6].node_intervals[1].end, SequencePosition::from_usize(8));
 }

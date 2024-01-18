@@ -1,4 +1,5 @@
 use crate::ancestors::AncestralSequence;
+use crate::dna::SequencePosition;
 use std::io;
 use std::io::Write;
 use std::path::Path;
@@ -9,12 +10,12 @@ use std::path::Path;
 #[derive(Debug, Clone)]
 pub struct TreeSequenceInterval {
     pub parent: usize,
-    pub start: usize,
-    pub end: usize,
+    pub start: SequencePosition,
+    pub end: SequencePosition,
 }
 
 impl TreeSequenceInterval {
-    pub fn new(parent: usize, start: usize, end: usize) -> Self {
+    pub fn new(parent: usize, start: SequencePosition, end: SequencePosition) -> Self {
         Self { parent, start, end }
     }
 }

@@ -4,7 +4,7 @@
 //! Markov Chain in tsinfer is modelled)
 
 use libairs::ancestors::AncestorGenerator;
-use libairs::dna::VariantSite;
+use libairs::dna::{SequencePosition, VariantSite};
 use libairs::ts::TreeSequenceGenerator;
 
 #[test]
@@ -26,8 +26,13 @@ fn test_markov_ancestor_count() {
     );
 
     let ancestors = ag.generate_ancestors();
-    let ancestor_matcher =
-        TreeSequenceGenerator::new(ancestors, 7, 1e-2, 1e-20, vec![1, 2, 3, 4, 5, 6]);
+    let ancestor_matcher = TreeSequenceGenerator::new(
+        ancestors,
+        SequencePosition::from_usize(7),
+        1e-2,
+        1e-20,
+        SequencePosition::from_vec(vec![1, 2, 3, 4, 5, 6]),
+    );
     let ts = ancestor_matcher.generate_tree_sequence().0;
 
     // when the ancestor count is incorrect, the algorithm will recombine at the wrong spots. So we test the correct
@@ -57,7 +62,10 @@ fn test_markov_ancestor_count() {
     // root. airs did that at site 6 when the error was present
     assert_eq!(ts[6].node_intervals.len(), 2);
     assert_eq!(ts[6].node_intervals[0].parent, 3);
-    assert_eq!(ts[6].node_intervals[0].end, 5); // exclusive
+    assert_eq!(ts[6].node_intervals[0].end, SequencePosition::from_usize(5)); // exclusive
     assert_eq!(ts[6].node_intervals[1].parent, 0);
-    assert_eq!(ts[6].node_intervals[1].start, 5);
+    assert_eq!(
+        ts[6].node_intervals[1].start,
+        SequencePosition::from_usize(5)
+    );
 }

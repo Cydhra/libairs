@@ -2,7 +2,7 @@
 //! likely to recombine. This test will likely get obsolete in the future, when airs intentionally diverges from tsinfer's behavior.
 
 use libairs::ancestors::AncestorGenerator;
-use libairs::dna::VariantSite;
+use libairs::dna::{SequencePosition, VariantSite};
 use libairs::ts::TreeSequenceGenerator;
 
 #[test]
@@ -23,8 +23,13 @@ fn test_incomplete_nodes() {
     );
 
     let ancestors = ag.generate_ancestors();
-    let ancestor_matcher =
-        TreeSequenceGenerator::new(ancestors, 6, 1e-2, 1e-20, vec![1, 2, 3, 4, 5]);
+    let ancestor_matcher = TreeSequenceGenerator::new(
+        ancestors,
+        SequencePosition::from_usize(6),
+        1e-2,
+        1e-20,
+        SequencePosition::from_vec(vec![1, 2, 3, 4, 5]),
+    );
     let ts = ancestor_matcher.generate_tree_sequence().0;
 
     // if tsinfer behavior is mimicked, nodes 1 and 2 are connected to root (0), and nodes 3 and 4 are connected to each of

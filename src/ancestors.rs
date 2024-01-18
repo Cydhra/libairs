@@ -6,8 +6,8 @@ use std::fmt::{Debug, Formatter};
 use std::hash::BuildHasherDefault;
 use std::io::Write;
 use std::ops::{Index, IndexMut};
-use std::{io, mem};
 use std::path::Path;
+use std::{io, mem};
 use twox_hash::XxHash64;
 
 const ANCESTRAL_STATE: u8 = 0;

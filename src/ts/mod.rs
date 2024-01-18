@@ -1,6 +1,7 @@
 mod tree_sequence;
 
 use crate::ancestors::AncestralSequence;
+use crate::dna::SequencePosition;
 use crate::ts::tree_sequence::{TreeSequence, TreeSequenceInterval, TreeSequenceNode};
 use crate::ts::SweepEventKind::Start;
 use radix_heap::RadixHeapMap;
@@ -13,8 +14,8 @@ use std::path::Path;
 pub struct TreeSequenceGenerator {
     pub ancestor_sequences: Vec<AncestralSequence>,
     partial_tree_sequence: Vec<TreeSequenceNode>,
-    variant_positions: Vec<usize>,
-    sequence_length: usize,
+    variant_positions: Vec<SequencePosition>,
+    sequence_length: SequencePosition,
     recombination_prob: f64,
     mismatch_prob: f64,
 }
@@ -22,10 +23,10 @@ pub struct TreeSequenceGenerator {
 impl TreeSequenceGenerator {
     pub fn new(
         ancestor_sequences: Vec<AncestralSequence>,
-        sequence_length: usize,
+        sequence_length: SequencePosition,
         recombination_rate: f64,
         mismatch_rate: f64,
-        variant_positions: Vec<usize>,
+        variant_positions: Vec<SequencePosition>,
     ) -> Self {
         let num_ancestors = ancestor_sequences.len();
 
@@ -75,10 +76,7 @@ impl TreeSequenceGenerator {
                         position: end_event_pos,
                         ancestor_index: event.ancestor_index,
                     };
-                    sweep_line_queue.push(
-                        Reverse(end_event_pos),
-                        ancestor_end,
-                    )
+                    sweep_line_queue.push(Reverse(end_event_pos), ancestor_end)
                 } else {
                     active_ancestors.retain(|&ancestor| ancestor != event.ancestor_index);
                 }
@@ -125,7 +123,11 @@ impl TreeSequenceGenerator {
                 if likelihoods[ancestor_id] > max_site_likelihood {
                     max_site_likelihood = likelihoods[ancestor_id];
                     max_site_likelihood_ancestor = Some(ancestor_id);
-                } else if likelihoods[ancestor_id] == max_site_likelihood && self.ancestor_sequences[ancestor_id].relative_age() > self.ancestor_sequences[max_site_likelihood_ancestor.unwrap()].relative_age() {
+                } else if likelihoods[ancestor_id] == max_site_likelihood
+                    && self.ancestor_sequences[ancestor_id].relative_age()
+                    > self.ancestor_sequences[max_site_likelihood_ancestor.unwrap()]
+                    .relative_age()
+                {
                     // TODO this is a hack to make sure that the oldest ancestor is chosen in case of a tie,
                     //  because this is what tsinfer does implicitly does by not calculating the likelihoods
                     //  of ancestors with equal sequences.
@@ -174,7 +176,7 @@ impl TreeSequenceGenerator {
         nodes.push(TreeSequenceInterval::new(
             ancestor_index,
             if candidate.start() == 0 {
-                0
+                SequencePosition::from_usize(0)
             } else {
                 self.variant_positions[candidate.start()]
             },
@@ -198,8 +200,8 @@ impl TreeSequenceGenerator {
             .node_intervals
             .push(TreeSequenceInterval::new(
                 0,
-                0,
-                self.ancestor_sequences[0].len(),
+                SequencePosition::from_usize(0),
+                self.sequence_length,
             ));
 
         for (ancestor_index, ancestor) in self.ancestor_sequences.iter().enumerate().skip(1) {
@@ -276,7 +278,7 @@ impl Ord for SweepEvent {
 #[cfg(test)]
 mod tests {
     use crate::ancestors::AncestorGenerator;
-    use crate::dna::VariantSite;
+    use crate::dna::{SequencePosition, VariantSite};
     use crate::ts::TreeSequenceGenerator;
 
     #[test]
@@ -300,8 +302,13 @@ mod tests {
 
         let ancestors = ag.generate_ancestors();
         let ancestors_copy = ancestors.clone();
-        let ancestor_matcher =
-            TreeSequenceGenerator::new(ancestors, 5, 1e-2, 1e-20, vec![1, 2, 3, 4, 5]);
+        let ancestor_matcher = TreeSequenceGenerator::new(
+            ancestors,
+            SequencePosition::from_usize(5),
+            1e-2,
+            1e-20,
+            SequencePosition::from_vec(vec![1, 2, 3, 4, 5]),
+        );
         let ts = ancestor_matcher.generate_tree_sequence().0;
 
         assert_eq!(ts.len(), 4);
@@ -354,8 +361,13 @@ mod tests {
 
         let ancestors = ag.generate_ancestors();
         let ancestors_copy = ancestors.clone();
-        let ancestor_matcher =
-            TreeSequenceGenerator::new(ancestors, 7, 1e-2, 1e-20, vec![1, 2, 4, 5, 6, 7]);
+        let ancestor_matcher = TreeSequenceGenerator::new(
+            ancestors,
+            SequencePosition::from_usize(7),
+            1e-2,
+            1e-20,
+            SequencePosition::from_vec(vec![1, 2, 4, 5, 6, 7]),
+        );
         let ts = ancestor_matcher.generate_tree_sequence().0;
 
         assert_eq!(ts.len(), 5);

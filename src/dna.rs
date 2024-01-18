@@ -1,10 +1,12 @@
+use std::fmt::{Display, Formatter};
+
 /// A single variant site defined by the genotype state.
 #[derive(Clone, Debug)]
 pub struct VariantSite {
     // todo hide most fields
     pub(crate) genotypes: Vec<u8>,
     // ancestral states per sample
-    pub position: usize,
+    pub position: SequencePosition,
     // position in the genome
     pub(crate) relative_age: f64,
     // whether the site is bi-allelic or not
@@ -42,10 +44,32 @@ impl VariantSite {
         let is_singleton = derived_sites == 1;
         VariantSite {
             genotypes,
-            position,
+            position: SequencePosition(position),
             relative_age: age,
             is_biallelic,
             is_singleton,
         }
+    }
+}
+
+/// A position in a DNA sequence. This newtype ensures that sequence positions and variant indices (indices into the
+/// variant site vector) aren't mixed up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct SequencePosition(usize);
+
+impl SequencePosition {
+    pub fn from_usize(position: usize) -> Self {
+        Self(position)
+    }
+
+    #[inline]
+    pub fn from_vec(positions: Vec<usize>) -> Vec<Self> {
+        positions.into_iter().map(|p| Self::from_usize(p)).collect()
+    }
+}
+
+impl Display for SequencePosition {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }

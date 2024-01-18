@@ -3,7 +3,7 @@
 //! but not on the ancestor we were recombing to at that site
 
 use libairs::ancestors::AncestorGenerator;
-use libairs::dna::VariantSite;
+use libairs::dna::{SequencePosition, VariantSite};
 use libairs::ts::TreeSequenceGenerator;
 
 #[test]
@@ -21,10 +21,10 @@ fn test_mutation_on_recombination_site() {
 
     let ancestor_matcher = TreeSequenceGenerator::new(
         ancestors,
-        4,
+        SequencePosition::from_usize(4),
         1e-2,
         1e-20,
-        vec![1, 2, 3],
+        SequencePosition::from_vec(vec![1, 2, 3]),
     );
     let ts = ancestor_matcher.generate_tree_sequence().0;
 
