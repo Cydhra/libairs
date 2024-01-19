@@ -69,6 +69,12 @@ impl TreeSequenceGenerator {
                 let (_, event) = sweep_line_queue.pop().unwrap();
                 if event.kind == Start {
                     active_ancestors.push(event.ancestor_index);
+
+                    // if the ancestor is not available from the start, the initial likelihood must be zero,
+                    // so we recombine away from it on tracback
+                    if event.position > candidate_start {
+                        likelihoods[event.ancestor_index] = 0f64;
+                    }
                     let end_event_pos = self.ancestor_sequences[event.ancestor_index].end();
 
                     let ancestor_end = SweepEvent {

@@ -54,7 +54,7 @@ impl VariantSite {
 
 /// A position in a DNA sequence. This newtype ensures that sequence positions and variant indices (indices into the
 /// variant site vector) aren't mixed up.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SequencePosition(usize);
 
 impl SequencePosition {
