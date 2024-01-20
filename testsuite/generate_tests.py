@@ -23,6 +23,7 @@ seed = args.seed
 pop_size = args.pop_size
 seq_length = args.seq_length
 samples = args.samples
+file_size_limit = 2 ** 26
 
 os.mkdir(f"simulation-{seed}")
 
@@ -45,7 +46,8 @@ print("msprime generated tree sequence with", len(ts.trees()), "trees")
 output_file = open(f"simulation-{seed}/sim{seed}.vcf", "w")
 ts.write_vcf(output_file)
 
-with tsinfer.SampleData(path=f"simulation-{seed}/sim{seed}.samples", sequence_length=seq_length, max_file_size=2**20) as sample_data:
+with tsinfer.SampleData(path=f"simulation-{seed}/sim{seed}.samples", sequence_length=seq_length,
+                        max_file_size=file_size_limit) as sample_data:
     for variant in ts.variants():
         sample_data.add_site(variant.position, variant.genotypes, variant.alleles)
 
@@ -53,7 +55,7 @@ with tsinfer.SampleData(path=f"simulation-{seed}/sim{seed}.samples", sequence_le
     ancestor_data = tsinfer.generate_ancestors(
         sample_data,
         path=f"simulation-{seed}/sim{seed}.ancestors",
-        max_file_size=2**20,
+        max_file_size=file_size_limit,
     )
     ancestor_tree = tsinfer.match_ancestors(sample_data, ancestor_data, path_compression=False, precision=20)
     ancestor_tree.dump(f"simulation-{seed}/sim{seed}.ancestors.trees")
