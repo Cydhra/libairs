@@ -16,10 +16,15 @@ parser = argparse.ArgumentParser(
     description='Generate test cases for a tskit / libairs test suite')
 
 parser.add_argument('seed', type=str, help='test case seed')
+parser.add_argument("--width", type=int, default=2048)
+parser.add_argument("--height", type=int, default=800)
 
 args = parser.parse_args()
 
 seed = args.seed
+width = args.width
+height = args.height
+
 simulation_dir = f"testdata/simulation-{seed}"
 simulation_filename = f"{simulation_dir}/sim{seed}"
 
@@ -32,7 +37,7 @@ sites = open(f"{simulation_dir}/sites.tsv")
 airs_ts = tskit.load_text(nodes, edges, mutations=mutations, sites=sites)
 
 output = open(f"{simulation_dir}/tsinfer.svg", "w+")
-svg_size = (1024, 250)
+svg_size = (width, height)
 svg_string = tsinfer_ts.draw_svg(
     size=svg_size,
     y_axis=True,
@@ -43,7 +48,7 @@ svg_string = tsinfer_ts.draw_svg(
 output.write(svg_string)
 
 output = open(f"{simulation_dir}/airs.svg", "w+")
-svg_size = (1024, 250)
+svg_size = (width, height)
 svg_string = airs_ts.draw_svg(
     size=svg_size,
     y_axis=True,
