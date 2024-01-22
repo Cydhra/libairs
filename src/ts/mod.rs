@@ -48,8 +48,8 @@ impl TreeSequenceGenerator {
         &self,
         candidate: &AncestralSequence,
         mut sweep_line_queue: RadixHeapMap<Reverse<usize>, SweepEvent>,
+        num_ancestors: usize,
     ) -> (Vec<TreeSequenceInterval>, Vec<usize>) {
-        let num_ancestors = sweep_line_queue.len();
         let mut active_ancestors = Vec::with_capacity(num_ancestors);
         let mut next_event_position = sweep_line_queue.peek_key().unwrap().0;
 
@@ -199,6 +199,7 @@ impl TreeSequenceGenerator {
 
         let mut current_age = f64::INFINITY;
         let mut current_age_set = Vec::new();
+        let mut num_ancestors = 0;
 
         // the first ancestor is the ancestral state and doesnt need to be processed
         current_age_set.push(0);
@@ -213,6 +214,7 @@ impl TreeSequenceGenerator {
         for (ancestor_index, ancestor) in self.ancestor_sequences.iter().enumerate().skip(1) {
             if ancestor.relative_age() < current_age {
                 current_age_set.iter().for_each(|&index| {
+                    num_ancestors += 1;
                     sweep_line_queue.push(
                         Reverse(self.ancestor_sequences[index].start()),
                         SweepEvent {
@@ -226,7 +228,7 @@ impl TreeSequenceGenerator {
                 current_age = ancestor.relative_age();
             }
 
-            let (intervals, mutations) = self.find_hidden_path(ancestor, sweep_line_queue.clone());
+            let (intervals, mutations) = self.find_hidden_path(ancestor, sweep_line_queue.clone(), num_ancestors);
             self.partial_tree_sequence[ancestor_index].node_intervals = intervals;
             self.partial_tree_sequence[ancestor_index].mutations = mutations;
 
