@@ -195,14 +195,8 @@ impl TreeSequenceGenerator {
     }
 
     pub fn generate_tree_sequence(mut self) -> TreeSequence {
-        let mut sweep_line_queue = RadixHeapMap::<Reverse<usize>, SweepEvent>::new();
-
-        let mut current_age = f64::INFINITY;
-        let mut current_age_set = Vec::new();
-        let mut num_ancestors = 0;
-
         // the first ancestor is the ancestral state and doesnt need to be processed
-        current_age_set.push(0);
+        // current_age_set.push(0);
         self.partial_tree_sequence[0]
             .node_intervals
             .push(TreeSequenceInterval::new(
@@ -212,30 +206,28 @@ impl TreeSequenceGenerator {
             ));
 
         for (ancestor_index, ancestor) in self.ancestor_sequences.iter().enumerate().skip(1) {
-            if ancestor.relative_age() < current_age {
-                current_age_set.iter().for_each(|&index| {
+            let mut sweep_line_queue = RadixHeapMap::<Reverse<usize>, SweepEvent>::new();
+            let mut num_ancestors = 0;
+
+            for (old_ancestor_index, old_ancestor) in self.ancestor_sequences.iter().enumerate().take(ancestor_index) {
+                if old_ancestor.relative_age() > ancestor.relative_age() { // TODO we can perform an overlap check here
                     num_ancestors += 1;
                     sweep_line_queue.push(
-                        Reverse(self.ancestor_sequences[index].start()),
+                        Reverse(old_ancestor.start()),
                         SweepEvent {
                             kind: Start,
-                            position: self.ancestor_sequences[index].start(),
-                            ancestor_index: index,
+                            position: old_ancestor.start(),
+                            ancestor_index: old_ancestor_index,
                         },
                     );
-                });
-                current_age_set.clear();
-                current_age = ancestor.relative_age();
+                }
             }
 
             let (intervals, mutations) = self.find_hidden_path(ancestor, sweep_line_queue.clone(), num_ancestors);
             self.partial_tree_sequence[ancestor_index].node_intervals = intervals;
             self.partial_tree_sequence[ancestor_index].mutations = mutations;
-
-            current_age_set.push(ancestor_index);
         }
 
-        // TODO dont need to clone here if we consume the generator
         TreeSequence(self.partial_tree_sequence, self.ancestor_sequences)
     }
 
