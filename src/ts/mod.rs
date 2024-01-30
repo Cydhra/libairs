@@ -1,4 +1,8 @@
 mod tree_sequence;
+mod ancestor_iterator;
+mod ancestor_array;
+mod partial_sequence;
+mod matcher;
 
 use crate::ancestors::AncestralSequence;
 use crate::dna::SequencePosition;
