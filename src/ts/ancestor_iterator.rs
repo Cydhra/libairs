@@ -1,7 +1,12 @@
+use std::cmp::Ordering;
+use std::iter::Peekable;
+
 use indexset::BTreeSet;
 
 use crate::ts::ancestor_array::{Ancestor, VariantIndex};
 use crate::ts::partial_sequence::PartialSequenceEdge;
+
+type Site<'a> = (VariantIndex, &'a MarginalTree);
 
 /// A helper structure for the Viterbi algorithm that helps iterating through the sites, updating
 /// the marginal tree at the currently visited site and helping with tree compression.
@@ -10,22 +15,72 @@ use crate::ts::partial_sequence::PartialSequenceEdge;
 ///
 /// Whenever new tree edges are calculated, they can be inserted into the iterator so the tree
 /// compression improves for future iterations.
-pub(crate) struct AncestorIterator {
-    edge_index: BTreeSet<usize>,
+pub(crate) struct AncestorIndex {
+    edge_index: BTreeSet<SequenceEvent>,
+    num_nodes: usize, // number of nodes in the tree sequence. All nodes with an index >= this
+                      // value are not part of the tree sequence yet, and are thus free nodes.
 }
 
-impl AncestorIterator {
+impl AncestorIndex {
     /// Create a new empty ancestor iterator
     pub(crate) fn new() -> Self {
         Self {
             edge_index: BTreeSet::new(),
+            num_nodes: 0,
         }
     }
 
-    /// Insert tree sequence edges into the partial tree sequence, which will be exploited by the
+    /// Insert a tree sequence node into the partial tree sequence, which will be exploited by the
     /// iterator to compress trees.
-    pub(crate) fn insert_sequence_edge(&mut self, edge: PartialSequenceEdge) {
-        todo!()
+    /// The nodes must be inserted in order of increasing index.
+    ///
+    /// # Parameters
+    /// - `tree_node`: The tree node handle that will be inserted into the tree sequence
+    /// - `edges`: The edges that are associated with the tree node
+    /// - `mutations`: The mutations that are associated with the tree node
+    ///
+    /// # Panics
+    /// Panics if the given tree node index is not the next index in the sequence.
+    pub(crate) fn insert_sequence_node(
+        &mut self,
+        tree_node: Ancestor,
+        edges: Vec<PartialSequenceEdge>,
+        mutations: Vec<VariantIndex>,
+    ) {
+        self.num_nodes += 1;
+        assert_eq!(
+            tree_node.0,
+            self.num_nodes - 1,
+            "Tree nodes must be inserted in order"
+        );
+
+        if !edges.is_empty() {
+            self.edge_index.insert(SequenceEvent {
+                site: edges.last().unwrap().end(),
+                node: tree_node,
+                kind: SequenceEventKind::End,
+            });
+
+            for edge in edges {
+                self.edge_index.insert(SequenceEvent {
+                    site: edge.start(),
+                    node: tree_node,
+                    kind: SequenceEventKind::ChangeParent {
+                        new_parent: edge.parent(),
+                    },
+                });
+            }
+        } else {
+            assert_eq!(self.num_nodes, 1, "only the root node can have no edges");
+        }
+
+        for mutation in mutations {
+            self.edge_index.insert(SequenceEvent {
+                site: mutation,
+                node: tree_node,
+                kind: SequenceEventKind::Mutation,
+            });
+        }
     }
 
     /// Iterate through the variant sites of the ancestral tree sequence.
@@ -33,18 +88,125 @@ impl AncestorIterator {
     /// until the given end index (exclusive).
     /// It provides the marginal tree for each site.
     /// If multiple sites have the same marginal tree, it is provided multiple times.
+    ///
+    /// # Parameters
+    /// - `start`: The index of the first site to iterate through
+    /// - `end`: The index of the last site to iterate through (exclusive)
+    /// - `limit_nodes`: The number of nodes to consider for the marginal tree. All nodes with a
+    /// index equal or greater than this value will be ignored.
     pub(crate) fn sites(
         &self,
         start: VariantIndex,
         end: VariantIndex,
-    ) -> impl Iterator<Item=(VariantIndex, MarginalTree)> {
-        todo!()
+        limit_nodes: usize,
+    ) -> PartialTreeSequenceIterator<impl Iterator<Item = &'_ SequenceEvent>> {
+        let mut marginal_tree = MarginalTree::new(self.num_nodes, limit_nodes);
+
+        let site = start;
+        let mut queue = self
+            .edge_index
+            .range(SequenceEvent::sentinel(start)..SequenceEvent::sentinel(end))
+            .into_iter()
+            .peekable();
+
+        marginal_tree.advance_to_site(&mut queue, site, true);
+
+        PartialTreeSequenceIterator {
+            marginal_tree,
+            site,
+            end,
+            queue,
+        }
     }
 }
 
-/// A node in the marginal tree of the tree sequence iterator.
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
-pub(crate) struct TreeNode(usize);
+/// Borrowed iterator through the partial tree sequence held by an [`AncestorIndex`].
+struct PartialTreeSequenceIterator<'a, I: Iterator<Item = &'a SequenceEvent>> {
+    marginal_tree: MarginalTree,
+    site: VariantIndex,
+    end: VariantIndex,
+    queue: Peekable<I>,
+}
+
+impl<'a, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<'a, I> {
+    pub(crate) fn for_each(&mut self, consumer: fn(Site<'_>)) {
+        while self.site < self.end {
+            self.marginal_tree
+                .advance_to_site(&mut self.queue, self.site.next(), false);
+            let this_site = self.site;
+            self.site = self.site.next();
+
+            consumer((this_site, &self.marginal_tree))
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum SequenceEventKind {
+    Mutation,
+    Start { parent: Ancestor },
+    ChangeParent { new_parent: Ancestor },
+    End,
+}
+
+impl PartialOrd<Self> for SequenceEventKind {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SequenceEventKind {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Self::Mutation, Self::Mutation) => Ordering::Equal,
+            (Self::Mutation, _) => Ordering::Less,
+            (_, Self::Mutation) => Ordering::Greater,
+            (Self::Start { parent: p1 }, Self::Start { parent: p2 }) => p1.cmp(p2),
+            (Self::Start { .. }, _) => Ordering::Less,
+            (_, Self::Start { .. }) => Ordering::Greater,
+            (Self::ChangeParent { new_parent: p1 }, Self::ChangeParent { new_parent: p2 }) => {
+                p1.cmp(p2)
+            }
+            (Self::ChangeParent { .. }, _) => Ordering::Less,
+            (_, Self::ChangeParent { .. }) => Ordering::Greater,
+            (Self::End, Self::End) => Ordering::Equal,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct SequenceEvent {
+    site: VariantIndex,
+    node: Ancestor,
+    kind: SequenceEventKind,
+}
+
+impl SequenceEvent {
+    /// Returns a sentinel event that is smaller or equal to the smallest event at the given site.
+    /// This is useful for defining ranges in the BTreeSet.
+    fn sentinel(pos: VariantIndex) -> Self {
+        Self {
+            site: pos,
+            node: Ancestor(0),
+            kind: SequenceEventKind::Mutation,
+        }
+    }
+}
+
+impl PartialOrd<Self> for SequenceEvent {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SequenceEvent {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.site
+            .cmp(&other.site)
+            .then(self.node.cmp(&other.node))
+            .then(self.kind.cmp(&other.kind))
+    }
+}
 
 /// An access structure into the tree sequence at a specific site.
 /// This structure is generated and by the [`AncestorIterator`] during iteration.
@@ -56,29 +218,289 @@ pub(crate) struct TreeNode(usize);
 /// As a result, those nodes cannot be recompressed (they have no parents).
 /// The marginal tree offers methods to iterate through all uncompressed nodes.
 ///
-/// [`AncestorIterator`]: AncestorIterator
+/// [`AncestorIterator`]: AncestorIndex
 pub(crate) struct MarginalTree {
-    actual_parents: Vec<Option<TreeNode>>,
-    compressed_tree_parents: Vec<Option<TreeNode>>,
+    /// The actual parents of the tree nodes. None for free nodes and the root, parents might be
+    /// compressed.
+    actual_parents: Vec<Option<Ancestor>>,
+
+    /// Uncompressed ancestors of uncompressed tree nodes. None for free nodes and the root, wrong
+    /// for compressed nodes.
+    uncompressed_tree_parents: Vec<Option<Ancestor>>,
+
+    /// Whether the node is currently compressed.
+    is_compressed: Vec<bool>,
+
+    /// The list of active nodes, i.e. nodes that are not compressed and are used in the Viterbi
+    /// algorithm.
+    active_nodes: Vec<Ancestor>,
+
+    /// The likelihood of each node in the tree. Likelihood for compressed nodes is wrong, but
+    /// they are ignored during the Viterbi algorithm.
+    likelihoods: Vec<f64>,
 }
 
 impl MarginalTree {
+    fn new(num_nodes: usize, limit_nodes: usize) -> Self {
+        let mut marginal_tree = Self {
+            actual_parents: vec![None; limit_nodes],
+            uncompressed_tree_parents: vec![None; limit_nodes],
+            is_compressed: vec![true; limit_nodes],
+            active_nodes: Vec::new(),
+            likelihoods: vec![-1.0f64; limit_nodes],
+        };
+
+        marginal_tree.add_initial_node(Ancestor(0)); // root
+        (num_nodes..limit_nodes)
+            .map(Ancestor)
+            .for_each(|n| marginal_tree.add_initial_node(n));
+
+        marginal_tree
+    }
+
     /// An iterator through the currently uncompressed nodes
-    pub(crate) fn nodes(&self) -> impl Iterator<Item=TreeNode> {
-        todo!()
+    pub(crate) fn nodes(&self) -> impl Iterator<Item = Ancestor> + '_ {
+        self.active_nodes.iter().copied()
+    }
+
+    /// Get the parent of the given tree node ignoring compressed nodes.
+    /// Returns `None` if the given node is the tree root, or a [free node].
+    ///
+    /// [free node]: MarginalTree
+    pub(crate) fn parent(&self, node: Ancestor) -> Option<Ancestor> {
+        // compressed parents arent tracked for compressed nodes
+        debug_assert!(
+            self.is_compressed[node.0] == false,
+            "Cannot get parent of compressed node"
+        );
+
+        self.uncompressed_tree_parents[node.0]
+    }
+
+    /// Get the number of active nodes in the tree.
+    /// This includes nodes that cannot be copied from at the current location, but might
+    /// influence nodes that can be copied from.
+    /// This also includes free nodes that aren't matched against the tree yet.
+    /// This value is interesting mostly for the Markov Chain during the Viterbi algorithm.
+    pub(crate) fn num_nodes(&self) -> usize {
+        self.likelihoods.len()
+    }
+
+    /// Get the likelihood of the given node.
+    pub(crate) fn likelihood(&self, node: Ancestor) -> f64 {
+        debug_assert!(!self.is_compressed[node.0]);
+        self.likelihoods[node.0]
+    }
+
+    /// Set the likelihood of the given node.
+    pub(crate) fn set_likelihood(&mut self, node: Ancestor, likelihood: f64) {
+        debug_assert!(!self.is_compressed[node.0]);
+        self.likelihoods[node.0] = likelihood;
+    }
+
+    fn find_uncompressed_parent(&self, node: Ancestor) -> Option<Ancestor> {
+        // If the node isn't compressed, the parent is recorded in the uncompressed tree parents array
+        debug_assert!(
+            self.is_compressed[node.0],
+            "Uncompressed parent requested for uncompressed node {}",
+            node.0
+        );
+
+        let mut parent = self.actual_parents[node.0];
+        while let Some(p) = parent {
+            if !self.is_compressed(p) {
+                break;
+            }
+            parent = self.actual_parents[p.0];
+        }
+        debug_assert!(
+            parent.is_some(),
+            "No uncompressed ancestor found for node {}",
+            node.0
+        );
+        parent
+    }
+
+    /// Return whether the node is currently compressed.
+    fn is_compressed(&self, node: Ancestor) -> bool {
+        self.is_compressed[node.0]
+    }
+
+    /// Compress all active nodes that have the same likelihood as their parent, so they can be
+    /// ignored during the Viterbi algorithm.
+    pub(crate) fn recompress_tree(&mut self) {
+        let mut recompress = Vec::new();
+        self.active_nodes.iter().for_each(|&node| {
+            debug_assert!(self.is_compressed[node.0] == false);
+
+            if let Some(parent) = self.parent(node) {
+                recompress.push(node);
+            }
+        });
+
+        recompress.into_iter().for_each(|node| {
+            self.recompress_node(
+                node,
+                self.parent(node)
+                    .expect("node has no parent but was marked for recompression"),
+            );
+        });
     }
 
     /// Recompress a node into its parent node. The method assumes that the node has the same
     /// likelihood as its parent, otherwise recompression is a logical error in Viterbi.
-    pub(crate) fn recompress(&mut self, node: TreeNode) {
-        todo!()
+    fn recompress_node(&mut self, node: Ancestor, parent: Ancestor) {
+        debug_assert!(self.likelihoods[node.0] == self.likelihoods[parent.0]);
+        debug_assert!(self.is_compressed[node.0] == false);
+        debug_assert!(self.is_compressed[parent.0] == false);
+
+        self.uncompressed_tree_parents.iter_mut().for_each(|entry| {
+            if *entry == Some(node) {
+                *entry = Some(parent);
+            }
+        });
+        self.active_nodes.retain(|&n| n != node);
+        self.is_compressed[node.0] = true;
     }
 
-    /// Get the uncompressed parent of the given tree node.
-    /// Returns `None` if the given node is the tree root, or a [free node].
+    /// Ensures a node is decompressed, i.e. it is in the active node list and if it is not,
+    /// it is added to the list and its likelihood is set to the likelihood of its parent.
     ///
-    /// [free node]: MarginalTree
-    pub(crate) fn parent(&self, node: TreeNode) -> Option<TreeNode> {
-        todo!()
+    /// If the node is already decompressed, this method does nothing.
+    fn ensure_decompressed(&mut self, node: Ancestor) {
+        if self.is_compressed(node) {
+            debug_assert!(!self.active_nodes.contains(&node));
+
+            // search the first uncompressed ancestor node
+            let parent = self.find_uncompressed_parent(node);
+            self.active_nodes.push(node);
+            self.is_compressed[node.0] = false;
+
+            self.likelihoods[node.0] = self.likelihoods[parent.unwrap().0];
+            self.uncompressed_tree_parents[node.0] = parent;
+        }
+    }
+
+    /// Insert a node into the tree that has no parent, i.e. it is a free node or is the root node.
+    /// This method is used to initialize the tree sequence, and should not be called during the
+    /// Viterbi algorithm.
+    fn add_initial_node(&mut self, node: Ancestor) {
+        debug_assert!(self.actual_parents[node.0].is_none());
+        debug_assert!(self.uncompressed_tree_parents[node.0].is_none());
+
+        self.active_nodes.push(node);
+        self.is_compressed[node.0] = false;
+        self.likelihoods[node.0] = 1.0;
+    }
+
+    /// Insert a new node into the tree. This is done whenever a new node begins, it is not the
+    /// correct method if a node is decompressed because of a change of its parent or a mutation.
+    ///
+    /// # Parameters
+    /// - `parent`: The parent of the new node
+    /// - `child`: The new node to insert
+    /// - `keep_compressed`: Whether the node should be kept compressed, i.e. it should not be
+    /// added to the set of active nodes.
+    fn insert_new_node(&mut self, parent: Ancestor, child: Ancestor, keep_compressed: bool) {
+        self.actual_parents[child.0] = Some(parent);
+
+        if !keep_compressed {
+            self.ensure_decompressed(child);
+            self.likelihoods[child.0] = 0.0;
+        }
+    }
+
+    /// Update the tree to reflect a change of parent for a node.
+    ///
+    /// Whenever a node changes parent, it must be decompressed, as its likelihood will now diverge
+    /// from its parent (unless the tree is not yet being used for matching, but just prepared).
+    /// This method ensures the node is decompressed and updates the tree to reflect the new parent.
+    ///
+    /// # Parameters
+    /// - `node`: The node that has a new parent
+    /// - `new_parent`: The new parent of the node
+    /// - `keep_compressed`: Whether the node should be kept compressed, i.e. it should not be
+    /// decompressed. This is useful if the tree is not yet being used for matching, but just being
+    /// prepared (i.e. the Viterbi algorithm is not yet running, but the ancestor iterator updates
+    /// the marginal tree by updating it for every event in the queue before the start-site of
+    /// the current candidate ancestor).
+    fn update_node_parent(&mut self, node: Ancestor, new_parent: Ancestor, keep_compressed: bool) {
+        self.actual_parents[node.0] = Some(new_parent);
+
+        if !keep_compressed {
+            self.ensure_decompressed(node);
+        }
+    }
+
+    /// Whenever a node has a mutation from its parent, it must be decompressed, as its likelihood
+    /// will no diverge from its parent.
+    /// This method ensures the node is decompressed.
+    /// This method must not be called when the tree is just being prepared, as the node will be
+    /// decompressed, which is unnecessary outside of the Viterbi algorithm.
+    fn update_node_mutation(&mut self, node: Ancestor) {
+        self.ensure_decompressed(node)
+    }
+
+    /// Remove a node from the tree. This is done whenever an ancestor ends.
+    fn remove_node(&mut self, node: Ancestor) {
+        self.actual_parents[node.0] = None;
+        self.uncompressed_tree_parents[node.0] = None;
+        self.is_compressed[node.0] = true;
+        self.active_nodes.retain(|&n| n != node);
+    }
+
+    /// Advance the tree to the given site by updating the tree to reflect all events in the queue
+    /// up to (but excluding) the given site.
+    ///
+    /// # Parameters
+    /// - `event_queue`: The queue of events to process, it must be peekable
+    /// - `site`: The site to advance to
+    /// - `keep_compressed`: Whether the nodes should be kept compressed, i.e. they should not be
+    /// added to the set of active nodes. This is useful if the tree is not yet being used for
+    /// matching, but just prepared (i.e. the Viterbi algorithm is not yet running, but the
+    /// ancestor iterator updates the marginal tree by updating it for every event in the queue
+    /// before the start-site of the current candidate ancestor).
+    fn advance_to_site<'b, I: Iterator<Item = &'b SequenceEvent>>(
+        &mut self,
+        event_queue: &mut Peekable<I>,
+        site: VariantIndex,
+        keep_compressed: bool,
+    ) {
+        while event_queue.peek().is_some() && event_queue.peek().unwrap().site < site {
+            match event_queue.next().unwrap() {
+                SequenceEvent {
+                    site: _,
+                    node,
+                    kind: SequenceEventKind::Mutation,
+                } => {
+                    if !keep_compressed {
+                        self.update_node_mutation(*node);
+                    }
+                }
+                SequenceEvent {
+                    site: _,
+                    node,
+                    kind: SequenceEventKind::Start { parent },
+                } => {
+                    self.insert_new_node(*parent, *node, keep_compressed);
+                }
+                SequenceEvent {
+                    site: _,
+                    node,
+                    kind: SequenceEventKind::ChangeParent { new_parent },
+                } => {
+                    self.update_node_parent(*node, *new_parent, keep_compressed);
+                }
+                SequenceEvent {
+                    site: _,
+                    node,
+                    kind: SequenceEventKind::End,
+                } => {
+                    self.remove_node(*node);
+                }
+            }
+        }
     }
 }
+
+// TODO add crafted unit tests

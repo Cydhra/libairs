@@ -1,6 +1,6 @@
 use crate::ancestors::AncestralSequence;
 use crate::ts::ancestor_array::AncestorArray;
-use crate::ts::ancestor_iterator::AncestorIterator;
+use crate::ts::ancestor_iterator::AncestorIndex;
 use crate::ts::partial_sequence::PartialSequenceEdge;
 
 /// A matcher runs the viterbi algorithm for a set of sequences.
@@ -12,13 +12,13 @@ use crate::ts::partial_sequence::PartialSequenceEdge;
 /// - [`Matcher::match_samples`]: Match a set of samples against the partial tree sequence
 pub struct Matcher {
     ancestors: AncestorArray,
-    ancestor_iterator: AncestorIterator,
+    ancestor_iterator: AncestorIndex,
 }
 
 impl Matcher {
     /// Create a new matcher for the given ancestral sequences
     pub fn new(ancestors: AncestorArray) -> Self {
-        let ancestor_iterator = AncestorIterator::new();
+        let ancestor_iterator = AncestorIndex::new();
         Self {
             ancestors,
             ancestor_iterator,
