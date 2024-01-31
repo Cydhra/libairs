@@ -333,7 +333,6 @@ impl MarginalTree {
         );
 
         let mut parent = self.actual_parents[node.0];
-        println!("parent of node {} is {:?}", node.0, parent);
 
         while let Some(p) = parent {
             if !self.is_compressed(p) {
@@ -585,6 +584,47 @@ mod tests {
                 assert_eq!(
                     tree.nodes().count(),
                     if counter < 5 { 1 } else { 2 },
+                    "wrong number of nodes at site {}",
+                    counter
+                );
+                counter += 1;
+            });
+    }
+
+    #[test]
+    fn test_simple_tree_recompression() {
+        let mut ix = AncestorIndex::new();
+        let mut counter = 0;
+
+        // insert edge from first to root node
+        ix.insert_sequence_node(
+            Ancestor(1),
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(0)],
+        );
+
+        ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2)
+            .for_each(|(site, tree)| {
+                if site == VariantIndex::from_usize(0) {
+                    // fake likelihoods to prevent early recompression
+                    for i in 0..tree.num_nodes() {
+                        tree.likelihoods[i] = 0.1 * i as f64
+                    }
+                } else if site == VariantIndex::from_usize(4) {
+                    // trigger recompression exactly after site 4, meaning the node should be taken
+                    // away beginning from site 5
+                    for i in 0..tree.num_nodes() {
+                        tree.likelihoods[i] = 0.1;
+                    }
+                }
+
+                assert_eq!(
+                    tree.nodes().count(),
+                    if counter < 5 { 2 } else { 1 },
                     "wrong number of nodes at site {}",
                     counter
                 );
