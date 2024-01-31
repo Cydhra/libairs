@@ -146,6 +146,7 @@ impl<'a, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<'a, 
         self.marginal_tree
             .advance_to_site(&mut self.queue, self.site.next(), false, true);
         consumer((self.site, &mut self.marginal_tree));
+        self.marginal_tree.recompress_tree();
         self.site = self.site.next();
 
         while self.site < self.end {
@@ -153,6 +154,7 @@ impl<'a, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<'a, 
                 .advance_to_site(&mut self.queue, self.site.next(), false, false);
 
             consumer((self.site, &mut self.marginal_tree));
+            self.marginal_tree.recompress_tree();
             self.site = self.site.next();
         }
     }
@@ -551,7 +553,7 @@ mod tests {
     }
 
     #[test]
-    fn test_simple_tree() {
+    fn test_simple_tree_compression() {
         let mut ix = AncestorIndex::new();
         let mut counter = 0;
 
@@ -568,6 +570,11 @@ mod tests {
 
         ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2)
             .for_each(|(site, tree)| {
+                // fake likelihoods to prevent recompression
+                for i in 0..tree.num_nodes() {
+                    tree.likelihoods[i] = 0.1 * i as f64
+                }
+
                 assert_eq!(site, VariantIndex::from_usize(counter));
                 assert_eq!(tree.num_nodes(), 2);
                 assert_eq!(
