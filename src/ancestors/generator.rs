@@ -1,4 +1,4 @@
-use crate::ancestors::{AncestralSequence, ANCESTRAL_STATE, DERIVED_STATE};
+use crate::ancestors::{AncestorArray, AncestralSequence, ANCESTRAL_STATE, DERIVED_STATE};
 use crate::dna::VariantSite;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
@@ -250,10 +250,7 @@ impl AncestorGenerator {
     }
 
     /// Generate a set of ancestral sequences with the variant sites added to the generator.
-    pub fn generate_ancestors(&self) -> Vec<AncestralSequence> {
-        // TODO we have to sort focal sites by time and group those with equal genotype distributions
-        //  together
-
+    pub fn generate_ancestors(&self) -> AncestorArray {
         // fixme this entire process is inefficient, we should sort the original sites
         let mut sites = self.sites.iter().enumerate().collect::<Vec<_>>();
         sites.sort_unstable_by(|(_, a), (_, b)| {
@@ -358,7 +355,7 @@ impl AncestorGenerator {
                 .reverse()
         });
 
-        ancestors
+        AncestorArray::from(ancestors)
     }
 
     pub fn tskit_export_sites(&self, path: &Path) -> io::Result<()> {
@@ -382,6 +379,7 @@ impl AncestorGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ancestors::Ancestor;
     use crate::dna::VariantSite;
 
     #[test]
@@ -405,7 +403,7 @@ mod tests {
         assert_eq!(ancestors.len(), 5);
 
         // root ancestor
-        assert_eq!(ancestors[0].state, vec![0, 0, 0, 0]);
+        assert_eq!(ancestors[Ancestor(0)].state, vec![0, 0, 0, 0]);
 
         assert!(ancestors.iter().any(|a| a.state == vec![1, 0, 0, 0]));
         assert!(ancestors.iter().any(|a| a.state == vec![0, 1, 0, 0]));
@@ -434,7 +432,7 @@ mod tests {
         assert_eq!(ancestors.len(), 3);
 
         // root ancestor
-        assert_eq!(ancestors[0].state, vec![0, 0, 0, 0]);
+        assert_eq!(ancestors[Ancestor(0)].state, vec![0, 0, 0, 0]);
 
         assert!(ancestors.iter().any(|a| a.state == vec![1, 0, 0, 1]));
         assert!(ancestors.iter().any(|a| a.state == vec![0, 1, 1, 0]));

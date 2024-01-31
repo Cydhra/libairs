@@ -1,4 +1,4 @@
-use crate::ancestors::AncestralSequence;
+use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence};
 use crate::dna::SequencePosition;
 use std::io;
 use std::io::Write;
@@ -92,7 +92,7 @@ impl TreeSequenceNode {
 }
 
 // todo this should probably be a proper struct with hidden fields
-pub struct TreeSequence(pub Vec<TreeSequenceNode>, pub Vec<AncestralSequence>);
+pub struct TreeSequence(pub Vec<TreeSequenceNode>, pub AncestorArray);
 
 impl TreeSequence {
     pub fn tskit_export(&self, path: &Path) -> io::Result<()> {
@@ -110,7 +110,7 @@ impl TreeSequence {
         ))?;
 
         for node in &self.0 {
-            node.tskit_format_node(&self.1[node.ancestor_index], &mut writer)?;
+            node.tskit_format_node(&self.1[Ancestor(node.ancestor_index)], &mut writer)?;
         }
 
         let mut edge_file = path.to_path_buf();

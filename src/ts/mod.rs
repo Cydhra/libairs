@@ -3,7 +3,7 @@ mod matcher;
 mod partial_sequence;
 mod tree_sequence;
 
-use crate::ancestors::AncestralSequence;
+use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence};
 use crate::dna::SequencePosition;
 use crate::ts::tree_sequence::{TreeSequence, TreeSequenceInterval, TreeSequenceNode};
 use crate::ts::SweepEventKind::Start;
@@ -12,10 +12,11 @@ use std::cmp::{Ordering, Reverse};
 use std::fs::File;
 use std::io;
 use std::io::Write;
+use std::ops::Deref;
 use std::path::Path;
 
 pub struct TreeSequenceGenerator {
-    pub ancestor_sequences: Vec<AncestralSequence>,
+    pub ancestor_sequences: AncestorArray,
     partial_tree_sequence: Vec<TreeSequenceNode>,
     variant_positions: Vec<SequencePosition>,
     sequence_length: SequencePosition,
@@ -25,7 +26,7 @@ pub struct TreeSequenceGenerator {
 
 impl TreeSequenceGenerator {
     pub fn new(
-        ancestor_sequences: Vec<AncestralSequence>,
+        ancestor_sequences: AncestorArray,
         sequence_length: SequencePosition,
         recombination_rate: f64,
         mismatch_rate: f64,
@@ -60,7 +61,7 @@ impl TreeSequenceGenerator {
         let mut recombination_points = vec![vec![false; num_ancestors]; candidate.len()];
         let mut mutation_points = vec![vec![false; num_ancestors]; candidate.len()];
 
-        let mut max_likelihoods = vec![0; candidate.len()];
+        let mut max_likelihoods = vec![Ancestor(0); candidate.len()];
         let candidate_start = candidate.start();
 
         let rho = self.recombination_prob;
@@ -76,7 +77,7 @@ impl TreeSequenceGenerator {
                     // if the ancestor is not available from the start, the initial likelihood must be zero,
                     // so we recombine away from it on tracback
                     if event.position > candidate_start {
-                        likelihoods[event.ancestor_index] = 0f64;
+                        likelihoods[event.ancestor_index.0] = 0f64;
                     }
                     let end_event_pos = self.ancestor_sequences[event.ancestor_index].end();
 
@@ -93,7 +94,7 @@ impl TreeSequenceGenerator {
             }
 
             let mut max_site_likelihood = -1f64;
-            let mut max_site_likelihood_ancestor: Option<usize> = None;
+            let mut max_site_likelihood_ancestor: Option<Ancestor> = None;
 
             let k = (num_ancestors + 1) as f64; // number of ancestors in tableau plus the virtual root
                                                 // probability that any one specific ancestor recombines to the current ancestors
@@ -111,28 +112,28 @@ impl TreeSequenceGenerator {
             );
             for &ancestor_id in active_ancestors.iter() {
                 let ancestral_sequence = &self.ancestor_sequences[ancestor_id];
-                let prob_no_recomb = likelihoods[ancestor_id] * prob_no_recomb;
+                let prob_no_recomb = likelihoods[ancestor_id.0] * prob_no_recomb;
 
                 let pt = if prob_no_recomb > prob_recomb {
                     prob_no_recomb
                 } else {
-                    recombination_points[site - candidate_start][ancestor_id] = true;
+                    recombination_points[site - candidate_start][ancestor_id.0] = true;
                     prob_recomb
                 };
 
                 let pe = if state == ancestral_sequence[site] {
                     rev_mu
                 } else {
-                    mutation_points[site - candidate_start][ancestor_id] = true;
+                    mutation_points[site - candidate_start][ancestor_id.0] = true;
                     mu
                 };
 
-                likelihoods[ancestor_id] = pt * pe;
+                likelihoods[ancestor_id.0] = pt * pe;
 
-                if likelihoods[ancestor_id] > max_site_likelihood {
-                    max_site_likelihood = likelihoods[ancestor_id];
+                if likelihoods[ancestor_id.0] > max_site_likelihood {
+                    max_site_likelihood = likelihoods[ancestor_id.0];
                     max_site_likelihood_ancestor = Some(ancestor_id);
-                } else if likelihoods[ancestor_id] == max_site_likelihood
+                } else if likelihoods[ancestor_id.0] == max_site_likelihood
                     && self.ancestor_sequences[ancestor_id].relative_age()
                         > self.ancestor_sequences[max_site_likelihood_ancestor.unwrap()]
                             .relative_age()
@@ -140,14 +141,14 @@ impl TreeSequenceGenerator {
                     // TODO this is a hack to make sure that the oldest ancestor is chosen in case of a tie,
                     //  because this is what tsinfer does implicitly does by not calculating the likelihoods
                     //  of ancestors with equal sequences.
-                    max_site_likelihood = likelihoods[ancestor_id];
+                    max_site_likelihood = likelihoods[ancestor_id.0];
                     max_site_likelihood_ancestor = Some(ancestor_id);
                 }
             }
 
             // Apparently a measure to maintain numerical stability
             for &ancestor in active_ancestors.iter() {
-                likelihoods[ancestor] /= max_site_likelihood;
+                likelihoods[ancestor.0] /= max_site_likelihood;
             }
 
             max_likelihoods[site - candidate_start] =
@@ -165,15 +166,15 @@ impl TreeSequenceGenerator {
         };
 
         for (site, _) in candidate.site_iter().rev() {
-            if mutation_points[site - candidate_start][ancestor_index] {
+            if mutation_points[site - candidate_start][ancestor_index.0] {
                 mutations.push(site);
             }
 
-            if recombination_points[site - candidate_start][ancestor_index]
+            if recombination_points[site - candidate_start][ancestor_index.0]
                 && max_likelihoods[site - 1 - candidate_start] != ancestor_index
             {
                 nodes.push(TreeSequenceInterval::new(
-                    ancestor_index,
+                    ancestor_index.0,
                     self.variant_positions[site],
                     ancestor_coverage_end,
                 ));
@@ -183,7 +184,7 @@ impl TreeSequenceGenerator {
             }
         }
         nodes.push(TreeSequenceInterval::new(
-            ancestor_index,
+            ancestor_index.0,
             if candidate.start() == 0 {
                 SequencePosition::from_usize(0)
             } else {
@@ -226,7 +227,7 @@ impl TreeSequenceGenerator {
                         SweepEvent {
                             kind: Start,
                             position: old_ancestor.start(),
-                            ancestor_index: old_ancestor_index,
+                            ancestor_index: Ancestor(old_ancestor_index),
                         },
                     );
                 }
@@ -248,7 +249,7 @@ impl TreeSequenceGenerator {
         let mut writer = File::create(node_file)?;
 
         writer.write_fmt(format_args!("start\tend\tage\tfocal_sites\tstate\n"))?;
-        for ancestor in &self.ancestor_sequences {
+        for ancestor in self.ancestor_sequences.deref() {
             ancestor.export(&mut writer)?;
         }
 
@@ -261,7 +262,7 @@ impl TreeSequenceGenerator {
 struct SweepEvent {
     kind: SweepEventKind,
     position: usize,
-    ancestor_index: usize,
+    ancestor_index: Ancestor,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
