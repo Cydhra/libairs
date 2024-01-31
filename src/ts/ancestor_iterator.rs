@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 use std::iter::Peekable;
-
-use indexset::BTreeSet;
 
 use crate::ts::ancestor_array::{Ancestor, VariantIndex};
 use crate::ts::partial_sequence::PartialSequenceEdge;
@@ -129,7 +128,7 @@ struct PartialTreeSequenceIterator<'a, I: Iterator<Item = &'a SequenceEvent>> {
 }
 
 impl<'a, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<'a, I> {
-    pub(crate) fn for_each(&mut self, consumer: fn(Site<'_>)) {
+    pub(crate) fn for_each<F: FnMut(Site)>(&mut self, mut consumer: F) {
         while self.site < self.end {
             self.marginal_tree
                 .advance_to_site(&mut self.queue, self.site.next(), false);
