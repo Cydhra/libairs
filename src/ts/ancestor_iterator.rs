@@ -121,7 +121,7 @@ impl AncestorIndex {
 }
 
 /// Borrowed iterator through the partial tree sequence held by an [`AncestorIndex`].
-struct PartialTreeSequenceIterator<'a, I: Iterator<Item = &'a SequenceEvent>> {
+pub(crate) struct PartialTreeSequenceIterator<'a, I: Iterator<Item = &'a SequenceEvent>> {
     marginal_tree: MarginalTree,
     site: VariantIndex,
     end: VariantIndex,
@@ -184,7 +184,7 @@ impl Ord for SequenceEventKind {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct SequenceEvent {
+pub(crate) struct SequenceEvent {
     site: VariantIndex,
     node: Ancestor,
     kind: SequenceEventKind,
