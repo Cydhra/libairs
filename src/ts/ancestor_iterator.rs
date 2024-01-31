@@ -61,7 +61,15 @@ impl AncestorIndex {
                 kind: SequenceEventKind::End,
             });
 
-            for edge in edges {
+            self.edge_index.insert(SequenceEvent {
+                site: edges.first().unwrap().start(),
+                node: tree_node,
+                kind: SequenceEventKind::Start {
+                    parent: edges.first().unwrap().parent(),
+                },
+            });
+
+            for edge in edges.iter().skip(1) {
                 self.edge_index.insert(SequenceEvent {
                     site: edge.start(),
                     node: tree_node,
@@ -501,9 +509,7 @@ impl MarginalTree {
                     node,
                     kind: SequenceEventKind::Start { parent },
                 } => {
-                    if !mutations_only {
-                        self.insert_new_node(*parent, *node, keep_compressed);
-                    }
+                    self.insert_new_node(*parent, *node, keep_compressed || mutations_only);
                 }
                 SequenceEvent {
                     site: _,
