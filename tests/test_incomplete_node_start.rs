@@ -6,6 +6,7 @@
 use libairs::ancestors::AncestorGenerator;
 use libairs::dna::{SequencePosition, VariantSite};
 use libairs::ts::TreeSequenceGenerator;
+use std::ops::Deref;
 
 #[test]
 fn test_incomplete_node_start() {
@@ -25,7 +26,7 @@ fn test_incomplete_node_start() {
     );
 
     let ancestors = ag.generate_ancestors();
-    assert_ne!(ancestors[2].start(), 0); // the third ancestor is incomplete and doesn't start at position 0.
+    assert_ne!(ancestors.deref()[2].start(), 0); // the third ancestor is incomplete and doesn't start at position 0.
 
     let ancestor_matcher = TreeSequenceGenerator::new(
         ancestors,

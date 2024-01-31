@@ -4,6 +4,7 @@
 use libairs::ancestors::AncestorGenerator;
 use libairs::dna::{SequencePosition, VariantSite};
 use libairs::ts::TreeSequenceGenerator;
+use std::ops::Deref;
 
 #[test]
 fn test_incomplete_nodes() {
@@ -25,7 +26,7 @@ fn test_incomplete_nodes() {
     let ancestors = ag.generate_ancestors();
 
     assert_eq!(ancestors.len(), 4);
-    assert_eq!(ancestors[3].haplotype(), &vec![1, 1, 1, 1]);
+    assert_eq!(ancestors.deref()[3].haplotype(), &vec![1, 1, 1, 1]);
 
     let ancestor_matcher = TreeSequenceGenerator::new(
         ancestors,

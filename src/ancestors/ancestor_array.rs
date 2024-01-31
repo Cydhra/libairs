@@ -25,14 +25,6 @@ impl Index<Ancestor> for AncestorArray {
     }
 }
 
-impl Index<usize> for AncestorArray {
-    type Output = AncestralSequence;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.ancestors[index]
-    }
-}
-
 impl Deref for AncestorArray {
     type Target = Vec<AncestralSequence>;
 

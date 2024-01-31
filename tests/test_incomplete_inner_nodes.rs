@@ -3,6 +3,8 @@
 //! algorithm. The test case tests that the incomplete ancestor stops copying from any ancestor, and that the last ancestor,
 //! which copies from the incomplete ancestor, stops copying from it before the incomplete ancestor ends
 
+use std::ops::Deref;
+
 use libairs::ancestors::AncestorGenerator;
 use libairs::dna::{SequencePosition, VariantSite};
 use libairs::ts::TreeSequenceGenerator;
@@ -27,7 +29,7 @@ fn test_incomplete_inner_nodes() {
     );
 
     let ancestors = ag.generate_ancestors();
-    assert_eq!(ancestors[5].len(), 6); // only 6 sites, instead of 7
+    assert_eq!(ancestors.deref()[5].len(), 6); // only 6 sites, instead of 7
 
     let ancestor_matcher = TreeSequenceGenerator::new(
         ancestors,
