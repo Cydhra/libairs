@@ -109,7 +109,7 @@ impl AncestorIndex {
             .into_iter()
             .peekable();
 
-        marginal_tree.advance_to_site(&mut queue, site, true);
+        marginal_tree.advance_to_site(&mut queue, site, true, false);
 
         PartialTreeSequenceIterator {
             marginal_tree,
@@ -130,13 +130,22 @@ struct PartialTreeSequenceIterator<'a, I: Iterator<Item = &'a SequenceEvent>> {
 
 impl<'a, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<'a, I> {
     pub(crate) fn for_each<F: FnMut(Site)>(&mut self, mut consumer: F) {
+        if self.site == self.end {
+            return;
+        }
+
+        // first site has special treatment because we don't need to decompress edges that start here
+        self.marginal_tree
+            .advance_to_site(&mut self.queue, self.site.next(), false, true);
+        consumer((self.site, &mut self.marginal_tree));
+        self.site = self.site.next();
+
         while self.site < self.end {
             self.marginal_tree
-                .advance_to_site(&mut self.queue, self.site.next(), false);
-            let this_site = self.site;
-            self.site = self.site.next();
+                .advance_to_site(&mut self.queue, self.site.next(), false, false);
 
-            consumer((this_site, &mut self.marginal_tree))
+            consumer((self.site, &mut self.marginal_tree));
+            self.site = self.site.next();
         }
     }
 }
@@ -464,11 +473,15 @@ impl MarginalTree {
     /// matching, but just prepared (i.e. the Viterbi algorithm is not yet running, but the
     /// ancestor iterator updates the marginal tree by updating it for every event in the queue
     /// before the start-site of the current candidate ancestor).
+    /// - `mutations_only`: Whether only mutations should be processed. This is useful to prepare
+    /// the first site of a candidate ancestor, as all nodes that dont have mutations on that site
+    /// have the same likelihood anyway, so they dont need to be decompressed
     fn advance_to_site<'b, I: Iterator<Item = &'b SequenceEvent>>(
         &mut self,
         event_queue: &mut Peekable<I>,
         site: VariantIndex,
         keep_compressed: bool,
+        mutations_only: bool,
     ) {
         while event_queue.peek().is_some() && event_queue.peek().unwrap().site < site {
             match event_queue.next().unwrap() {
@@ -486,14 +499,16 @@ impl MarginalTree {
                     node,
                     kind: SequenceEventKind::Start { parent },
                 } => {
-                    self.insert_new_node(*parent, *node, keep_compressed);
+                    if !mutations_only {
+                        self.insert_new_node(*parent, *node, keep_compressed);
+                    }
                 }
                 SequenceEvent {
                     site: _,
                     node,
                     kind: SequenceEventKind::ChangeParent { new_parent },
                 } => {
-                    self.update_node_parent(*node, *new_parent, keep_compressed);
+                    self.update_node_parent(*node, *new_parent, keep_compressed || mutations_only);
                 }
                 SequenceEvent {
                     site: _,
@@ -523,6 +538,36 @@ mod tests {
                 assert_eq!(tree.nodes().count(), 2);
                 assert_eq!(tree.parent(Ancestor(0)), None);
                 assert_eq!(tree.parent(Ancestor(1)), None);
+                counter += 1;
+            });
+    }
+
+    #[test]
+    fn test_simple_tree() {
+        let mut ix = AncestorIndex::new();
+        let mut counter = 0;
+
+        // insert edge from first to root node
+        ix.insert_sequence_node(
+            Ancestor(1),
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(5)],
+        );
+
+        ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2)
+            .for_each(|(site, tree)| {
+                assert_eq!(site, VariantIndex::from_usize(counter));
+                assert_eq!(tree.num_nodes(), 2);
+                assert_eq!(
+                    tree.nodes().count(),
+                    if counter < 5 { 1 } else { 2 },
+                    "wrong number of nodes at site {}",
+                    counter
+                );
                 counter += 1;
             });
     }
