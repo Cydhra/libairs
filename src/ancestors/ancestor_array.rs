@@ -2,6 +2,7 @@ use crate::ancestors::{Ancestor, AncestralSequence};
 use std::ops::{Deref, Index};
 
 /// This is a helper struct for the Viterbi algorithm that manages the ancestral sequences.
+#[derive(Debug, Clone)]
 pub struct AncestorArray {
     // TODO figure out if transposing the ancestors improves cache locality
     ancestors: Vec<AncestralSequence>,
