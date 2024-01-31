@@ -263,6 +263,9 @@ pub(crate) struct MarginalTree {
     /// The likelihood of each node in the tree. Likelihood for compressed nodes is wrong, but
     /// they are ignored during the Viterbi algorithm.
     likelihoods: Vec<f64>,
+
+    /// The number of nodes in the tree. Nodes with a higher index are ignored in the tree.
+    limit_nodes: usize,
 }
 
 impl MarginalTree {
@@ -275,6 +278,7 @@ impl MarginalTree {
             is_compressed: vec![true; limit_nodes],
             active_nodes: Vec::new(),
             likelihoods: vec![-1.0f64; limit_nodes],
+            limit_nodes,
         };
 
         marginal_tree.add_initial_node(Ancestor(0));
@@ -502,7 +506,13 @@ impl MarginalTree {
         mutations_only: bool,
     ) {
         while event_queue.peek().is_some() && event_queue.peek().unwrap().site < site {
-            match event_queue.next().unwrap() {
+            let event = event_queue.next().unwrap();
+
+            if event.node.0 >= self.limit_nodes {
+                continue;
+            }
+
+            match event {
                 SequenceEvent {
                     site: _,
                     node,
@@ -765,6 +775,50 @@ mod tests {
                         0..=4 => 2,
                         5.. => 3,
                     },
+                    "wrong number of nodes at site {}",
+                    counter
+                );
+                counter += 1usize;
+            });
+    }
+
+    #[test]
+    fn test_limit_nodes() {
+        // test whether the correct nodes are in the tree if we limit the number of nodes
+        let mut ix = AncestorIndex::new();
+        let mut counter = 0;
+
+        // insert two nodes, one will be ignored
+        ix.insert_sequence_node(
+            Ancestor(1),
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(0)],
+        );
+        ix.insert_sequence_node(
+            Ancestor(2),
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(0)],
+        );
+
+        // check the tree size is always 2
+        ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2)
+            .for_each(|(site, tree)| {
+                // fake likelihoods to prevent recompression
+                for i in 0..tree.num_nodes() {
+                    tree.likelihoods[i] = 0.1 * i as f64
+                }
+
+                assert_eq!(
+                    tree.nodes().count(),
+                    2,
                     "wrong number of nodes at site {}",
                     counter
                 );
