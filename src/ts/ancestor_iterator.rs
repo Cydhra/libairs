@@ -129,6 +129,8 @@ impl AncestorIndex {
 }
 
 /// Borrowed iterator through the partial tree sequence held by an [`AncestorIndex`].
+/// Not an actual implementation of IterMut, because it borrows the same marginal tree for each site
+/// mutably, so we need to make sure the reference cannot escape the iterator.
 pub(crate) struct PartialTreeSequenceIterator<'a, I: Iterator<Item = &'a SequenceEvent>> {
     marginal_tree: MarginalTree,
     site: VariantIndex,
@@ -677,6 +679,40 @@ mod tests {
                 assert_eq!(
                     tree.nodes().count(),
                     if counter < 5 { 1 } else { 2 },
+                    "wrong number of nodes at site {}",
+                    counter
+                );
+                counter += 1;
+            });
+    }
+
+    #[test]
+    fn test_recompression_divergence() {
+        // test whether divergence works after recompression
+        let mut ix = AncestorIndex::new();
+        let mut counter = 0;
+
+        ix.insert_sequence_node(
+            Ancestor(1),
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            // diverge on site 1, then again on site 5, recompress in between
+            vec![VariantIndex::from_usize(1), VariantIndex::from_usize(5)],
+        );
+
+        ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2)
+            .for_each(|(site, tree)| {
+                // likelihoods stay at 0, so recompression happens immediately
+                assert_eq!(
+                    tree.nodes().count(),
+                    match counter {
+                        1 => 2,
+                        5 => 2,
+                        _ => 1,
+                    },
                     "wrong number of nodes at site {}",
                     counter
                 );
