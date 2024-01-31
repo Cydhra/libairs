@@ -286,8 +286,9 @@ impl MarginalTree {
     }
 
     /// An iterator through the currently uncompressed nodes
-    pub(crate) fn nodes(&self) -> impl Iterator<Item = Ancestor> + '_ {
-        self.active_nodes.iter().copied()
+    pub(crate) fn nodes(&self) -> impl Iterator<Item = Ancestor> {
+        // TODO can we maybe get away without cloning here?
+        self.active_nodes.clone().into_iter()
     }
 
     /// Get the parent of the given tree node ignoring compressed nodes.
