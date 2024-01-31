@@ -510,7 +510,6 @@ impl MarginalTree {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ancestors::AncestralSequence;
 
     #[test]
     fn test_ancestor_iteration() {
@@ -522,6 +521,8 @@ mod tests {
                 assert_eq!(site, VariantIndex::from_usize(counter));
                 assert_eq!(tree.num_nodes(), 2);
                 assert_eq!(tree.nodes().count(), 2);
+                assert_eq!(tree.parent(Ancestor(0)), None);
+                assert_eq!(tree.parent(Ancestor(1)), None);
                 counter += 1;
             });
     }
