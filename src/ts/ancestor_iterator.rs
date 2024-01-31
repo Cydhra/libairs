@@ -5,7 +5,7 @@ use std::iter::Peekable;
 use crate::ts::ancestor_array::{Ancestor, VariantIndex};
 use crate::ts::partial_sequence::PartialSequenceEdge;
 
-type Site<'a> = (VariantIndex, &'a MarginalTree);
+type Site<'a> = (VariantIndex, &'a mut MarginalTree);
 
 /// A helper structure for the Viterbi algorithm that helps iterating through the sites, updating
 /// the marginal tree at the currently visited site and helping with tree compression.
@@ -135,7 +135,7 @@ impl<'a, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<'a, 
             let this_site = self.site;
             self.site = self.site.next();
 
-            consumer((this_site, &self.marginal_tree))
+            consumer((this_site, &mut self.marginal_tree))
         }
     }
 }
@@ -218,6 +218,7 @@ impl Ord for SequenceEvent {
 /// The marginal tree offers methods to iterate through all uncompressed nodes.
 ///
 /// [`AncestorIterator`]: AncestorIndex
+#[derive(Clone, Debug)]
 pub(crate) struct MarginalTree {
     /// The actual parents of the tree nodes. None for free nodes and the root, parents might be
     /// compressed.
@@ -249,7 +250,10 @@ impl MarginalTree {
             likelihoods: vec![-1.0f64; limit_nodes],
         };
 
-        marginal_tree.add_initial_node(Ancestor(0)); // root
+        if num_nodes > 0 {
+            // always add the root as the base node
+            marginal_tree.add_initial_node(Ancestor(0));
+        }
         (num_nodes..limit_nodes)
             .map(Ancestor)
             .for_each(|n| marginal_tree.add_initial_node(n));
@@ -502,4 +506,22 @@ impl MarginalTree {
     }
 }
 
-// TODO add crafted unit tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ancestors::AncestralSequence;
+
+    #[test]
+    fn test_ancestor_iteration() {
+        let ix = AncestorIndex::new();
+        let mut counter = 0;
+
+        ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2)
+            .for_each(|(site, tree)| {
+                assert_eq!(site, VariantIndex::from_usize(counter));
+                assert_eq!(tree.num_nodes(), 2);
+                assert_eq!(tree.nodes().count(), 2);
+                counter += 1;
+            });
+    }
+}
