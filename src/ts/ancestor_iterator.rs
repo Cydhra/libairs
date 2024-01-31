@@ -111,11 +111,7 @@ impl AncestorIndex {
         let mut marginal_tree = MarginalTree::new(self.num_nodes, limit_nodes);
 
         let site = start;
-        let mut queue = self
-            .edge_index
-            .range(SequenceEvent::sentinel(start)..SequenceEvent::sentinel(end))
-            .into_iter()
-            .peekable();
+        let mut queue = self.edge_index.iter().peekable();
 
         marginal_tree.advance_to_site(&mut queue, site, true, false);
 
@@ -819,6 +815,54 @@ mod tests {
                 assert_eq!(
                     tree.nodes().count(),
                     2,
+                    "wrong number of nodes at site {}",
+                    counter
+                );
+                counter += 1usize;
+            });
+    }
+
+    #[test]
+    fn test_incomplete_site_iterator() {
+        // test whether an incomplete range of sites iterated yields correct trees
+        let mut ix = AncestorIndex::new();
+        let mut counter = 2;
+
+        // insert two nodes
+        ix.insert_sequence_node(
+            Ancestor(1),
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(5)],
+        );
+        ix.insert_sequence_node(
+            Ancestor(2),
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(1)],
+        );
+
+        // check the tree
+        ix.sites(VariantIndex::from_usize(2), VariantIndex::from_usize(10), 3)
+            .for_each(|(site, tree)| {
+                // fake likelihoods to prevent recompression
+                for i in 0..tree.num_nodes() {
+                    tree.likelihoods[i] = 0.1 * i as f64
+                }
+
+                assert_eq!(
+                    tree.nodes().count(),
+                    match counter {
+                        2..=4 => 1,
+                        5.. => 2,
+                        _ => unreachable!(),
+                    },
                     "wrong number of nodes at site {}",
                     counter
                 );
