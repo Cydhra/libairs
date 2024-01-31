@@ -823,7 +823,7 @@ mod tests {
     }
 
     #[test]
-    fn test_incomplete_site_iterator() {
+    fn test_subset_iterator() {
         // test whether an incomplete range of sites iterated yields correct trees
         let mut ix = AncestorIndex::new();
         let mut counter = 2;
@@ -862,6 +862,44 @@ mod tests {
                         2..=4 => 1,
                         5.. => 2,
                         _ => unreachable!(),
+                    },
+                    "wrong number of nodes at site {}",
+                    counter
+                );
+                counter += 1usize;
+            });
+    }
+
+    #[test]
+    fn test_incomplete_ancestor() {
+        // test whether an ancestor that ends early gets removed from the marginal tree
+        let mut ix = AncestorIndex::new();
+        let mut counter = 0;
+
+        // insert incomplete ancestor
+        ix.insert_sequence_node(
+            Ancestor(1),
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(5),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(0)],
+        );
+
+        // check the tree
+        ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2)
+            .for_each(|(site, tree)| {
+                // fake likelihoods to prevent recompression
+                for i in 0..tree.num_nodes() {
+                    tree.likelihoods[i] = 0.1 * i as f64
+                }
+
+                assert_eq!(
+                    tree.nodes().count(),
+                    match counter {
+                        0..=4 => 2,
+                        5.. => 1,
                     },
                     "wrong number of nodes at site {}",
                     counter
