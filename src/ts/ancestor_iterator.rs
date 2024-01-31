@@ -18,6 +18,7 @@ pub(crate) struct AncestorIndex {
     edge_index: BTreeSet<SequenceEvent>,
     num_nodes: usize, // number of nodes in the tree sequence. All nodes with an index >= this
                       // value are not part of the tree sequence yet, and are thus free nodes.
+                      // The root node is always part of the tree, so this value is at least 1.
 }
 
 impl AncestorIndex {
@@ -25,7 +26,7 @@ impl AncestorIndex {
     pub(crate) fn new() -> Self {
         Self {
             edge_index: BTreeSet::new(),
-            num_nodes: 0,
+            num_nodes: 1,
         }
     }
 
@@ -242,6 +243,8 @@ pub(crate) struct MarginalTree {
 
 impl MarginalTree {
     fn new(num_nodes: usize, limit_nodes: usize) -> Self {
+        debug_assert!(num_nodes > 0, "Tree must have at least one node");
+
         let mut marginal_tree = Self {
             actual_parents: vec![None; limit_nodes],
             uncompressed_tree_parents: vec![None; limit_nodes],
@@ -250,10 +253,8 @@ impl MarginalTree {
             likelihoods: vec![-1.0f64; limit_nodes],
         };
 
-        if num_nodes > 0 {
-            // always add the root as the base node
-            marginal_tree.add_initial_node(Ancestor(0));
-        }
+        // TODO dont initialize nodes here, ask somebody for the Ancestor instances
+        marginal_tree.add_initial_node(Ancestor(0));
         (num_nodes..limit_nodes)
             .map(Ancestor)
             .for_each(|n| marginal_tree.add_initial_node(n));
