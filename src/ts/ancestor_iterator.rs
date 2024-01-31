@@ -719,4 +719,56 @@ mod tests {
                 counter += 1;
             });
     }
+
+    #[test]
+    fn test_mutation_on_recombination() {
+        // test whether the correct nodes are decompressed when a mutation happens on a recombination
+        let mut ix = AncestorIndex::new();
+        let mut counter = 0;
+
+        ix.insert_sequence_node(
+            Ancestor(1),
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(0)],
+        );
+        ix.insert_sequence_node(
+            Ancestor(2),
+            vec![
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(0),
+                    VariantIndex::from_usize(5),
+                    Ancestor(1),
+                ),
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(5),
+                    VariantIndex::from_usize(10),
+                    Ancestor(0),
+                ),
+            ],
+            vec![VariantIndex::from_usize(5)],
+        );
+
+        ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 3)
+            .for_each(|(site, tree)| {
+                // fake likelihoods to prevent recompression
+                for i in 0..tree.num_nodes() {
+                    tree.likelihoods[i] = 0.1 * i as f64
+                }
+
+                assert_eq!(
+                    tree.nodes().count(),
+                    match counter {
+                        0..=4 => 2,
+                        5.. => 3,
+                    },
+                    "wrong number of nodes at site {}",
+                    counter
+                );
+                counter += 1usize;
+            });
+    }
 }
