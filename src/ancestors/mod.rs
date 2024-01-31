@@ -9,7 +9,7 @@ use rayon::prelude::IntoParallelRefIterator;
 mod ancestor_array;
 mod generator;
 
-pub(crate) use ancestor_array::{Ancestor, AncestorArray, VariantIndex};
+pub(crate) use ancestor_array::AncestorArray;
 pub use generator::AncestorGenerator;
 
 const ANCESTRAL_STATE: u8 = 0;
@@ -152,3 +152,25 @@ impl IndexMut<usize> for AncestralSequence {
         &mut self.state[index]
     }
 }
+
+/// An index into the [`AncestorArray`]
+///
+/// [`AncestorArray`]: AncestorArray
+#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+pub(crate) struct VariantIndex(usize);
+
+impl VariantIndex {
+    #[cfg(test)]
+    pub fn from_usize(index: usize) -> Self {
+        Self(index)
+    }
+
+    /// Get the next variant index after this one
+    pub(crate) fn next(&self) -> Self {
+        Self(self.0 + 1)
+    }
+}
+
+/// An index into the ancestor array which uniquely identifies an ancestor
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub(crate) struct Ancestor(pub(crate) usize);

@@ -277,7 +277,6 @@ impl MarginalTree {
             likelihoods: vec![-1.0f64; limit_nodes],
         };
 
-        // TODO dont initialize nodes here, ask somebody for the Ancestor instances
         marginal_tree.add_initial_node(Ancestor(0));
         (num_nodes..limit_nodes)
             .map(Ancestor)
