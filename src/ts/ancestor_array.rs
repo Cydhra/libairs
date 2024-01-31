@@ -32,6 +32,11 @@ impl Index<Ancestor> for AncestorArray {
 pub(crate) struct VariantIndex(usize);
 
 impl VariantIndex {
+    #[cfg(test)]
+    pub fn from_usize(index: usize) -> Self {
+        Self(index)
+    }
+
     /// Get the next variant index after this one
     pub(crate) fn next(&self) -> Self {
         Self(self.0 + 1)
