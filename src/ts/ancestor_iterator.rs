@@ -631,4 +631,56 @@ mod tests {
                 counter += 1;
             });
     }
+
+    #[test]
+    fn test_simple_tree_divergence() {
+        // test whether a compressed node is decompressed when its parent changes to a different node
+        let mut ix = AncestorIndex::new();
+        let mut counter = 0;
+
+        // insert edges for two nodes
+        ix.insert_sequence_node(
+            Ancestor(1),
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(9)],
+        );
+        ix.insert_sequence_node(
+            Ancestor(2),
+            vec![
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(0),
+                    VariantIndex::from_usize(5),
+                    Ancestor(1),
+                ),
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(5),
+                    VariantIndex::from_usize(10),
+                    Ancestor(0),
+                ),
+            ],
+            vec![VariantIndex::from_usize(10)],
+        );
+
+        ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(9), 3)
+            .for_each(|(site, tree)| {
+                // fake likelihoods to prevent recompression
+                for i in 0..tree.num_nodes() {
+                    tree.likelihoods[i] = 0.1 * i as f64
+                }
+
+                assert_eq!(site, VariantIndex::from_usize(counter));
+                assert_eq!(tree.num_nodes(), 3);
+                assert_eq!(
+                    tree.nodes().count(),
+                    if counter < 5 { 1 } else { 2 },
+                    "wrong number of nodes at site {}",
+                    counter
+                );
+                counter += 1;
+            });
+    }
 }
