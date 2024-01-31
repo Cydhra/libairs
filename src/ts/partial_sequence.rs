@@ -1,4 +1,4 @@
-use crate::ts::ancestor_array::{Ancestor, VariantIndex};
+use crate::ancestors::{Ancestor, VariantIndex};
 
 /// Internal tree sequence edge used during the Viterbi algorithm.
 /// Its interval has not been converted into sequence positions yet, conveniently allowing use

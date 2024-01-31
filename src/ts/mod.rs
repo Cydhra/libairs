@@ -1,8 +1,7 @@
-mod tree_sequence;
 mod ancestor_iterator;
-mod ancestor_array;
-mod partial_sequence;
 mod matcher;
+mod partial_sequence;
+mod tree_sequence;
 
 use crate::ancestors::AncestralSequence;
 use crate::dna::SequencePosition;
@@ -97,7 +96,7 @@ impl TreeSequenceGenerator {
             let mut max_site_likelihood_ancestor: Option<usize> = None;
 
             let k = (num_ancestors + 1) as f64; // number of ancestors in tableau plus the virtual root
-            // probability that any one specific ancestor recombines to the current ancestors
+                                                // probability that any one specific ancestor recombines to the current ancestors
             let prob_recomb = rho / k;
             // probability that none of the k-1 active ancestors recombines to the current ancestor
             let prob_no_recomb = 1f64 - rho + rho / k;
@@ -135,8 +134,8 @@ impl TreeSequenceGenerator {
                     max_site_likelihood_ancestor = Some(ancestor_id);
                 } else if likelihoods[ancestor_id] == max_site_likelihood
                     && self.ancestor_sequences[ancestor_id].relative_age()
-                    > self.ancestor_sequences[max_site_likelihood_ancestor.unwrap()]
-                    .relative_age()
+                        > self.ancestor_sequences[max_site_likelihood_ancestor.unwrap()]
+                            .relative_age()
                 {
                     // TODO this is a hack to make sure that the oldest ancestor is chosen in case of a tie,
                     //  because this is what tsinfer does implicitly does by not calculating the likelihoods
@@ -213,8 +212,14 @@ impl TreeSequenceGenerator {
             let mut sweep_line_queue = RadixHeapMap::<Reverse<usize>, SweepEvent>::new();
             let mut num_ancestors = 0;
 
-            for (old_ancestor_index, old_ancestor) in self.ancestor_sequences.iter().enumerate().take(ancestor_index) {
-                if old_ancestor.relative_age() > ancestor.relative_age() { // TODO we can perform an overlap check here
+            for (old_ancestor_index, old_ancestor) in self
+                .ancestor_sequences
+                .iter()
+                .enumerate()
+                .take(ancestor_index)
+            {
+                if old_ancestor.relative_age() > ancestor.relative_age() {
+                    // TODO we can perform an overlap check here
                     num_ancestors += 1;
                     sweep_line_queue.push(
                         Reverse(old_ancestor.start()),
@@ -227,7 +232,8 @@ impl TreeSequenceGenerator {
                 }
             }
 
-            let (intervals, mutations) = self.find_hidden_path(ancestor, sweep_line_queue.clone(), num_ancestors);
+            let (intervals, mutations) =
+                self.find_hidden_path(ancestor, sweep_line_queue.clone(), num_ancestors);
             self.partial_tree_sequence[ancestor_index].node_intervals = intervals;
             self.partial_tree_sequence[ancestor_index].mutations = mutations;
         }

@@ -1,5 +1,5 @@
 use crate::ancestors::AncestralSequence;
-use crate::ts::ancestor_array::AncestorArray;
+use crate::ancestors::{Ancestor, AncestorArray};
 use crate::ts::ancestor_iterator::AncestorIndex;
 use crate::ts::partial_sequence::PartialSequenceEdge;
 

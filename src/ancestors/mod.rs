@@ -6,8 +6,10 @@ use std::ops::{Index, IndexMut};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelRefIterator;
 
+mod ancestor_array;
 mod generator;
 
+pub(crate) use ancestor_array::{Ancestor, AncestorArray, VariantIndex};
 pub use generator::AncestorGenerator;
 
 const ANCESTRAL_STATE: u8 = 0;
@@ -23,8 +25,7 @@ pub struct AncestralSequence {
     /// start of valid data in the state vector, inclusive
     start: usize,
     /// end of valid data in the state vector, exclusive
-    // TODO not public
-    pub(crate) end: usize,
+    end: usize,
     age: f64,
 }
 
