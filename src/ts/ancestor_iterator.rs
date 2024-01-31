@@ -347,7 +347,9 @@ impl MarginalTree {
             debug_assert!(self.is_compressed[node.0] == false);
 
             if let Some(parent) = self.parent(node) {
-                recompress.push(node);
+                if self.likelihoods[node.0] == self.likelihoods[parent.0] {
+                    recompress.push(node);
+                }
             }
         });
 
