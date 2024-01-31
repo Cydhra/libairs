@@ -5,7 +5,7 @@ use std::iter::Peekable;
 use crate::ts::ancestor_array::{Ancestor, VariantIndex};
 use crate::ts::partial_sequence::PartialSequenceEdge;
 
-type Site<'a> = (VariantIndex, &'a mut MarginalTree);
+pub(crate) type Site<'a> = (VariantIndex, &'a mut MarginalTree);
 
 /// A helper structure for the Viterbi algorithm that helps iterating through the sites, updating
 /// the marginal tree at the currently visited site and helping with tree compression.
