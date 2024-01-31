@@ -162,10 +162,10 @@ impl<'a, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<'a, 
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum SequenceEventKind {
-    Mutation,
+    End,
     Start { parent: Ancestor },
     ChangeParent { new_parent: Ancestor },
-    End,
+    Mutation,
 }
 
 impl PartialOrd<Self> for SequenceEventKind {
@@ -177,9 +177,12 @@ impl PartialOrd<Self> for SequenceEventKind {
 impl Ord for SequenceEventKind {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Self::Mutation, Self::Mutation) => Ordering::Equal,
-            (Self::Mutation, _) => Ordering::Less,
-            (_, Self::Mutation) => Ordering::Greater,
+            (Self::End, Self::End) => Ordering::Equal,
+            // we can afford to make this the smallest element, because it cannot be at the same site
+            // as any other event regarding the same node. And it has advantages to make this value
+            // a sentinel rather than one with parameters
+            (Self::End, _) => Ordering::Greater,
+            (_, Self::End) => Ordering::Less,
             (Self::Start { parent: p1 }, Self::Start { parent: p2 }) => p1.cmp(p2),
             (Self::Start { .. }, _) => Ordering::Less,
             (_, Self::Start { .. }) => Ordering::Greater,
@@ -188,7 +191,7 @@ impl Ord for SequenceEventKind {
             }
             (Self::ChangeParent { .. }, _) => Ordering::Less,
             (_, Self::ChangeParent { .. }) => Ordering::Greater,
-            (Self::End, Self::End) => Ordering::Equal,
+            (Self::Mutation, Self::Mutation) => Ordering::Equal,
         }
     }
 }
@@ -207,7 +210,7 @@ impl SequenceEvent {
         Self {
             site: pos,
             node: Ancestor(0),
-            kind: SequenceEventKind::Mutation,
+            kind: SequenceEventKind::End,
         }
     }
 }
@@ -330,6 +333,8 @@ impl MarginalTree {
         );
 
         let mut parent = self.actual_parents[node.0];
+        println!("parent of node {} is {:?}", node.0, parent);
+
         while let Some(p) = parent {
             if !self.is_compressed(p) {
                 break;
