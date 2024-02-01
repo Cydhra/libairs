@@ -1,4 +1,6 @@
-use crate::ancestors::{AncestorArray, AncestralSequence, ANCESTRAL_STATE, DERIVED_STATE};
+use crate::ancestors::{
+    AncestorArray, AncestralSequence, VariantIndex, ANCESTRAL_STATE, DERIVED_STATE,
+};
 use crate::dna::VariantSite;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
@@ -101,9 +103,9 @@ impl AncestorGenerator {
         );
 
         // TODO truncate ancestral sequence to save memory. this should be implemented using functionality from BitVec
-        ancestral_sequence.focal_sites = focal_sites.to_vec();
-        ancestral_sequence.start = focal_sites[0] - modified_left;
-        ancestral_sequence.end = last_focal_site + modified_right + 1;
+        ancestral_sequence.focal_sites = focal_sites.iter().map(|&f| VariantIndex(f)).collect();
+        ancestral_sequence.start = VariantIndex(focal_sites[0] - modified_left);
+        ancestral_sequence.end = VariantIndex(last_focal_site + modified_right + 1);
 
         ancestral_sequence
     }
@@ -344,7 +346,7 @@ impl AncestorGenerator {
 
         // artificially add the root ancestor
         let mut ancestral_state = AncestralSequence::from_ancestral_state(self.sites.len(), 1.0);
-        ancestral_state.end = self.sites.len();
+        ancestral_state.end = VariantIndex(self.sites.len());
         ancestors.push(ancestral_state);
 
         // TODO parallel sort ancestors by age (par_sort_unstable_by)

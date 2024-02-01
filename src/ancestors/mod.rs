@@ -21,11 +21,11 @@ const DERIVED_STATE: u8 = 1;
 #[derive(Clone)]
 pub struct AncestralSequence {
     state: Vec<u8>,
-    focal_sites: Vec<usize>,
+    focal_sites: Vec<VariantIndex>,
     /// start of valid data in the state vector, inclusive
-    start: usize,
+    start: VariantIndex,
     /// end of valid data in the state vector, exclusive
-    end: usize,
+    end: VariantIndex,
     age: f64,
 }
 
@@ -35,8 +35,8 @@ impl AncestralSequence {
         AncestralSequence {
             state: vec![0u8; len],
             focal_sites: Vec::new(),
-            start: 0,
-            end: 0,
+            start: VariantIndex(0),
+            end: VariantIndex(len),
             age,
         }
     }
@@ -50,35 +50,38 @@ impl AncestralSequence {
     /// [`start`]: Self::start
     /// [`end`]: Self::end
     pub fn haplotype(&self) -> &[u8] {
-        &self.state[self.start..self.end]
+        &self.state[self.start.0..self.end.0]
     }
 
     /// Get an enumerated iterator over the haplotype sequence. This sequence starts at the first
     /// known site and ends at the last known site. Each returned element also contains the index
     /// of the site in the genome (regarding the genome's variant site vector, the actual genome
     /// position will differ from this).
-    pub fn site_iter(&self) -> impl Iterator<Item = (usize, &'_ u8)> + DoubleEndedIterator + '_ {
+    pub fn site_iter(
+        &self,
+    ) -> impl Iterator<Item = (VariantIndex, &'_ u8)> + DoubleEndedIterator + '_ {
         self.state
             .iter()
             .enumerate()
-            .skip(self.start)
-            .take(self.end - self.start)
+            .skip(self.start.0)
+            .take(self.end.0 - self.start.0)
+            .map(|(idx, b)| (VariantIndex(idx), b))
     }
 
     /// Get the position of the first known site in the genome (inclusive), regarding the genome's variant site
     /// vector (so it doesn't necessarily correspond to the actual position in the genome).
-    pub fn start(&self) -> usize {
+    pub fn start(&self) -> VariantIndex {
         self.start
     }
 
     /// Get the position of the last known site in the genome (exclusive), regarding the genome's variant site
     /// vector (so it doesn't necessarily correspond to the actual position in the genome).
-    pub fn end(&self) -> usize {
+    pub fn end(&self) -> VariantIndex {
         self.end
     }
 
     /// Get the set of focal sites that were used to generate this ancestral sequence.
-    pub fn focal_sites(&self) -> &[usize] {
+    pub fn focal_sites(&self) -> &[VariantIndex] {
         &self.focal_sites
     }
 
@@ -91,20 +94,20 @@ impl AncestralSequence {
     /// Get the length of the ancestral sequence. Only known sites are considered, so the length
     /// might be shorter than the length of the underlying DNA sequence.
     pub fn len(&self) -> usize {
-        self.end - self.start
+        self.end.0 - self.start.0
     }
 
     /// Dump the ancestral sequence into a text file for the testing suite.
     pub fn export(&self, writer: &mut dyn Write) -> io::Result<()> {
         writer.write_fmt(format_args!(
             "{start}\t{end}\t{age}\t{focal_sites:?}\t",
-            start = self.start,
-            end = self.end,
+            start = self.start.0,
+            end = self.end.0,
             age = self.age,
             focal_sites = self.focal_sites
         ))?;
 
-        for b in &self.state[self.start..self.end] {
+        for b in &self.state[self.start.0..self.end.0] {
             writer.write_fmt(format_args!("{}", b))?;
         }
 
@@ -122,7 +125,7 @@ impl Debug for AncestralSequence {
         let mut iter = self.state.iter();
         let mut idx = 0;
         while let Some(b) = iter.next() {
-            if idx < self.start || idx >= self.end {
+            if idx < self.start.0 || idx >= self.end.0 {
                 f.write_str("-")?;
             } else {
                 f.write_fmt(format_args!("{}", b))?;
@@ -153,11 +156,25 @@ impl IndexMut<usize> for AncestralSequence {
     }
 }
 
+impl Index<VariantIndex> for AncestralSequence {
+    type Output = u8;
+
+    fn index(&self, index: VariantIndex) -> &Self::Output {
+        &self.state[index.0]
+    }
+}
+
+impl IndexMut<VariantIndex> for AncestralSequence {
+    fn index_mut(&mut self, index: VariantIndex) -> &mut Self::Output {
+        &mut self.state[index.0]
+    }
+}
+
 /// An index into the [`AncestorArray`]
 ///
 /// [`AncestorArray`]: AncestorArray
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub(crate) struct VariantIndex(usize);
+pub(crate) struct VariantIndex(pub(crate) usize);
 
 impl VariantIndex {
     #[cfg(test)]
@@ -168,6 +185,15 @@ impl VariantIndex {
     /// Get the next variant index after this one
     pub(crate) fn next(&self) -> Self {
         Self(self.0 + 1)
+    }
+
+    /// Calculate the distance in variants between this index and another. Does not return the distance in sequence bases.
+    pub fn get_variant_distance(&self, other: VariantIndex) -> usize {
+        if self.0 > other.0 {
+            self.0 - other.0
+        } else {
+            other.0 - self.0
+        }
     }
 }
 

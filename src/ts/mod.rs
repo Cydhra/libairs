@@ -5,8 +5,8 @@ mod tree_sequence;
 
 use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence};
 use crate::dna::SequencePosition;
+use crate::ts::matcher::ViterbiMatcher;
 use crate::ts::tree_sequence::{TreeSequence, TreeSequenceInterval, TreeSequenceNode};
-use crate::ts::SweepEventKind::Start;
 use radix_heap::RadixHeapMap;
 use std::cmp::{Ordering, Reverse};
 use std::fs::File;
@@ -17,6 +17,7 @@ use std::path::Path;
 
 pub struct TreeSequenceGenerator {
     pub ancestor_sequences: AncestorArray,
+    matcher: ViterbiMatcher,
     partial_tree_sequence: Vec<TreeSequenceNode>,
     variant_positions: Vec<SequencePosition>,
     sequence_length: SequencePosition,
@@ -35,7 +36,8 @@ impl TreeSequenceGenerator {
         let num_ancestors = ancestor_sequences.len();
 
         Self {
-            ancestor_sequences,
+            ancestor_sequences: ancestor_sequences.clone(),
+            matcher: ViterbiMatcher::new(ancestor_sequences, recombination_rate, mismatch_rate),
             partial_tree_sequence: (0..num_ancestors)
                 .map(|i| TreeSequenceNode::empty(i))
                 .collect(),
@@ -49,152 +51,34 @@ impl TreeSequenceGenerator {
     /// For a given [`AncestralSequence`] and a set of ancestor sequences, calculate the most likely
     /// copying path within the LS model using the Viterbi algorithm.
     fn find_hidden_path(
-        &self,
+        &mut self,
+        node: Ancestor,
         candidate: &AncestralSequence,
         mut sweep_line_queue: RadixHeapMap<Reverse<usize>, SweepEvent>,
         num_ancestors: usize,
     ) -> (Vec<TreeSequenceInterval>, Vec<usize>) {
-        let mut active_ancestors = Vec::with_capacity(num_ancestors);
-        let mut next_event_position = sweep_line_queue.peek_key().unwrap().0;
+        let (edges, mutations) = self.matcher.find_copy_path(candidate, num_ancestors);
+        self.matcher
+            .insert_edges(node, edges.clone(), mutations.clone());
 
-        let mut likelihoods = vec![1f64; num_ancestors];
-        let mut recombination_points = vec![vec![false; num_ancestors]; candidate.len()];
-        let mut mutation_points = vec![vec![false; num_ancestors]; candidate.len()];
-
-        let mut max_likelihoods = vec![Ancestor(0); candidate.len()];
-        let candidate_start = candidate.start();
-
-        let rho = self.recombination_prob;
-        let mu = self.mismatch_prob;
-
-        for (site, &state) in candidate.site_iter() {
-            // update active ancestors
-            while next_event_position <= site {
-                let (_, event) = sweep_line_queue.pop().unwrap();
-                if event.kind == Start {
-                    active_ancestors.push(event.ancestor_index);
-
-                    // if the ancestor is not available from the start, the initial likelihood must be zero,
-                    // so we recombine away from it on tracback
-                    if event.position > candidate_start {
-                        likelihoods[event.ancestor_index.0] = 0f64;
-                    }
-                    let end_event_pos = self.ancestor_sequences[event.ancestor_index].end();
-
-                    let ancestor_end = SweepEvent {
-                        kind: SweepEventKind::End,
-                        position: end_event_pos,
-                        ancestor_index: event.ancestor_index,
-                    };
-                    sweep_line_queue.push(Reverse(end_event_pos), ancestor_end)
-                } else {
-                    active_ancestors.retain(|&ancestor| ancestor != event.ancestor_index);
-                }
-                next_event_position = sweep_line_queue.peek_key().map_or(usize::MAX, |e| e.0);
-            }
-
-            let mut max_site_likelihood = -1f64;
-            let mut max_site_likelihood_ancestor: Option<Ancestor> = None;
-
-            let k = (num_ancestors + 1) as f64; // number of ancestors in tableau plus the virtual root
-                                                // probability that any one specific ancestor recombines to the current ancestors
-            let prob_recomb = rho / k;
-            // probability that none of the k-1 active ancestors recombines to the current ancestor
-            let prob_no_recomb = 1f64 - rho + rho / k;
-
-            let num_alleles = 2f64; // TODO we might not want to hard-code this
-            let rev_mu = 1f64 - (num_alleles - 1f64) * mu;
-
-            debug_assert!(
-                active_ancestors.len() > 0,
-                "no active ancestors at {}",
-                site
-            );
-            for &ancestor_id in active_ancestors.iter() {
-                let ancestral_sequence = &self.ancestor_sequences[ancestor_id];
-                let prob_no_recomb = likelihoods[ancestor_id.0] * prob_no_recomb;
-
-                let pt = if prob_no_recomb > prob_recomb {
-                    prob_no_recomb
-                } else {
-                    recombination_points[site - candidate_start][ancestor_id.0] = true;
-                    prob_recomb
-                };
-
-                let pe = if state == ancestral_sequence[site] {
-                    rev_mu
-                } else {
-                    mutation_points[site - candidate_start][ancestor_id.0] = true;
-                    mu
-                };
-
-                likelihoods[ancestor_id.0] = pt * pe;
-
-                if likelihoods[ancestor_id.0] > max_site_likelihood {
-                    max_site_likelihood = likelihoods[ancestor_id.0];
-                    max_site_likelihood_ancestor = Some(ancestor_id);
-                } else if likelihoods[ancestor_id.0] == max_site_likelihood
-                    && self.ancestor_sequences[ancestor_id].relative_age()
-                        > self.ancestor_sequences[max_site_likelihood_ancestor.unwrap()]
-                            .relative_age()
-                {
-                    // TODO this is a hack to make sure that the oldest ancestor is chosen in case of a tie,
-                    //  because this is what tsinfer does implicitly does by not calculating the likelihoods
-                    //  of ancestors with equal sequences.
-                    max_site_likelihood = likelihoods[ancestor_id.0];
-                    max_site_likelihood_ancestor = Some(ancestor_id);
-                }
-            }
-
-            // Apparently a measure to maintain numerical stability
-            for &ancestor in active_ancestors.iter() {
-                likelihoods[ancestor.0] /= max_site_likelihood;
-            }
-
-            max_likelihoods[site - candidate_start] =
-                max_site_likelihood_ancestor.expect("no max likelihood calculated");
-        }
         let mut nodes = Vec::new();
-        let mut mutations = Vec::new();
-
-        let mut ancestor_index = max_likelihoods[candidate.end() - 1 - candidate_start];
-        let mut ancestor_coverage_end = if candidate.end() == self.variant_positions.len() {
-            self.sequence_length
-        } else {
-            // convert exclusive site index to exclusive site position
-            self.variant_positions[candidate.end()]
-        };
-
-        for (site, _) in candidate.site_iter().rev() {
-            if mutation_points[site - candidate_start][ancestor_index.0] {
-                mutations.push(site);
-            }
-
-            if recombination_points[site - candidate_start][ancestor_index.0]
-                && max_likelihoods[site - 1 - candidate_start] != ancestor_index
-            {
-                nodes.push(TreeSequenceInterval::new(
-                    ancestor_index.0,
-                    self.variant_positions[site],
-                    ancestor_coverage_end,
-                ));
-
-                ancestor_index = max_likelihoods[site - 1 - candidate_start];
-                ancestor_coverage_end = self.variant_positions[site];
-            }
+        for edge in edges {
+            nodes.push(TreeSequenceInterval {
+                parent: edge.parent().0,
+                start: if edge.start().0 == 0 {
+                    SequencePosition::from_usize(0)
+                } else {
+                    self.variant_positions[edge.start().0]
+                },
+                end: if edge.end().0 == self.variant_positions.len() {
+                    self.sequence_length
+                } else {
+                    self.variant_positions[edge.end().0]
+                },
+            })
         }
-        nodes.push(TreeSequenceInterval::new(
-            ancestor_index.0,
-            if candidate.start() == 0 {
-                SequencePosition::from_usize(0)
-            } else {
-                self.variant_positions[candidate.start()]
-            },
-            ancestor_coverage_end,
-        ));
+        let mut mutations = mutations.iter().map(|m| m.0).collect::<Vec<_>>();
 
-        nodes.reverse();
-        mutations.reverse();
         (nodes, mutations)
     }
 
@@ -209,7 +93,8 @@ impl TreeSequenceGenerator {
                 self.sequence_length,
             ));
 
-        for (ancestor_index, ancestor) in self.ancestor_sequences.iter().enumerate().skip(1) {
+        let ancestor_sequences = self.ancestor_sequences.clone();
+        for (ancestor_index, ancestor) in ancestor_sequences.iter().enumerate().skip(1) {
             let mut sweep_line_queue = RadixHeapMap::<Reverse<usize>, SweepEvent>::new();
             let mut num_ancestors = 0;
 
@@ -222,19 +107,15 @@ impl TreeSequenceGenerator {
                 if old_ancestor.relative_age() > ancestor.relative_age() {
                     // TODO we can perform an overlap check here
                     num_ancestors += 1;
-                    sweep_line_queue.push(
-                        Reverse(old_ancestor.start()),
-                        SweepEvent {
-                            kind: Start,
-                            position: old_ancestor.start(),
-                            ancestor_index: Ancestor(old_ancestor_index),
-                        },
-                    );
                 }
             }
 
-            let (intervals, mutations) =
-                self.find_hidden_path(ancestor, sweep_line_queue.clone(), num_ancestors);
+            let (intervals, mutations) = self.find_hidden_path(
+                Ancestor(ancestor_index),
+                ancestor,
+                sweep_line_queue.clone(),
+                num_ancestors,
+            );
             self.partial_tree_sequence[ancestor_index].node_intervals = intervals;
             self.partial_tree_sequence[ancestor_index].mutations = mutations;
         }
@@ -291,6 +172,7 @@ mod tests {
     use crate::ancestors::AncestorGenerator;
     use crate::dna::{SequencePosition, VariantSite};
     use crate::ts::TreeSequenceGenerator;
+    use std::ops::Deref;
 
     #[test]
     fn trivial_tree_test() {
@@ -312,7 +194,7 @@ mod tests {
         );
 
         let ancestors = ag.generate_ancestors();
-        let ancestors_copy = ancestors.clone();
+        let ancestors_copy = ancestors.deref().clone();
         let ancestor_matcher = TreeSequenceGenerator::new(
             ancestors,
             SequencePosition::from_usize(5),
@@ -371,7 +253,7 @@ mod tests {
         );
 
         let ancestors = ag.generate_ancestors();
-        let ancestors_copy = ancestors.clone();
+        let ancestors_copy = ancestors.deref().clone();
         let ancestor_matcher = TreeSequenceGenerator::new(
             ancestors,
             SequencePosition::from_usize(7),
