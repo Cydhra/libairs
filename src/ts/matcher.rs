@@ -89,6 +89,12 @@ impl ViterbiMatcher {
                 if likelihood > max_site_likelihood {
                     max_site_likelihood = likelihood;
                     max_site_likelihood_ancestor = Some(ancestor_id);
+                } else if likelihood == max_site_likelihood
+                    && self.ancestors[ancestor_id].relative_age()
+                        > self.ancestors[max_site_likelihood_ancestor.unwrap()].relative_age()
+                {
+                    // always select the older one to mimic tsinfer behavior
+                    max_site_likelihood_ancestor = Some(ancestor_id);
                 }
             }
 
