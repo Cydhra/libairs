@@ -587,11 +587,12 @@ impl MarginalTree {
         keep_compressed: bool,
         site_index: usize,
     ) {
-        self.actual_parents[node.0] = Some(new_parent);
-
         if !keep_compressed {
             self.ensure_decompressed(node, site_index);
         }
+
+        // update parent afterwards to ensure it copies from the correct ancestor
+        self.actual_parents[node.0] = Some(new_parent);
     }
 
     /// Whenever a node has a mutation from its parent, it must be decompressed, as its likelihood
