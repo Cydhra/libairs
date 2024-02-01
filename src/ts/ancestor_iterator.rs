@@ -690,6 +690,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_empty_range() {
+        // test whether iterating over an empty range doesn't crash and calls the closure zero times
+        let ix = AncestorIndex::new();
+        ix.sites(
+            VariantIndex::from_usize(10),
+            VariantIndex::from_usize(10),
+            2,
+        )
+        .for_each(|_| panic!("closure called for empty range"));
+    }
+
+    #[test]
     fn test_ancestor_iteration() {
         let ix = AncestorIndex::new();
         let mut counter = 0;
