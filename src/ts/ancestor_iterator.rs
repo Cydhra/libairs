@@ -1139,4 +1139,83 @@ mod tests {
                 _ => assert!(!*state, "recombination site {} should be false", i),
             });
     }
+
+    #[test]
+    fn test_copying_from_parent_on_change_parent() {
+        // test whether the iterator copies the recombination and mutation sites from the parent when a child is
+        // decompressed
+
+        let mut ix = AncestorIndex::new();
+        let mut counter = 0;
+
+        // insert a child node that serves as a second node
+        ix.insert_sequence_node(
+            Ancestor(1),
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(0)],
+        );
+
+        // insert another child node that copies from both the root and the child node, but has no mutations
+        ix.insert_sequence_node(
+            Ancestor(2),
+            vec![
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(0),
+                    VariantIndex::from_usize(5),
+                    Ancestor(0),
+                ),
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(5),
+                    VariantIndex::from_usize(7),
+                    Ancestor(1),
+                ),
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(7),
+                    VariantIndex::from_usize(10),
+                    Ancestor(0),
+                ),
+            ],
+            vec![],
+        );
+
+        // add mutations and recombinations with the root, and check whether the second child node copies them
+        let mut iterator = ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 3);
+        iterator.for_each(|(site, tree)| {
+            match counter {
+                // don't recompress first two nodes
+                0 => tree
+                    .nodes()
+                    .for_each(|n| tree.likelihoods[n.0] = n.0 as f64 * 0.1),
+
+                // insert mutations and recombination for nodes 0 and 1, and later check if 2 inherited them
+                2 => *tree.mutation_site(Ancestor(0), 2) = true,
+                3 => *tree.recombination_site(Ancestor(0), 3) = true,
+                5 => *tree.mutation_site(Ancestor(1), 5) = true, // this should not be copied because the second ancestor is uncompressed at this site
+
+                _ => {}
+            }
+
+            counter += 1;
+        });
+
+        iterator.marginal_tree.mutation_sites[2]
+            .iter()
+            .enumerate()
+            .for_each(|(i, state)| match i {
+                2 => assert!(*state, "mutation site {} should be true", i),
+                _ => assert!(!*state, "mutation site {} should be false", i),
+            });
+
+        iterator.marginal_tree.recombination_sites[2]
+            .iter()
+            .enumerate()
+            .for_each(|(i, state)| match i {
+                3 => assert!(*state, "recombination site {} should be true", i),
+                _ => assert!(!*state, "recombination site {} should be false", i),
+            });
+    }
 }
