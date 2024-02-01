@@ -1062,7 +1062,7 @@ mod tests {
     }
 
     #[test]
-    fn test_copying_from_parent() {
+    fn test_copying_from_parent_on_mutation() {
         // test whether the iterator copies the recombination and mutation sites from the parent when a child is
         // decompressed
 
@@ -1124,18 +1124,18 @@ mod tests {
             .iter()
             .enumerate()
             .for_each(|(i, state)| match i {
-                2 => assert!(*state),
-                6 => assert!(*state),
-                _ => assert!(!*state),
+                2 => assert!(*state, "mutation site {} should be true", i),
+                6 => assert!(*state, "mutation site {} should be true", i),
+                _ => assert!(!*state, "mutation site {} should be false", i),
             });
 
         iterator.marginal_tree.recombination_sites[2]
             .iter()
             .enumerate()
             .for_each(|(i, state)| match i {
-                3 => assert!(*state),
-                7 => assert!(*state),
-                _ => assert!(!*state),
+                3 => assert!(*state, "recombination site {} should be true", i),
+                7 => assert!(*state, "recombination site {} should be true", i),
+                _ => assert!(!*state, "recombination site {} should be false", i),
             });
     }
 }
