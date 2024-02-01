@@ -458,7 +458,8 @@ impl MarginalTree {
             }
         });
         self.active_nodes.retain(|&n| n != node);
-        self.last_compressed[node.0] = site_index;
+        // store the first site where the node is compressed, so the next one
+        self.last_compressed[node.0] = site_index + 1;
         self.is_compressed[node.0] = true;
     }
 
