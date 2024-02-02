@@ -601,6 +601,14 @@ impl MarginalTree {
 
         // update parent afterwards to ensure it copies from the correct ancestor
         self.actual_parents[node.0] = Some(new_parent);
+
+        if !keep_compressed {
+            if self.is_compressed(new_parent) {
+                self.uncompressed_tree_parents[node.0] = self.find_uncompressed_parent(new_parent);
+            } else {
+                self.uncompressed_tree_parents[node.0] = Some(new_parent);
+            }
+        }
     }
 
     /// Whenever a node has a mutation from its parent, it must be decompressed, as its likelihood
@@ -1134,7 +1142,10 @@ mod tests {
                 // insert mutations and recombination for nodes 0 and 1, and later check if 2 inherited them
                 2 => *tree.mutation_site(Ancestor(0), 2) = true,
                 3 => *tree.recombination_site(Ancestor(0), 3) = true,
-                4 => *tree.mutation_site(Ancestor(0), 4) = true, // this shouldnt be copied, because the second node is uncompressed at this site
+                4 => {
+                    tree.likelihoods[2] = 0.1; // set likelihood of third node to that of second to trigger recompression
+                    *tree.mutation_site(Ancestor(0), 4) = true // this shouldnt be copied, because the second node is uncompressed at this site
+                }
                 6 => *tree.mutation_site(Ancestor(1), 6) = true,
                 7 => *tree.recombination_site(Ancestor(1), 7) = true,
                 _ => {}
@@ -1292,6 +1303,91 @@ mod tests {
         ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 4)
             .for_each(|tuple| {
                 black_box(tuple);
+            });
+    }
+
+    #[test]
+    fn test_uncompressed_tree_integrity() {
+        // test whether the uncompressed tree array always points to the correct parent
+        let mut ix = AncestorIndex::new();
+        let mut counter = 0;
+
+        ix.insert_sequence_node(
+            Ancestor(1),
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(2),
+                VariantIndex::from_usize(4),
+            ],
+        );
+        ix.insert_sequence_node(
+            Ancestor(2),
+            vec![
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(0),
+                    VariantIndex::from_usize(5),
+                    Ancestor(1),
+                ),
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(5),
+                    VariantIndex::from_usize(10),
+                    Ancestor(0),
+                ),
+            ],
+            vec![
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(1),
+                VariantIndex::from_usize(2),
+                VariantIndex::from_usize(4),
+            ],
+        );
+
+        // check tree
+        ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 3)
+            .for_each(|(site, tree)| {
+                // always trigger recompression
+                match counter {
+                    0 => {
+                        assert_eq!(tree.parent(Ancestor(0)), None);
+                        assert_eq!(tree.parent(Ancestor(1)), Some(Ancestor(0)));
+                        assert_eq!(tree.parent(Ancestor(2)), Some(Ancestor(1)));
+                    }
+                    1 => {
+                        assert_eq!(tree.parent(Ancestor(0)), None);
+                        // ancestor 1 is compressed
+                        assert_eq!(tree.parent(Ancestor(2)), Some(Ancestor(0)));
+                    }
+                    2 => {
+                        assert_eq!(tree.parent(Ancestor(0)), None);
+                        assert_eq!(tree.parent(Ancestor(1)), Some(Ancestor(0)));
+                        assert_eq!(tree.parent(Ancestor(2)), Some(Ancestor(1)));
+                    }
+                    4 => {
+                        assert_eq!(tree.parent(Ancestor(0)), None);
+                        assert_eq!(tree.parent(Ancestor(1)), Some(Ancestor(0)));
+                        assert_eq!(tree.parent(Ancestor(2)), Some(Ancestor(1)));
+
+                        // prevent recompression, to test if Ancestor(2) still recombines to Ancestor(0)
+                        *tree.likelihood(Ancestor(1)) = 0.1;
+                    }
+                    5 => {
+                        assert_eq!(tree.parent(Ancestor(0)), None);
+                        assert_eq!(tree.parent(Ancestor(1)), Some(Ancestor(0)));
+                        assert_eq!(tree.parent(Ancestor(2)), Some(Ancestor(0)));
+
+                        // recompress everything
+                        *tree.likelihood(Ancestor(1)) = 0.0;
+                    }
+                    _ => {
+                        assert_eq!(tree.parent(Ancestor(0)), None);
+                    }
+                }
+                counter += 1usize;
             });
     }
 }
