@@ -183,10 +183,11 @@ impl<'a, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<'a, 
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum SequenceEventKind {
-    End,
+    Sentinel,
     Start { parent: Ancestor },
     ChangeParent { new_parent: Ancestor },
     Mutation,
+    End,
 }
 
 impl PartialOrd<Self> for SequenceEventKind {
@@ -198,12 +199,9 @@ impl PartialOrd<Self> for SequenceEventKind {
 impl Ord for SequenceEventKind {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Self::End, Self::End) => Ordering::Equal,
-            // we can afford to make this the smallest element, because it cannot be at the same site
-            // as any other event regarding the same node. And it has advantages to make this value
-            // a sentinel rather than one with parameters
-            (Self::End, _) => Ordering::Greater,
-            (_, Self::End) => Ordering::Less,
+            (Self::Sentinel, Self::Sentinel) => Ordering::Equal,
+            (Self::Sentinel, _) => Ordering::Less,
+            (_, Self::Sentinel) => Ordering::Greater,
             (Self::Start { parent: p1 }, Self::Start { parent: p2 }) => p1.cmp(p2),
             (Self::Start { .. }, _) => Ordering::Less,
             (_, Self::Start { .. }) => Ordering::Greater,
@@ -213,6 +211,9 @@ impl Ord for SequenceEventKind {
             (Self::ChangeParent { .. }, _) => Ordering::Less,
             (_, Self::ChangeParent { .. }) => Ordering::Greater,
             (Self::Mutation, Self::Mutation) => Ordering::Equal,
+            (Self::Mutation, _) => Ordering::Less,
+            (_, Self::Mutation) => Ordering::Greater,
+            (Self::End, Self::End) => Ordering::Equal,
         }
     }
 }
@@ -231,7 +232,7 @@ impl SequenceEvent {
         Self {
             site: pos,
             node: Ancestor(0),
-            kind: SequenceEventKind::End,
+            kind: SequenceEventKind::Sentinel,
         }
     }
 }
@@ -451,6 +452,7 @@ impl MarginalTree {
         debug_assert!(self.likelihoods[node.0] == self.likelihoods[parent.0]);
         debug_assert!(self.is_compressed[node.0] == false);
         debug_assert!(self.is_compressed[parent.0] == false);
+        debug_assert!(node.0 != 0, "Root node cannot be compressed");
 
         self.uncompressed_tree_parents.iter_mut().for_each(|entry| {
             if *entry == Some(node) {
@@ -611,6 +613,12 @@ impl MarginalTree {
 
     /// Remove a node from the tree. This is done whenever an ancestor ends.
     fn remove_node(&mut self, node: Ancestor) {
+        debug_assert!(
+            !self.actual_parents.iter().any(|&n| n == Some(node)),
+            "Node {} cannot be removed while it has children",
+            node.0
+        );
+
         self.actual_parents[node.0] = None;
         self.uncompressed_tree_parents[node.0] = None;
         self.is_compressed[node.0] = true;
@@ -681,6 +689,13 @@ impl MarginalTree {
                     kind: SequenceEventKind::End,
                 } => {
                     self.remove_node(*node);
+                }
+                SequenceEvent {
+                    site: _,
+                    node: _,
+                    kind: SequenceEventKind::Sentinel,
+                } => {
+                    panic!("Sentinel event should not be in the queue");
                 }
             }
         }
