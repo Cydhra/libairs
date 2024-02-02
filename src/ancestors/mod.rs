@@ -104,7 +104,7 @@ impl AncestralSequence {
             start = self.start.0,
             end = self.end.0,
             age = self.age,
-            focal_sites = self.focal_sites
+            focal_sites = self.focal_sites.iter().map(|s| s.0).collect::<Vec<_>>(),
         ))?;
 
         for b in &self.state[self.start.0..self.end.0] {

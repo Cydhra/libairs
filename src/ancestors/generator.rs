@@ -370,7 +370,7 @@ impl AncestorGenerator {
             writer.write_fmt(format_args!(
                 "{id}\t{position}\t{ancestral_state}\n",
                 id = i,
-                position = site.position,
+                position = site.position.0,
                 ancestral_state = 'C', // TODO encode actual ancestral state
             ))?;
         }
