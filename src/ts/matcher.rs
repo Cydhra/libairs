@@ -127,6 +127,9 @@ impl ViterbiMatcher {
                     .expect("no max likelihood ancestor found")
                     != current_ancestor
             {
+                debug_assert!(self.ancestors[current_ancestor].start() <= site);
+                debug_assert!(self.ancestors[current_ancestor].end() >= site);
+
                 edges.push(PartialSequenceEdge::new(
                     site,
                     ancestor_coverage_end,

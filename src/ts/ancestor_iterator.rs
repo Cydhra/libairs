@@ -247,8 +247,13 @@ impl Ord for SequenceEvent {
     fn cmp(&self, other: &Self) -> Ordering {
         self.site
             .cmp(&other.site)
-            .then(self.node.cmp(&other.node))
             .then(self.kind.cmp(&other.kind))
+            .then(match self.kind {
+                // we need to delete the tree from the bottom,
+                SequenceEventKind::End => self.node.cmp(&other.node).reverse(),
+                // but build it from the top
+                _ => self.node.cmp(&other.node),
+            })
     }
 }
 
@@ -705,6 +710,7 @@ impl MarginalTree {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::hint::black_box;
 
     #[test]
     fn test_empty_range() {
@@ -1232,6 +1238,60 @@ mod tests {
             .for_each(|(i, state)| match i {
                 3 => assert!(*state, "recombination site {} should be true", i),
                 _ => assert!(!*state, "recombination site {} should be false", i),
+            });
+    }
+
+    #[test]
+    fn test_queue_order() {
+        // test whether the queue order is sensible in upholding invariants.
+        // specifically it shouldn't remove nodes before their children have changed parents or have been removed,
+        // and shouldnt insert nodes before their parents have been inserted
+
+        let mut ix = AncestorIndex::new();
+
+        ix.insert_sequence_node(
+            Ancestor(1),
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(5),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(0)],
+        );
+        // this must change its parent before the above node is removed from the tree
+        // furthermore, this must be inserted after the Ancestor(1) node, otherwise it has no parent
+        ix.insert_sequence_node(
+            Ancestor(2),
+            vec![
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(0),
+                    VariantIndex::from_usize(5),
+                    Ancestor(1),
+                ),
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(5),
+                    VariantIndex::from_usize(10),
+                    Ancestor(0),
+                ),
+            ],
+            vec![VariantIndex::from_usize(0)],
+        );
+        // this must be removed before Ancestor(1) is removed, otherwise the queue will crash when it searches the parent
+        ix.insert_sequence_node(
+            Ancestor(3),
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(5),
+                Ancestor(1),
+            )],
+            vec![VariantIndex::from_usize(0)],
+        );
+
+        // if one of the above restrictions is violated, the queue will panic, so we don't need to explicitely test this
+        // behavior (and we also can't because the closure is only called after all events for a site have been processed)
+        ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 4)
+            .for_each(|tuple| {
+                black_box(tuple);
             });
     }
 }
