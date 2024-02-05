@@ -44,8 +44,8 @@ impl AncestorIndex {
     pub(crate) fn insert_sequence_node(
         &mut self,
         tree_node: Ancestor,
-        edges: Vec<PartialSequenceEdge>,
-        mutations: Vec<VariantIndex>,
+        edges: &[PartialSequenceEdge],
+        mutations: &[VariantIndex],
     ) {
         self.num_nodes += 1;
         assert_eq!(
@@ -82,7 +82,7 @@ impl AncestorIndex {
             assert_eq!(self.num_nodes, 1, "only the root node can have no edges");
         }
 
-        for mutation in mutations {
+        for &mutation in mutations {
             self.edge_index.insert(SequenceEvent {
                 site: mutation,
                 node: tree_node,
@@ -710,12 +710,12 @@ mod tests {
         // insert edge from first to root node
         ix.insert_sequence_node(
             Ancestor(1),
-            vec![PartialSequenceEdge::new(
+            &vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(10),
                 Ancestor(0),
             )],
-            vec![VariantIndex::from_usize(5)],
+            &vec![VariantIndex::from_usize(5)],
         );
 
         ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2)
@@ -745,12 +745,12 @@ mod tests {
         // insert edge from first to root node
         ix.insert_sequence_node(
             Ancestor(1),
-            vec![PartialSequenceEdge::new(
+            &vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(10),
                 Ancestor(0),
             )],
-            vec![VariantIndex::from_usize(0)],
+            &vec![VariantIndex::from_usize(0)],
         );
 
         ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2)
@@ -787,16 +787,16 @@ mod tests {
         // insert edges for two nodes
         ix.insert_sequence_node(
             Ancestor(1),
-            vec![PartialSequenceEdge::new(
+            &vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(10),
                 Ancestor(0),
             )],
-            vec![VariantIndex::from_usize(9)],
+            &vec![VariantIndex::from_usize(9)],
         );
         ix.insert_sequence_node(
             Ancestor(2),
-            vec![
+            &vec![
                 PartialSequenceEdge::new(
                     VariantIndex::from_usize(0),
                     VariantIndex::from_usize(5),
@@ -808,7 +808,7 @@ mod tests {
                     Ancestor(0),
                 ),
             ],
-            vec![VariantIndex::from_usize(10)],
+            &vec![VariantIndex::from_usize(10)],
         );
 
         ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(9), 3)
@@ -838,13 +838,13 @@ mod tests {
 
         ix.insert_sequence_node(
             Ancestor(1),
-            vec![PartialSequenceEdge::new(
+            &vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(10),
                 Ancestor(0),
             )],
             // diverge on site 1, then again on site 5, recompress in between
-            vec![VariantIndex::from_usize(1), VariantIndex::from_usize(5)],
+            &vec![VariantIndex::from_usize(1), VariantIndex::from_usize(5)],
         );
 
         ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2)
@@ -872,16 +872,16 @@ mod tests {
 
         ix.insert_sequence_node(
             Ancestor(1),
-            vec![PartialSequenceEdge::new(
+            &vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(10),
                 Ancestor(0),
             )],
-            vec![VariantIndex::from_usize(0)],
+            &vec![VariantIndex::from_usize(0)],
         );
         ix.insert_sequence_node(
             Ancestor(2),
-            vec![
+            &vec![
                 PartialSequenceEdge::new(
                     VariantIndex::from_usize(0),
                     VariantIndex::from_usize(5),
@@ -893,7 +893,7 @@ mod tests {
                     Ancestor(0),
                 ),
             ],
-            vec![VariantIndex::from_usize(5)],
+            &vec![VariantIndex::from_usize(5)],
         );
 
         ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 3)
@@ -925,21 +925,21 @@ mod tests {
         // insert two nodes, one will be ignored
         ix.insert_sequence_node(
             Ancestor(1),
-            vec![PartialSequenceEdge::new(
+            &vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(10),
                 Ancestor(0),
             )],
-            vec![VariantIndex::from_usize(0)],
+            &vec![VariantIndex::from_usize(0)],
         );
         ix.insert_sequence_node(
             Ancestor(2),
-            vec![PartialSequenceEdge::new(
+            &vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(10),
                 Ancestor(0),
             )],
-            vec![VariantIndex::from_usize(0)],
+            &vec![VariantIndex::from_usize(0)],
         );
 
         // check the tree size is always 2
@@ -969,21 +969,21 @@ mod tests {
         // insert two nodes
         ix.insert_sequence_node(
             Ancestor(1),
-            vec![PartialSequenceEdge::new(
+            &vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(10),
                 Ancestor(0),
             )],
-            vec![VariantIndex::from_usize(5)],
+            &vec![VariantIndex::from_usize(5)],
         );
         ix.insert_sequence_node(
             Ancestor(2),
-            vec![PartialSequenceEdge::new(
+            &vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(10),
                 Ancestor(0),
             )],
-            vec![VariantIndex::from_usize(1)],
+            &vec![VariantIndex::from_usize(1)],
         );
 
         // check the tree
@@ -1017,12 +1017,12 @@ mod tests {
         // insert incomplete ancestor
         ix.insert_sequence_node(
             Ancestor(1),
-            vec![PartialSequenceEdge::new(
+            &vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(5),
                 Ancestor(0),
             )],
-            vec![VariantIndex::from_usize(0)],
+            &vec![VariantIndex::from_usize(0)],
         );
 
         // check the tree
@@ -1057,18 +1057,18 @@ mod tests {
         // insert a child node that serves as a second node
         ix.insert_sequence_node(
             Ancestor(1),
-            vec![PartialSequenceEdge::new(
+            &vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(10),
                 Ancestor(0),
             )],
-            vec![VariantIndex::from_usize(0)],
+            &vec![VariantIndex::from_usize(0)],
         );
 
         // insert another child node that copies from both the root and the child node
         ix.insert_sequence_node(
             Ancestor(2),
-            vec![
+            &vec![
                 PartialSequenceEdge::new(
                     VariantIndex::from_usize(0),
                     VariantIndex::from_usize(5),
@@ -1080,7 +1080,7 @@ mod tests {
                     Ancestor(1),
                 ),
             ],
-            vec![VariantIndex::from_usize(4), VariantIndex::from_usize(9)],
+            &vec![VariantIndex::from_usize(4), VariantIndex::from_usize(9)],
         );
 
         // add mutations and recombinations with the root and first child node, and check whether the second child node
@@ -1138,18 +1138,18 @@ mod tests {
         // insert a child node that serves as a second node
         ix.insert_sequence_node(
             Ancestor(1),
-            vec![PartialSequenceEdge::new(
+            &vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(10),
                 Ancestor(0),
             )],
-            vec![VariantIndex::from_usize(0)],
+            &vec![VariantIndex::from_usize(0)],
         );
 
         // insert another child node that copies from both the root and the child node, but has no mutations
         ix.insert_sequence_node(
             Ancestor(2),
-            vec![
+            &vec![
                 PartialSequenceEdge::new(
                     VariantIndex::from_usize(0),
                     VariantIndex::from_usize(5),
@@ -1166,7 +1166,7 @@ mod tests {
                     Ancestor(0),
                 ),
             ],
-            vec![],
+            &vec![],
         );
 
         // add mutations and recombinations with the root, and check whether the second child node copies them
@@ -1216,18 +1216,18 @@ mod tests {
 
         ix.insert_sequence_node(
             Ancestor(1),
-            vec![PartialSequenceEdge::new(
+            &vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(5),
                 Ancestor(0),
             )],
-            vec![VariantIndex::from_usize(0)],
+            &vec![VariantIndex::from_usize(0)],
         );
         // this must change its parent before the above node is removed from the tree
         // furthermore, this must be inserted after the Ancestor(1) node, otherwise it has no parent
         ix.insert_sequence_node(
             Ancestor(2),
-            vec![
+            &vec![
                 PartialSequenceEdge::new(
                     VariantIndex::from_usize(0),
                     VariantIndex::from_usize(5),
@@ -1239,17 +1239,17 @@ mod tests {
                     Ancestor(0),
                 ),
             ],
-            vec![VariantIndex::from_usize(0)],
+            &vec![VariantIndex::from_usize(0)],
         );
         // this must be removed before Ancestor(1) is removed, otherwise the queue will crash when it searches the parent
         ix.insert_sequence_node(
             Ancestor(3),
-            vec![PartialSequenceEdge::new(
+            &vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(5),
                 Ancestor(1),
             )],
-            vec![VariantIndex::from_usize(0)],
+            &vec![VariantIndex::from_usize(0)],
         );
 
         // if one of the above restrictions is violated, the queue will panic, so we don't need to explicitely test this
@@ -1268,12 +1268,12 @@ mod tests {
 
         ix.insert_sequence_node(
             Ancestor(1),
-            vec![PartialSequenceEdge::new(
+            &vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(10),
                 Ancestor(0),
             )],
-            vec![
+            &vec![
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(2),
                 VariantIndex::from_usize(4),
@@ -1281,7 +1281,7 @@ mod tests {
         );
         ix.insert_sequence_node(
             Ancestor(2),
-            vec![
+            &vec![
                 PartialSequenceEdge::new(
                     VariantIndex::from_usize(0),
                     VariantIndex::from_usize(5),
@@ -1293,7 +1293,7 @@ mod tests {
                     Ancestor(0),
                 ),
             ],
-            vec![
+            &vec![
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(1),
                 VariantIndex::from_usize(2),

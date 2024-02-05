@@ -44,10 +44,6 @@ fn test_grouping() {
 
     let ancestors = ag.generate_ancestors();
 
-    for a in ancestors.iter() {
-        println!("{:?}\t\tage: {}", a, a.relative_age());
-    }
-
     let ancestor_matcher = TreeSequenceGenerator::new(
         ancestors,
         SequencePosition::from_usize(23),

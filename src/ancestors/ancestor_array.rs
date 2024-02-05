@@ -16,6 +16,13 @@ impl AncestorArray {
     pub fn len(&self) -> usize {
         self.ancestors.len()
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (Ancestor, &AncestralSequence)> {
+        self.ancestors
+            .iter()
+            .enumerate()
+            .map(|(i, a)| (Ancestor(i), a))
+    }
 }
 
 impl Index<Ancestor> for AncestorArray {

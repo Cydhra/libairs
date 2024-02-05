@@ -3,12 +3,11 @@ mod matcher;
 mod partial_sequence;
 mod tree_sequence;
 
-use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence};
+use crate::ancestors::{Ancestor, AncestorArray};
 use crate::dna::SequencePosition;
 use crate::ts::matcher::ViterbiMatcher;
-use crate::ts::tree_sequence::{TreeSequence, TreeSequenceInterval, TreeSequenceNode};
-use radix_heap::RadixHeapMap;
-use std::cmp::{Ordering, Reverse};
+use crate::ts::tree_sequence::{TreeSequence, TreeSequenceNode};
+use std::cmp::Ordering;
 use std::fs::File;
 use std::io;
 use std::io::Write;
@@ -48,79 +47,13 @@ impl TreeSequenceGenerator {
         }
     }
 
-    /// For a given [`AncestralSequence`] and a set of ancestor sequences, calculate the most likely
-    /// copying path within the LS model using the Viterbi algorithm.
-    fn find_hidden_path(
-        &mut self,
-        node: Ancestor,
-        candidate: &AncestralSequence,
-        mut sweep_line_queue: RadixHeapMap<Reverse<usize>, SweepEvent>,
-        num_ancestors: usize,
-    ) -> (Vec<TreeSequenceInterval>, Vec<usize>) {
-        let (edges, mutations) = self.matcher.find_copy_path(candidate, num_ancestors);
-        self.matcher
-            .insert_edges(node, edges.clone(), mutations.clone());
-
-        let mut nodes = Vec::new();
-        for edge in edges {
-            nodes.push(TreeSequenceInterval {
-                parent: edge.parent().0,
-                start: if edge.start().0 == 0 {
-                    SequencePosition::from_usize(0)
-                } else {
-                    self.variant_positions[edge.start().0]
-                },
-                end: if edge.end().0 == self.variant_positions.len() {
-                    self.sequence_length
-                } else {
-                    self.variant_positions[edge.end().0]
-                },
-            })
-        }
-        let mut mutations = mutations.iter().map(|m| m.0).collect::<Vec<_>>();
-
-        (nodes, mutations)
-    }
-
     pub fn generate_tree_sequence(mut self) -> TreeSequence {
-        // the first ancestor is the ancestral state and doesnt need to be processed
-        // current_age_set.push(0);
-        self.partial_tree_sequence[0]
-            .node_intervals
-            .push(TreeSequenceInterval::new(
-                0,
-                SequencePosition::from_usize(0),
-                self.sequence_length,
-            ));
-
-        let ancestor_sequences = self.ancestor_sequences.clone();
-        for (ancestor_index, ancestor) in ancestor_sequences.iter().enumerate().skip(1) {
-            let mut sweep_line_queue = RadixHeapMap::<Reverse<usize>, SweepEvent>::new();
-            let mut num_ancestors = 0;
-
-            for (old_ancestor_index, old_ancestor) in self
-                .ancestor_sequences
-                .iter()
-                .enumerate()
-                .take(ancestor_index)
-            {
-                if old_ancestor.relative_age() > ancestor.relative_age() {
-                    // TODO we can perform an overlap check here
-                    num_ancestors += 1;
-                }
-            }
-
-            let (intervals, mutations) = self.find_hidden_path(
-                Ancestor(ancestor_index),
-                ancestor,
-                sweep_line_queue.clone(),
-                num_ancestors,
-            );
-            self.partial_tree_sequence[ancestor_index].node_intervals = intervals;
-            self.partial_tree_sequence[ancestor_index].mutations = mutations;
-        }
-
-        TreeSequence(self.partial_tree_sequence, self.ancestor_sequences)
+        let partial_sequence = self.matcher.match_ancestors();
+        partial_sequence.as_tree_sequence(
+            self.sequence_length,
+            &self.variant_positions,
+            self.ancestor_sequences,
+        )
     }
 
     /// Export the tree sequence in a TSV format that can be read by the test suite

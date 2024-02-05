@@ -407,10 +407,10 @@ mod tests {
         // root ancestor
         assert_eq!(ancestors[Ancestor(0)].state, vec![0, 0, 0, 0]);
 
-        assert!(ancestors.iter().any(|a| a.state == vec![1, 0, 0, 0]));
-        assert!(ancestors.iter().any(|a| a.state == vec![0, 1, 0, 0]));
-        assert!(ancestors.iter().any(|a| a.state == vec![0, 0, 1, 0]));
-        assert!(ancestors.iter().any(|a| a.state == vec![0, 0, 0, 1]));
+        assert!(ancestors.iter().any(|(_, a)| a.state == vec![1, 0, 0, 0]));
+        assert!(ancestors.iter().any(|(_, a)| a.state == vec![0, 1, 0, 0]));
+        assert!(ancestors.iter().any(|(_, a)| a.state == vec![0, 0, 1, 0]));
+        assert!(ancestors.iter().any(|(_, a)| a.state == vec![0, 0, 0, 1]));
     }
 
     #[test]
@@ -436,7 +436,7 @@ mod tests {
         // root ancestor
         assert_eq!(ancestors[Ancestor(0)].state, vec![0, 0, 0, 0]);
 
-        assert!(ancestors.iter().any(|a| a.state == vec![1, 0, 0, 1]));
-        assert!(ancestors.iter().any(|a| a.state == vec![0, 1, 1, 0]));
+        assert!(ancestors.iter().any(|(_, a)| a.state == vec![1, 0, 0, 1]));
+        assert!(ancestors.iter().any(|(_, a)| a.state == vec![0, 1, 1, 0]));
     }
 }

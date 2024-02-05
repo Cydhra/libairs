@@ -1,7 +1,7 @@
 use crate::ancestors::{Ancestor, AncestorArray};
 use crate::ancestors::{AncestralSequence, VariantIndex};
 use crate::ts::ancestor_iterator::AncestorIndex;
-use crate::ts::partial_sequence::PartialSequenceEdge;
+use crate::ts::partial_sequence::{PartialSequenceEdge, PartialTreeSequence};
 
 /// A matcher runs the viterbi algorithm for a set of sequences.
 /// It will generate a tree sequence from an array of ancestral sequences and can then match
@@ -31,6 +31,7 @@ impl ViterbiMatcher {
 
     /// Find a copying path for the given sequence given the ancestor iterator as a partial
     /// tree sequence.
+    #[must_use]
     pub fn find_copy_path(
         &self,
         candidate: &AncestralSequence,
@@ -153,22 +154,41 @@ impl ViterbiMatcher {
         (edges, mutations)
     }
 
-    // TODO remove this method
-    pub(crate) fn insert_edges(
-        &mut self,
-        node: Ancestor,
-        edges: Vec<PartialSequenceEdge>,
-        mutations: Vec<VariantIndex>,
-    ) {
-        self.ancestor_iterator
-            .insert_sequence_node(node, edges, mutations)
-    }
-
     /// Generate a tree sequence from the given ancestor array.
     /// This will modify the internal state to represent the tree sequence for all ancestors
     /// within the array.
-    pub fn match_ancestors(&mut self) {
-        todo!()
+    pub fn match_ancestors(&mut self) -> PartialTreeSequence {
+        let mut partial_tree_sequence = PartialTreeSequence::with_capacity(self.ancestors.len());
+
+        // edges for root node
+        let root = Ancestor(0);
+        partial_tree_sequence.push(
+            vec![PartialSequenceEdge::new(
+                self.ancestors[root].start(),
+                self.ancestors[root].end(),
+                root,
+            )],
+            vec![],
+        );
+
+        for (ancestor_index, ancestor) in self.ancestors.iter().skip(1) {
+            let mut num_ancestors = 0;
+
+            // TODO precalculate this
+            for (_, old_ancestor) in self.ancestors.iter().take(ancestor_index.0) {
+                if old_ancestor.relative_age() > ancestor.relative_age() {
+                    // TODO we can perform an overlap check here
+                    num_ancestors += 1;
+                }
+            }
+
+            let (edges, mutations) = self.find_copy_path(ancestor, num_ancestors);
+            self.ancestor_iterator
+                .insert_sequence_node(ancestor_index, &edges, &mutations);
+            partial_tree_sequence.push(edges, mutations);
+        }
+
+        partial_tree_sequence
     }
 
     /// Insert a set of samples into an ancestral tree sequence. The samples will be matched
