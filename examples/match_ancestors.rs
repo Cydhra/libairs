@@ -57,11 +57,7 @@ fn main() {
         sequence_length,
         1e-2,
         1e-20,
-        ancestor_generator
-            .sites
-            .iter()
-            .map(|s| s.position)
-            .collect(),
+        ancestor_generator.variant_positions(),
     );
     target_file.pop();
     matcher

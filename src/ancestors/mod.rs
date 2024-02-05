@@ -30,8 +30,7 @@ pub struct AncestralSequence {
 }
 
 impl AncestralSequence {
-    // TODO shouldnt be public. instead a builder should be used, so the meta data can be calculated
-    pub fn from_ancestral_state(len: usize, age: f64) -> Self {
+    fn from_ancestral_state(len: usize, age: f64) -> Self {
         AncestralSequence {
             state: vec![0u8; len],
             focal_sites: Vec::new(),

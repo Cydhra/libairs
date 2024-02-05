@@ -1,7 +1,7 @@
 use crate::ancestors::{
     AncestorArray, AncestralSequence, VariantIndex, ANCESTRAL_STATE, DERIVED_STATE,
 };
-use crate::dna::VariantSite;
+use crate::dna::{SequencePosition, VariantSite};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::io::Write;
@@ -14,8 +14,7 @@ use twox_hash::XxHash64;
 /// infer the ancestral state for surrounding sites. For each set of focal sites, a single ancestral
 /// sequence is generated.
 pub struct AncestorGenerator {
-    // todo hide fields?
-    pub sites: Vec<VariantSite>,
+    sites: Vec<VariantSite>,
 }
 
 impl AncestorGenerator {
@@ -49,6 +48,11 @@ impl AncestorGenerator {
         if Self::is_valid_site(&site) {
             self.sites.push(site);
         }
+    }
+
+    /// Extract the sequence positions of the variant sites.
+    pub fn variant_positions(&self) -> Vec<SequencePosition> {
+        self.sites.iter().map(|s| s.position).collect()
     }
 
     /// For a given set of focal sites, compute an ancestor that uses those focal sites. The focal
