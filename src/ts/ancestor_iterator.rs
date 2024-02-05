@@ -314,6 +314,8 @@ impl MarginalTree {
     ) -> Self {
         debug_assert!(num_nodes > 0, "Tree must have at least one node");
 
+        // TODO these allocations take a lot of time, maybe we can pre-allocate one marginal tree per thread
+        //  and update it in-place?
         let mut marginal_tree = Self {
             actual_parents: vec![None; limit_nodes],
             is_compressed: vec![true; limit_nodes],
@@ -466,7 +468,7 @@ impl MarginalTree {
 
             self.likelihoods[node.0] = self.likelihoods[parent.0];
 
-            /// copy the recombination and mutation sites from the parent
+            // copy the recombination and mutation sites from the parent
             let last_compressed_begin = self.last_compressed[node.0];
 
             Self::copy_parent_sites(
@@ -848,7 +850,7 @@ mod tests {
         );
 
         ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2)
-            .for_each(|(site, tree)| {
+            .for_each(|(_, tree)| {
                 // likelihoods stay at 0, so recompression happens immediately
                 assert_eq!(
                     tree.nodes().count(),
@@ -897,7 +899,7 @@ mod tests {
         );
 
         ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 3)
-            .for_each(|(site, tree)| {
+            .for_each(|(_, tree)| {
                 // fake likelihoods to prevent recompression
                 for i in 0..tree.num_nodes() {
                     tree.likelihoods[i] = 0.1 * i as f64
@@ -944,7 +946,7 @@ mod tests {
 
         // check the tree size is always 2
         ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2)
-            .for_each(|(site, tree)| {
+            .for_each(|(_, tree)| {
                 // fake likelihoods to prevent recompression
                 for i in 0..tree.num_nodes() {
                     tree.likelihoods[i] = 0.1 * i as f64
@@ -988,7 +990,7 @@ mod tests {
 
         // check the tree
         ix.sites(VariantIndex::from_usize(2), VariantIndex::from_usize(10), 3)
-            .for_each(|(site, tree)| {
+            .for_each(|(_, tree)| {
                 // fake likelihoods to prevent recompression
                 for i in 0..tree.num_nodes() {
                     tree.likelihoods[i] = 0.1 * i as f64
@@ -1027,7 +1029,7 @@ mod tests {
 
         // check the tree
         ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2)
-            .for_each(|(site, tree)| {
+            .for_each(|(_, tree)| {
                 // fake likelihoods to prevent recompression
                 for i in 0..tree.num_nodes() {
                     tree.likelihoods[i] = 0.1 * i as f64
@@ -1086,7 +1088,7 @@ mod tests {
         // add mutations and recombinations with the root and first child node, and check whether the second child node
         // copies them
         let mut iterator = ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 3);
-        iterator.for_each(|(site, tree)| {
+        iterator.for_each(|(_, tree)| {
             match counter {
                 // don't recompress first two nodes
                 0 => tree
@@ -1171,7 +1173,7 @@ mod tests {
 
         // add mutations and recombinations with the root, and check whether the second child node copies them
         let mut iterator = ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 3);
-        iterator.for_each(|(site, tree)| {
+        iterator.for_each(|(_, tree)| {
             match counter {
                 // don't recompress first two nodes
                 0 => tree
@@ -1303,7 +1305,7 @@ mod tests {
 
         // check tree
         ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 3)
-            .for_each(|(site, tree)| {
+            .for_each(|(_, tree)| {
                 // always trigger recompression
                 match counter {
                     0 => {

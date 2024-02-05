@@ -3,25 +3,22 @@ mod matcher;
 mod partial_sequence;
 mod tree_sequence;
 
-use crate::ancestors::{Ancestor, AncestorArray};
+use crate::ancestors::AncestorArray;
 use crate::dna::SequencePosition;
 use crate::ts::matcher::ViterbiMatcher;
-use crate::ts::tree_sequence::{TreeSequence, TreeSequenceNode};
-use std::cmp::Ordering;
+use crate::ts::tree_sequence::TreeSequence;
 use std::fs::File;
 use std::io;
 use std::io::Write;
 use std::ops::Deref;
 use std::path::Path;
 
+// TODO remove this once the ViterbiMatcher can be used conveniently
 pub struct TreeSequenceGenerator {
     pub ancestor_sequences: AncestorArray,
     matcher: ViterbiMatcher,
-    partial_tree_sequence: Vec<TreeSequenceNode>,
     variant_positions: Vec<SequencePosition>,
     sequence_length: SequencePosition,
-    recombination_prob: f64,
-    mismatch_prob: f64,
 }
 
 impl TreeSequenceGenerator {
@@ -32,18 +29,11 @@ impl TreeSequenceGenerator {
         mismatch_rate: f64,
         variant_positions: Vec<SequencePosition>,
     ) -> Self {
-        let num_ancestors = ancestor_sequences.len();
-
         Self {
             ancestor_sequences: ancestor_sequences.clone(),
             matcher: ViterbiMatcher::new(ancestor_sequences, recombination_rate, mismatch_rate),
-            partial_tree_sequence: (0..num_ancestors)
-                .map(|i| TreeSequenceNode::empty(i))
-                .collect(),
             variant_positions,
             sequence_length,
-            recombination_prob: recombination_rate,
-            mismatch_prob: mismatch_rate,
         }
     }
 
@@ -68,35 +58,6 @@ impl TreeSequenceGenerator {
         }
 
         Ok(())
-    }
-}
-
-/// A single event in the sweep line algorithm.
-#[derive(Debug, Eq, PartialEq, Clone)]
-struct SweepEvent {
-    kind: SweepEventKind,
-    position: usize,
-    ancestor_index: Ancestor,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-enum SweepEventKind {
-    Start,
-    End,
-}
-
-impl PartialOrd<Self> for SweepEvent {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for SweepEvent {
-    fn cmp(&self, other: &Self) -> Ordering {
-        other
-            .position
-            .cmp(&self.position)
-            .then(other.ancestor_index.cmp(&self.ancestor_index))
     }
 }
 

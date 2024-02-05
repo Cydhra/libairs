@@ -6,7 +6,6 @@
 use libairs::ancestors::AncestorGenerator;
 use libairs::dna::{SequencePosition, VariantSite};
 use libairs::ts::TreeSequenceGenerator;
-use std::ops::Deref;
 
 #[test]
 fn test_incomplete_node_start() {

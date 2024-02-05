@@ -43,14 +43,6 @@ pub(crate) struct PartialTreeSequence {
 }
 
 impl PartialTreeSequence {
-    /// Create a new empty partial tree sequence
-    pub(crate) fn new() -> Self {
-        Self {
-            edges: Vec::new(),
-            mutations: Vec::new(),
-        }
-    }
-
     /// Create a new partial tree sequence with a given node capacity. Does not set the edge capacity
     pub(crate) fn with_capacity(capacity: usize) -> Self {
         Self {
