@@ -36,7 +36,7 @@ fn test_incomplete_nodes() {
         1e-20,
         SequencePosition::from_vec(vec![1, 2, 3, 4, 5]),
     );
-    let ts = ancestor_matcher.generate_tree_sequence().0;
+    let ts = ancestor_matcher.generate_tree_sequence().nodes;
 
     assert_eq!(ts.len(), 4);
     assert_eq!(ts[3].edges().len(), 2);

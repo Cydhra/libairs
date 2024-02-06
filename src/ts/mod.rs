@@ -93,7 +93,7 @@ mod tests {
             1e-20,
             SequencePosition::from_vec(vec![1, 2, 3, 4, 5]),
         );
-        let ts = ancestor_matcher.generate_tree_sequence().0;
+        let ts = ancestor_matcher.generate_tree_sequence().nodes;
 
         assert_eq!(ts.len(), 4);
         assert_eq!(ts[0].ancestor(), 0);
@@ -153,7 +153,7 @@ mod tests {
             1e-20,
             SequencePosition::from_vec(vec![1, 2, 4, 5, 6, 7]),
         );
-        let ts = ancestor_matcher.generate_tree_sequence().0;
+        let ts = ancestor_matcher.generate_tree_sequence().nodes;
 
         assert_eq!(ts.len(), 5);
 

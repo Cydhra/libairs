@@ -59,7 +59,7 @@ impl PartialTreeSequence {
 
     pub(crate) fn as_tree_sequence(&self, ancestors: AncestorArray) -> TreeSequence {
         TreeSequence {
-            0: self
+            nodes: self
                 .edges
                 .iter()
                 .enumerate()
@@ -79,7 +79,7 @@ impl PartialTreeSequence {
                     )
                 })
                 .collect(),
-            1: ancestors,
+            ancestors: ancestors,
         }
     }
 }

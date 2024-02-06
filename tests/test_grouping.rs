@@ -52,7 +52,7 @@ fn test_grouping() {
         1e-20,
         SequencePosition::from_vec((0..23).into_iter().collect()),
     );
-    let ts = ancestor_matcher.generate_tree_sequence().0;
+    let ts = ancestor_matcher.generate_tree_sequence().nodes;
 
     // TODO assertions
 }

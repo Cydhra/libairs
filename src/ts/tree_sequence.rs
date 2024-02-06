@@ -112,8 +112,12 @@ impl TreeSequenceNode {
     }
 }
 
-// todo this should probably be a proper struct with hidden fields
-pub struct TreeSequence(pub Vec<TreeSequenceNode>, pub AncestorArray);
+/// A tree sequence consisting of a set of ancestors and corresponding nodes in the tree sequence.
+/// The node indices correspond to the ancestor indices.
+pub struct TreeSequence {
+    pub nodes: Vec<TreeSequenceNode>,
+    pub ancestors: AncestorArray,
+}
 
 impl TreeSequence {
     pub fn tskit_export(&self, path: &Path) -> io::Result<()> {
@@ -130,8 +134,8 @@ impl TreeSequence {
             time = 2.0,
         ))?;
 
-        for node in &self.0 {
-            node.tskit_format_node(&self.1[Ancestor(node.ancestor_index)], &mut writer)?;
+        for node in &self.nodes {
+            node.tskit_format_node(&self.ancestors[Ancestor(node.ancestor_index)], &mut writer)?;
         }
 
         let mut edge_file = path.to_path_buf();
@@ -140,10 +144,10 @@ impl TreeSequence {
 
         writer.write_fmt(format_args!("left\tright\tparent\tchild\n"))?;
         // write edge from virtual root to root
-        writer.write_fmt(format_args!("0\t{}\t0\t1\n", self.0[1].edges[0].end))?;
+        writer.write_fmt(format_args!("0\t{}\t0\t1\n", self.nodes[1].edges[0].end))?;
 
         // skip first edge because tskit doesn't like the root node to have an edge to itself. TODO we can remove this anyway at some point
-        for node in self.0.iter().skip(1) {
+        for node in self.nodes.iter().skip(1) {
             node.tskit_format_edges(&mut writer)?;
         }
 
@@ -152,7 +156,7 @@ impl TreeSequence {
         let mut writer = std::fs::File::create(mutation_file)?;
 
         writer.write_fmt(format_args!("site\tnode\tderived_state\n"))?;
-        for node in &self.0 {
+        for node in &self.nodes {
             node.tskit_format_mutations(&mut writer)?;
         }
         Ok(())

@@ -35,7 +35,7 @@ fn test_markov_ancestor_count2() {
         1e-20,
         SequencePosition::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8]),
     );
-    let ts = ancestor_matcher.generate_tree_sequence().0;
+    let ts = ancestor_matcher.generate_tree_sequence().nodes;
 
     // when the ancestor count is incorrect, the algorithm will recombine the last ancestor too early, which will
     // increase the number of trees in the sequence

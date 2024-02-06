@@ -37,7 +37,7 @@ fn test_incomplete_node_start() {
         1e-20,
         SequencePosition::from_vec(vec![1, 2, 3, 4, 5]),
     );
-    let ts = ancestor_matcher.generate_tree_sequence().0;
+    let ts = ancestor_matcher.generate_tree_sequence().nodes;
 
     // assert that no ancestor has the third ancestor as its parent in the first variant site, because it doesnt exist
     // for this position
