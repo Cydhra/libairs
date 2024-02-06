@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::io;
 use std::io::Write;
 use std::ops::{Index, IndexMut};
@@ -172,8 +172,9 @@ impl IndexMut<VariantIndex> for AncestralSequence {
 /// An index into the [`AncestorArray`]
 ///
 /// [`AncestorArray`]: AncestorArray
+// TODO the type should be made private and not used in the public API
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub(crate) struct VariantIndex(pub(crate) usize);
+pub struct VariantIndex(usize);
 
 impl VariantIndex {
     #[cfg(test)]
@@ -193,6 +194,17 @@ impl VariantIndex {
         } else {
             other.0 - self.0
         }
+    }
+
+    /// Get the underlying usize value of the variant index.
+    pub fn unwrap(&self) -> usize {
+        self.0
+    }
+}
+
+impl Display for VariantIndex {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
     }
 }
 

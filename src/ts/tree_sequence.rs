@@ -1,4 +1,4 @@
-use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence};
+use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence, VariantIndex};
 use crate::dna::SequencePosition;
 use std::io;
 use std::io::Write;
@@ -27,14 +27,14 @@ pub struct TreeSequenceNode {
     // todo hide fields
     pub ancestor_index: usize,
     pub node_intervals: Vec<TreeSequenceInterval>,
-    pub mutations: Vec<usize>,
+    pub mutations: Vec<VariantIndex>,
 }
 
 impl TreeSequenceNode {
     pub fn new(
         ancestor_index: usize,
         node_intervals: Vec<TreeSequenceInterval>,
-        mutations: Vec<usize>,
+        mutations: Vec<VariantIndex>,
     ) -> Self {
         TreeSequenceNode {
             ancestor_index,

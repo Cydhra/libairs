@@ -256,7 +256,7 @@ impl AncestorGenerator {
     }
 
     /// Generate a set of ancestral sequences with the variant sites added to the generator.
-    pub fn generate_ancestors(&self) -> AncestorArray {
+    pub fn generate_ancestors(&self, sequence_length: SequencePosition) -> AncestorArray {
         // fixme this entire process is inefficient, we should sort the original sites
         let mut sites = self.sites.iter().enumerate().collect::<Vec<_>>();
         sites.sort_unstable_by(|(_, a), (_, b)| {
@@ -361,7 +361,7 @@ impl AncestorGenerator {
                 .reverse()
         });
 
-        AncestorArray::from(ancestors)
+        AncestorArray::new(ancestors, self.variant_positions(), sequence_length)
     }
 
     pub fn tskit_export_sites(&self, path: &Path) -> io::Result<()> {
@@ -404,7 +404,9 @@ mod tests {
             ],
         };
 
-        let ancestors = ag.generate_ancestors();
+        let len = SequencePosition::from_usize(5);
+
+        let ancestors = ag.generate_ancestors(len);
 
         assert_eq!(ancestors.len(), 5);
 
@@ -433,7 +435,9 @@ mod tests {
             ],
         };
 
-        let ancestors = ag.generate_ancestors();
+        let len = SequencePosition::from_usize(5);
+
+        let ancestors = ag.generate_ancestors(len);
 
         assert_eq!(ancestors.len(), 3);
 

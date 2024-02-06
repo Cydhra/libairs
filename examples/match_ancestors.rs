@@ -51,7 +51,7 @@ fn main() {
     let mut target_file = PathBuf::from(&vcf);
 
     let ancestor_generator = libairs::convenience::from_vcf(&vcf, compressed).unwrap();
-    let ancestors = ancestor_generator.generate_ancestors();
+    let ancestors = ancestor_generator.generate_ancestors(sequence_length);
     let matcher = libairs::ts::TreeSequenceGenerator::new(
         ancestors,
         sequence_length,

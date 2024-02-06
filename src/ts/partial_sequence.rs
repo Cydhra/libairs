@@ -58,12 +58,7 @@ impl PartialTreeSequence {
         self.mutations.push(mutations);
     }
 
-    pub(crate) fn as_tree_sequence(
-        &self,
-        sequence_length: SequencePosition,
-        variant_positions: &[SequencePosition],
-        ancestors: AncestorArray,
-    ) -> TreeSequence {
+    pub(crate) fn as_tree_sequence(&self, ancestors: AncestorArray) -> TreeSequence {
         TreeSequence {
             0: self
                 .edges
@@ -76,40 +71,16 @@ impl PartialTreeSequence {
                             .iter()
                             .map(|edge| {
                                 let parent = edge.parent();
-                                // TODO hide conversion of variant index to sequence position somewhere in ancestors module
-                                let start = Self::convert_variant_index(
-                                    edge.start(),
-                                    sequence_length,
-                                    variant_positions,
-                                );
-                                let end = Self::convert_variant_index(
-                                    edge.end(),
-                                    sequence_length,
-                                    variant_positions,
-                                );
+                                let start = ancestors.variant_index_to_sequence_pos(edge.start());
+                                let end = ancestors.variant_index_to_sequence_pos(edge.end());
                                 TreeSequenceInterval::new(parent.0, start, end)
                             })
                             .collect(),
-                        // TODO don't convert to usize here
-                        self.mutations[idx].iter().map(|index| index.0).collect(),
+                        self.mutations[idx].clone(),
                     )
                 })
                 .collect(),
             1: ancestors,
-        }
-    }
-
-    fn convert_variant_index(
-        index: VariantIndex,
-        sequence_length: SequencePosition,
-        variant_positions: &[SequencePosition],
-    ) -> SequencePosition {
-        if let 0 = index.0 {
-            SequencePosition::from_usize(0)
-        } else if index.0 == variant_positions.len() {
-            sequence_length
-        } else {
-            variant_positions[index.0]
         }
     }
 }

@@ -28,12 +28,13 @@ fn test_incomplete_inner_nodes() {
             .map(|(i, site)| VariantSite::new(site.to_vec(), i + 1)),
     );
 
-    let ancestors = ag.generate_ancestors();
+    let len = SequencePosition::from_usize(8);
+    let ancestors = ag.generate_ancestors(len);
     assert_eq!(ancestors.deref()[5].len(), 6); // only 6 sites, instead of 7
 
     let ancestor_matcher = TreeSequenceGenerator::new(
         ancestors,
-        SequencePosition::from_usize(8),
+        len,
         1e-2,
         1e-20,
         SequencePosition::from_vec(vec![1, 2, 3, 4, 5, 6, 7]),

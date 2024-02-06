@@ -42,11 +42,12 @@ fn test_grouping() {
             .map(|(i, site)| VariantSite::new(site.to_vec(), i + 1)),
     );
 
-    let ancestors = ag.generate_ancestors();
+    let len = SequencePosition::from_usize(23);
+    let ancestors = ag.generate_ancestors(len);
 
     let ancestor_matcher = TreeSequenceGenerator::new(
         ancestors,
-        SequencePosition::from_usize(23),
+        len,
         1e-2,
         1e-20,
         SequencePosition::from_vec((0..23).into_iter().collect()),

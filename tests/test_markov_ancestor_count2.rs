@@ -26,10 +26,11 @@ fn test_markov_ancestor_count2() {
             .map(|(i, site)| VariantSite::new(site.to_vec(), i + 1)),
     );
 
-    let ancestors = ag.generate_ancestors();
+    let len = SequencePosition::from_usize(9);
+    let ancestors = ag.generate_ancestors(len);
     let ancestor_matcher = TreeSequenceGenerator::new(
         ancestors,
-        SequencePosition::from_usize(9),
+        len,
         1e-2,
         1e-20,
         SequencePosition::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8]),

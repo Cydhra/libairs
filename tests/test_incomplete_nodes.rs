@@ -23,14 +23,15 @@ fn test_incomplete_nodes() {
             .map(|(i, site)| VariantSite::new(site.to_vec(), i + 1)),
     );
 
-    let ancestors = ag.generate_ancestors();
+    let len = SequencePosition::from_usize(6);
+    let ancestors = ag.generate_ancestors(len);
 
     assert_eq!(ancestors.len(), 4);
     assert_eq!(ancestors.deref()[3].haplotype(), &vec![1, 1, 1, 1]);
 
     let ancestor_matcher = TreeSequenceGenerator::new(
         ancestors,
-        SequencePosition::from_usize(6),
+        len,
         1e-2,
         1e-20,
         SequencePosition::from_vec(vec![1, 2, 3, 4, 5]),

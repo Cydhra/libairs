@@ -66,6 +66,11 @@ impl SequencePosition {
     pub fn from_vec(positions: Vec<usize>) -> Vec<Self> {
         positions.into_iter().map(|p| Self::from_usize(p)).collect()
     }
+
+    /// Get the underlying usize value of the sequence position.
+    pub fn unwrap(&self) -> usize {
+        self.0
+    }
 }
 
 impl Display for SequencePosition {

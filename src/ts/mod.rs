@@ -39,11 +39,7 @@ impl TreeSequenceGenerator {
 
     pub fn generate_tree_sequence(mut self) -> TreeSequence {
         let partial_sequence = self.matcher.match_ancestors();
-        partial_sequence.as_tree_sequence(
-            self.sequence_length,
-            &self.variant_positions,
-            self.ancestor_sequences,
-        )
+        partial_sequence.as_tree_sequence(self.ancestor_sequences)
     }
 
     /// Export the tree sequence in a TSV format that can be read by the test suite
@@ -86,8 +82,9 @@ mod tests {
             ]
             .into_iter(),
         );
+        let len = SequencePosition::from_usize(6);
 
-        let ancestors = ag.generate_ancestors();
+        let ancestors = ag.generate_ancestors(len);
         let ancestors_copy = ancestors.deref().clone();
         let ancestor_matcher = TreeSequenceGenerator::new(
             ancestors,
@@ -145,12 +142,13 @@ mod tests {
             ]
             .into_iter(),
         );
+        let len = SequencePosition::from_usize(7);
 
-        let ancestors = ag.generate_ancestors();
+        let ancestors = ag.generate_ancestors(len);
         let ancestors_copy = ancestors.deref().clone();
         let ancestor_matcher = TreeSequenceGenerator::new(
             ancestors,
-            SequencePosition::from_usize(7),
+            len,
             1e-2,
             1e-20,
             SequencePosition::from_vec(vec![1, 2, 4, 5, 6, 7]),

@@ -24,14 +24,15 @@ fn test_incomplete_node_start() {
             .map(|(i, site)| VariantSite::new(site.to_vec(), i + 1)),
     );
 
-    let ancestors = ag.generate_ancestors();
+    let len = SequencePosition::from_usize(6);
+    let ancestors = ag.generate_ancestors(len);
 
     // fixme this is broken because start() publicly exposes variant site
     // assert_ne!(ancestors.deref()[2].start(), 0); // the third ancestor is incomplete and doesn't start at position 0.
 
     let ancestor_matcher = TreeSequenceGenerator::new(
         ancestors,
-        SequencePosition::from_usize(6),
+        len,
         1e-2,
         1e-20,
         SequencePosition::from_vec(vec![1, 2, 3, 4, 5]),
