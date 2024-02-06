@@ -51,5 +51,5 @@ fn test_mutation_on_recombination_site() {
 
     // there is a mutation between left_parent and the third node, but not between right_parent and the third node
     assert_eq!(ts[3].mutations.len(), 1);
-    assert_eq!(ts[3].mutations[0].unwrap(), 0); // first site is mutated
+    assert_eq!(ts[3].mutations[0], 0); // first site is mutated
 }

@@ -40,10 +40,7 @@ fn test_incomplete_nodes() {
 
     assert_eq!(ts.len(), 4);
     assert_eq!(ts[3].node_intervals.len(), 2);
-    assert_eq!(
-        ts[3].node_intervals[0].start,
-        SequencePosition::from_usize(0)
-    );
+    assert_eq!(ts[3].node_intervals[0].start, 0);
     assert_eq!(ts[3].node_intervals[0].end, ts[3].node_intervals[1].start);
-    assert_eq!(ts[3].node_intervals[1].end, SequencePosition::from_usize(5)); // test that the end is placed correctly, i.e. exclusive and less than the sequence length
+    assert_eq!(ts[3].node_intervals[1].end, 5); // test that the end is placed correctly, i.e. exclusive and less than the sequence length
 }

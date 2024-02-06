@@ -10,13 +10,17 @@ use std::path::Path;
 #[derive(Debug, Clone)]
 pub struct TreeSequenceInterval {
     pub parent: usize,
-    pub start: SequencePosition,
-    pub end: SequencePosition,
+    pub start: usize,
+    pub end: usize,
 }
 
 impl TreeSequenceInterval {
     pub fn new(parent: usize, start: SequencePosition, end: SequencePosition) -> Self {
-        Self { parent, start, end }
+        Self {
+            parent,
+            start: start.unwrap(),
+            end: end.unwrap(),
+        }
     }
 }
 
@@ -27,19 +31,19 @@ pub struct TreeSequenceNode {
     // todo hide fields
     pub ancestor_index: usize,
     pub node_intervals: Vec<TreeSequenceInterval>,
-    pub mutations: Vec<VariantIndex>,
+    pub mutations: Vec<usize>,
 }
 
 impl TreeSequenceNode {
-    pub fn new(
+    pub(crate) fn new(
         ancestor_index: usize,
         node_intervals: Vec<TreeSequenceInterval>,
-        mutations: Vec<VariantIndex>,
+        mutations: &[VariantIndex],
     ) -> Self {
         TreeSequenceNode {
             ancestor_index,
             node_intervals,
-            mutations,
+            mutations: mutations.iter().map(|v| v.unwrap()).collect(),
         }
     }
 

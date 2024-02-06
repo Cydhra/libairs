@@ -56,7 +56,7 @@ impl AncestralSequence {
     /// known site and ends at the last known site. Each returned element also contains the index
     /// of the site in the genome (regarding the genome's variant site vector, the actual genome
     /// position will differ from this).
-    pub fn site_iter(
+    pub(crate) fn site_iter(
         &self,
     ) -> impl Iterator<Item = (VariantIndex, &'_ u8)> + DoubleEndedIterator + '_ {
         self.state
@@ -69,18 +69,18 @@ impl AncestralSequence {
 
     /// Get the position of the first known site in the genome (inclusive), regarding the genome's variant site
     /// vector (so it doesn't necessarily correspond to the actual position in the genome).
-    pub fn start(&self) -> VariantIndex {
+    pub(crate) fn start(&self) -> VariantIndex {
         self.start
     }
 
     /// Get the position of the last known site in the genome (exclusive), regarding the genome's variant site
     /// vector (so it doesn't necessarily correspond to the actual position in the genome).
-    pub fn end(&self) -> VariantIndex {
+    pub(crate) fn end(&self) -> VariantIndex {
         self.end
     }
 
     /// Get the set of focal sites that were used to generate this ancestral sequence.
-    pub fn focal_sites(&self) -> &[VariantIndex] {
+    pub(crate) fn focal_sites(&self) -> &[VariantIndex] {
         &self.focal_sites
     }
 
@@ -172,13 +172,14 @@ impl IndexMut<VariantIndex> for AncestralSequence {
 /// An index into the [`AncestorArray`]
 ///
 /// [`AncestorArray`]: AncestorArray
-// TODO the type should be made private and not used in the public API
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub struct VariantIndex(usize);
+pub(crate) struct VariantIndex(usize);
 
 impl VariantIndex {
+    /// Create a new variant index from a raw index. Only for testing purposes, actual module code shouldn't work
+    /// with raw values
     #[cfg(test)]
-    pub fn from_usize(index: usize) -> Self {
+    pub(crate) fn from_usize(index: usize) -> Self {
         Self(index)
     }
 
@@ -188,7 +189,7 @@ impl VariantIndex {
     }
 
     /// Calculate the distance in variants between this index and another. Does not return the distance in sequence bases.
-    pub fn get_variant_distance(&self, other: VariantIndex) -> usize {
+    pub(crate) fn get_variant_distance(&self, other: VariantIndex) -> usize {
         if self.0 > other.0 {
             self.0 - other.0
         } else {

@@ -63,10 +63,7 @@ fn test_markov_ancestor_count() {
     // root. airs did that at site 6 when the error was present
     assert_eq!(ts[6].node_intervals.len(), 2);
     assert_eq!(ts[6].node_intervals[0].parent, 3);
-    assert_eq!(ts[6].node_intervals[0].end, SequencePosition::from_usize(5)); // exclusive
+    assert_eq!(ts[6].node_intervals[0].end, 5); // exclusive
     assert_eq!(ts[6].node_intervals[1].parent, 0);
-    assert_eq!(
-        ts[6].node_intervals[1].start,
-        SequencePosition::from_usize(5)
-    );
+    assert_eq!(ts[6].node_intervals[1].start, 5);
 }

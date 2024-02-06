@@ -1,5 +1,4 @@
 use crate::ancestors::{Ancestor, AncestorArray, VariantIndex};
-use crate::dna::SequencePosition;
 use crate::ts::tree_sequence::{TreeSequence, TreeSequenceInterval, TreeSequenceNode};
 
 /// Internal tree sequence edge used during the Viterbi algorithm.
@@ -76,7 +75,7 @@ impl PartialTreeSequence {
                                 TreeSequenceInterval::new(parent.0, start, end)
                             })
                             .collect(),
-                        self.mutations[idx].clone(),
+                        &self.mutations[idx],
                     )
                 })
                 .collect(),

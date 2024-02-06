@@ -32,7 +32,7 @@ impl AncestorArray {
         self.ancestors.len()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (Ancestor, &AncestralSequence)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (Ancestor, &AncestralSequence)> {
         self.ancestors
             .iter()
             .enumerate()

@@ -40,5 +40,5 @@ fn test_markov_ancestor_count2() {
     // when the ancestor count is incorrect, the algorithm will recombine the last ancestor too early, which will
     // increase the number of trees in the sequence
 
-    assert_eq!(ts[7].node_intervals[0].end, SequencePosition::from_usize(4));
+    assert_eq!(ts[7].node_intervals[0].end, 4);
 }

@@ -55,9 +55,10 @@ impl VariantSite {
 /// A position in a DNA sequence. This newtype ensures that sequence positions and variant indices (indices into the
 /// variant site vector) aren't mixed up.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct SequencePosition(pub(crate) usize); // TODO do not make this public
+pub struct SequencePosition(usize); // TODO do not make this public
 
 impl SequencePosition {
+    /// Create a new sequence position from a usize.
     pub fn from_usize(position: usize) -> Self {
         Self(position)
     }
