@@ -8,13 +8,13 @@ use std::path::Path;
 /// The interval is defined by the start and (exclusive) end position of the interval and the index of the
 /// parent node.
 #[derive(Debug, Clone)]
-pub struct TreeSequenceInterval {
+pub struct TreeSequenceEdge {
     pub parent: usize,
     pub start: usize,
     pub end: usize,
 }
 
-impl TreeSequenceInterval {
+impl TreeSequenceEdge {
     pub fn new(parent: usize, start: SequencePosition, end: SequencePosition) -> Self {
         Self {
             parent,
@@ -28,31 +28,48 @@ impl TreeSequenceInterval {
 /// represents and a list of intervals that define what parent nodes cover the ancestor sequence.
 #[derive(Debug, Clone)]
 pub struct TreeSequenceNode {
-    // todo hide fields
-    pub ancestor_index: usize,
-    pub node_intervals: Vec<TreeSequenceInterval>,
-    pub mutations: Vec<usize>,
+    ancestor_index: usize,
+    edges: Vec<TreeSequenceEdge>,
+    mutations: Vec<usize>,
 }
 
 impl TreeSequenceNode {
     pub(crate) fn new(
         ancestor_index: usize,
-        node_intervals: Vec<TreeSequenceInterval>,
+        edges: Vec<TreeSequenceEdge>,
         mutations: &[VariantIndex],
     ) -> Self {
         TreeSequenceNode {
             ancestor_index,
-            node_intervals,
+            edges,
             mutations: mutations.iter().map(|v| v.unwrap()).collect(),
         }
     }
 
-    pub fn empty(ancestor_index: usize) -> Self {
+    pub(crate) fn empty(ancestor_index: usize) -> Self {
         TreeSequenceNode {
             ancestor_index,
-            node_intervals: Vec::new(),
+            edges: Vec::new(),
             mutations: Vec::new(),
         }
+    }
+
+    /// Get the index of the ancestor sequence that this node represents
+    pub fn ancestor(&self) -> usize {
+        self.ancestor_index
+    }
+
+    /// Get the collection of [`TreeSequenceEdges`] that define the intervals covered by parent nodes.
+    ///
+    /// [`TreeSequenceEdges`]: TreeSequenceEdge
+    pub fn edges(&self) -> &[TreeSequenceEdge] {
+        &self.edges
+    }
+
+    /// Get a collection of mutation sites. The collection is a list of indices into the variant
+    /// site vector.
+    pub fn mutations(&self) -> &[usize] {
+        &self.mutations
     }
 
     pub fn tskit_format_node(
@@ -69,11 +86,11 @@ impl TreeSequenceNode {
     }
 
     pub fn tskit_format_edges(&self, writer: &mut dyn Write) -> io::Result<()> {
-        for interval in &self.node_intervals {
+        for interval in &self.edges {
             writer.write_fmt(format_args!(
                 "{left}\t{right}\t{parent}\t{child}\n",
-                left = interval.start, // todo get the actual genomic position instead of the index into the variant sites
-                right = interval.end,  // same here
+                left = interval.start,
+                right = interval.end,
                 // add one to the node index because tskit uses the virtual root node, so we encode the root twice
                 parent = interval.parent + 1,
                 child = self.ancestor_index + 1,
@@ -123,10 +140,7 @@ impl TreeSequence {
 
         writer.write_fmt(format_args!("left\tright\tparent\tchild\n"))?;
         // write edge from virtual root to root
-        writer.write_fmt(format_args!(
-            "0\t{}\t0\t1\n",
-            self.0[1].node_intervals[0].end
-        ))?;
+        writer.write_fmt(format_args!("0\t{}\t0\t1\n", self.0[1].edges[0].end))?;
 
         // skip first edge because tskit doesn't like the root node to have an edge to itself. TODO we can remove this anyway at some point
         for node in self.0.iter().skip(1) {

@@ -31,25 +31,25 @@ fn test_mutation_on_recombination_site() {
 
     assert_eq!(ts.len(), 4); // root node + 3 ancestor nodes
 
-    assert_eq!(ts[0].node_intervals.len(), 1); // root node has one interval
+    assert_eq!(ts[0].edges().len(), 1); // root node has one interval
 
     // two nodes connect to the root node
-    assert_eq!(ts[1].node_intervals.len(), 1);
-    assert_eq!(ts[1].node_intervals[0].parent, 0);
-    assert_eq!(ts[2].node_intervals.len(), 1);
-    assert_eq!(ts[2].node_intervals[0].parent, 0);
+    assert_eq!(ts[1].edges().len(), 1);
+    assert_eq!(ts[1].edges()[0].parent, 0);
+    assert_eq!(ts[2].edges().len(), 1);
+    assert_eq!(ts[2].edges()[0].parent, 0);
 
     // the third node connects to the second and the third node
-    assert_eq!(ts[3].node_intervals.len(), 2);
+    assert_eq!(ts[3].edges().len(), 2);
 
-    let left_parent = ts[3].node_intervals[0].parent;
-    let right_parent = ts[3].node_intervals[1].parent;
+    let left_parent = ts[3].edges()[0].parent;
+    let right_parent = ts[3].edges()[1].parent;
 
     assert!(left_parent == 1 || left_parent == 2);
     assert!(right_parent == 1 || right_parent == 2);
     assert_ne!(left_parent, right_parent);
 
     // there is a mutation between left_parent and the third node, but not between right_parent and the third node
-    assert_eq!(ts[3].mutations.len(), 1);
-    assert_eq!(ts[3].mutations[0], 0); // first site is mutated
+    assert_eq!(ts[3].mutations().len(), 1);
+    assert_eq!(ts[3].mutations()[0], 0); // first site is mutated
 }

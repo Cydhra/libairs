@@ -96,30 +96,30 @@ mod tests {
         let ts = ancestor_matcher.generate_tree_sequence().0;
 
         assert_eq!(ts.len(), 4);
-        assert_eq!(ts[0].ancestor_index, 0);
-        assert_eq!(ts[0].node_intervals.len(), 1);
-        assert_eq!(ts[0].node_intervals[0].parent, 0);
+        assert_eq!(ts[0].ancestor(), 0);
+        assert_eq!(ts[0].edges().len(), 1);
+        assert_eq!(ts[0].edges()[0].parent, 0);
 
         let seq = ts
             .iter()
-            .find(|n| ancestors_copy[n.ancestor_index].haplotype() == vec![1, 0, 0, 1, 0])
+            .find(|n| ancestors_copy[n.ancestor()].haplotype() == vec![1, 0, 0, 1, 0])
             .unwrap();
-        assert_eq!(seq.node_intervals.len(), 1);
-        assert_eq!(seq.node_intervals[0].parent, 0);
+        assert_eq!(seq.edges().len(), 1);
+        assert_eq!(seq.edges()[0].parent, 0);
 
         let seq = ts
             .iter()
-            .find(|n| ancestors_copy[n.ancestor_index].haplotype() == vec![1, 0, 0, 1, 1])
+            .find(|n| ancestors_copy[n.ancestor()].haplotype() == vec![1, 0, 0, 1, 1])
             .unwrap();
-        assert_eq!(seq.node_intervals.len(), 1);
-        assert_eq!(seq.node_intervals[0].parent, 1);
+        assert_eq!(seq.edges().len(), 1);
+        assert_eq!(seq.edges()[0].parent, 1);
 
         let seq = ts
             .iter()
-            .find(|n| ancestors_copy[n.ancestor_index].haplotype() == vec![0, 1, 1, 0, 0])
+            .find(|n| ancestors_copy[n.ancestor()].haplotype() == vec![0, 1, 1, 0, 0])
             .unwrap();
-        assert_eq!(seq.node_intervals.len(), 1);
-        assert_eq!(seq.node_intervals[0].parent, 0);
+        assert_eq!(seq.edges().len(), 1);
+        assert_eq!(seq.edges()[0].parent, 0);
     }
 
     #[test]
@@ -157,36 +157,36 @@ mod tests {
 
         assert_eq!(ts.len(), 5);
 
-        assert_eq!(ts[0].ancestor_index, 0);
-        assert_eq!(ts[0].node_intervals.len(), 1);
+        assert_eq!(ts[0].ancestor(), 0);
+        assert_eq!(ts[0].edges().len(), 1);
 
         let seq1 = ts
             .iter()
-            .find(|n| ancestors_copy[n.ancestor_index].haplotype() == vec![1, 1, 0, 0, 0, 0])
+            .find(|n| ancestors_copy[n.ancestor()].haplotype() == vec![1, 1, 0, 0, 0, 0])
             .unwrap();
-        assert_eq!(seq1.node_intervals.len(), 1);
-        assert_eq!(seq1.node_intervals[0].parent, 0);
+        assert_eq!(seq1.edges().len(), 1);
+        assert_eq!(seq1.edges()[0].parent, 0);
 
         let seq2 = ts
             .iter()
-            .find(|n| ancestors_copy[n.ancestor_index].haplotype() == vec![0, 0, 0, 0, 1, 1])
+            .find(|n| ancestors_copy[n.ancestor()].haplotype() == vec![0, 0, 0, 0, 1, 1])
             .unwrap();
-        assert_eq!(seq2.node_intervals.len(), 1);
-        assert_eq!(seq2.node_intervals[0].parent, 0);
+        assert_eq!(seq2.edges().len(), 1);
+        assert_eq!(seq2.edges()[0].parent, 0);
 
         let seq = ts
             .iter()
-            .find(|n| ancestors_copy[n.ancestor_index].haplotype() == vec![1, 1, 1, 0, 1, 1])
+            .find(|n| ancestors_copy[n.ancestor()].haplotype() == vec![1, 1, 1, 0, 1, 1])
             .unwrap();
-        assert_eq!(seq.node_intervals.len(), 2);
-        assert_eq!(seq.node_intervals[0].parent, seq1.ancestor_index);
-        assert_eq!(seq.node_intervals[1].parent, seq2.ancestor_index);
+        assert_eq!(seq.edges().len(), 2);
+        assert_eq!(seq.edges()[0].parent, seq1.ancestor());
+        assert_eq!(seq.edges()[1].parent, seq2.ancestor());
 
         let seq = ts
             .iter()
-            .find(|n| ancestors_copy[n.ancestor_index].haplotype() == vec![1, 1, 0, 1, 0, 0])
+            .find(|n| ancestors_copy[n.ancestor()].haplotype() == vec![1, 1, 0, 1, 0, 0])
             .unwrap();
-        assert_eq!(seq.node_intervals.len(), 1);
-        assert_eq!(seq.node_intervals[0].parent, seq1.ancestor_index);
+        assert_eq!(seq.edges().len(), 1);
+        assert_eq!(seq.edges()[0].parent, seq1.ancestor());
     }
 }

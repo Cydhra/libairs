@@ -44,14 +44,14 @@ fn test_incomplete_inner_nodes() {
     assert_eq!(ts.len(), 7);
 
     // test that the incomplete ancestor copies from another one and stops at the site where it has no more state
-    assert_eq!(ts[5].node_intervals.len(), 1);
-    assert_eq!(ts[5].node_intervals[0].end, 7); // not equal to the sequence-length 8, because the ancestor doesnt have state for the last site
+    assert_eq!(ts[5].edges().len(), 1);
+    assert_eq!(ts[5].edges()[0].end, 7); // not equal to the sequence-length 8, because the ancestor doesnt have state for the last site
 
-    assert_eq!(ts[6].node_intervals.len(), 2);
-    assert_eq!(ts[6].node_intervals[0].parent, 5); // check that it copies from the incomplete ancestor
-    assert_eq!(ts[6].node_intervals[0].end, 7);
+    assert_eq!(ts[6].edges().len(), 2);
+    assert_eq!(ts[6].edges()[0].parent, 5); // check that it copies from the incomplete ancestor
+    assert_eq!(ts[6].edges()[0].end, 7);
 
     // check that it copies from somewhere else
-    assert_eq!(ts[6].node_intervals[1].start, 7);
-    assert_eq!(ts[6].node_intervals[1].end, 8);
+    assert_eq!(ts[6].edges()[1].start, 7);
+    assert_eq!(ts[6].edges()[1].end, 8);
 }

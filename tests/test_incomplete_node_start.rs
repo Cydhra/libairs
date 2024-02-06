@@ -42,6 +42,6 @@ fn test_incomplete_node_start() {
     // assert that no ancestor has the third ancestor as its parent in the first variant site, because it doesnt exist
     // for this position
     ts[3..].iter().for_each(|node| {
-        assert!(node.node_intervals[0].parent != 2 || node.node_intervals[0].start > 0);
+        assert!(node.edges()[0].parent != 2 || node.edges()[0].start > 0);
     });
 }
