@@ -46,14 +46,6 @@ impl TreeSequenceNode {
         }
     }
 
-    pub(crate) fn empty(ancestor_index: usize) -> Self {
-        TreeSequenceNode {
-            ancestor_index,
-            edges: Vec::new(),
-            mutations: Vec::new(),
-        }
-    }
-
     /// Get the index of the ancestor sequence that this node represents
     pub fn ancestor(&self) -> usize {
         self.ancestor_index
