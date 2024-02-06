@@ -5,7 +5,7 @@
 
 use libairs::ancestors::AncestorGenerator;
 use libairs::dna::{SequencePosition, VariantSite};
-use libairs::ts::TreeSequenceGenerator;
+use libairs::ts::ViterbiMatcher;
 
 #[test]
 fn test_grouping() {
@@ -45,14 +45,9 @@ fn test_grouping() {
     let len = SequencePosition::from_usize(23);
     let ancestors = ag.generate_ancestors(len);
 
-    let ancestor_matcher = TreeSequenceGenerator::new(
-        ancestors,
-        len,
-        1e-2,
-        1e-20,
-        SequencePosition::from_vec((0..23).into_iter().collect()),
-    );
-    let ts = ancestor_matcher.generate_tree_sequence().nodes;
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+    ancestor_matcher.match_ancestors();
+    let ts = ancestor_matcher.get_tree_sequence().nodes;
 
     // TODO assertions
 }

@@ -7,7 +7,7 @@ use std::ops::Deref;
 
 use libairs::ancestors::AncestorGenerator;
 use libairs::dna::{SequencePosition, VariantSite};
-use libairs::ts::TreeSequenceGenerator;
+use libairs::ts::ViterbiMatcher;
 
 #[test]
 fn test_incomplete_inner_nodes() {
@@ -32,14 +32,9 @@ fn test_incomplete_inner_nodes() {
     let ancestors = ag.generate_ancestors(len);
     assert_eq!(ancestors.deref()[5].len(), 6); // only 6 sites, instead of 7
 
-    let ancestor_matcher = TreeSequenceGenerator::new(
-        ancestors,
-        len,
-        1e-2,
-        1e-20,
-        SequencePosition::from_vec(vec![1, 2, 3, 4, 5, 6, 7]),
-    );
-    let ts = ancestor_matcher.generate_tree_sequence().nodes;
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+    ancestor_matcher.match_ancestors();
+    let ts = ancestor_matcher.get_tree_sequence().nodes;
 
     assert_eq!(ts.len(), 7);
 

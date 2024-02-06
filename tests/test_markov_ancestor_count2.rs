@@ -4,7 +4,7 @@
 
 use libairs::ancestors::AncestorGenerator;
 use libairs::dna::{SequencePosition, VariantSite};
-use libairs::ts::TreeSequenceGenerator;
+use libairs::ts::ViterbiMatcher;
 
 #[test]
 fn test_markov_ancestor_count2() {
@@ -28,14 +28,9 @@ fn test_markov_ancestor_count2() {
 
     let len = SequencePosition::from_usize(9);
     let ancestors = ag.generate_ancestors(len);
-    let ancestor_matcher = TreeSequenceGenerator::new(
-        ancestors,
-        len,
-        1e-2,
-        1e-20,
-        SequencePosition::from_vec(vec![1, 2, 3, 4, 5, 6, 7, 8]),
-    );
-    let ts = ancestor_matcher.generate_tree_sequence().nodes;
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+    ancestor_matcher.match_ancestors();
+    let ts = ancestor_matcher.get_tree_sequence().nodes;
 
     // when the ancestor count is incorrect, the algorithm will recombine the last ancestor too early, which will
     // increase the number of trees in the sequence

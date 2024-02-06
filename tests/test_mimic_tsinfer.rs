@@ -3,7 +3,7 @@
 
 use libairs::ancestors::AncestorGenerator;
 use libairs::dna::{SequencePosition, VariantSite};
-use libairs::ts::TreeSequenceGenerator;
+use libairs::ts::ViterbiMatcher;
 
 #[test]
 fn test_incomplete_nodes() {
@@ -24,14 +24,9 @@ fn test_incomplete_nodes() {
 
     let len = SequencePosition::from_usize(6);
     let ancestors = ag.generate_ancestors(len);
-    let ancestor_matcher = TreeSequenceGenerator::new(
-        ancestors,
-        len,
-        1e-2,
-        1e-20,
-        SequencePosition::from_vec(vec![1, 2, 3, 4, 5]),
-    );
-    let ts = ancestor_matcher.generate_tree_sequence().nodes;
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+    ancestor_matcher.match_ancestors();
+    let ts = ancestor_matcher.get_tree_sequence().nodes;
 
     // if tsinfer behavior is mimicked, nodes 1 and 2 are connected to root (0), and nodes 3 and 4 are connected to each of
     // them (1, 2) in two different trees. If built incorrectly, one of nodes (3, 4) will connect to the other (4, 3) one respectively

@@ -4,7 +4,7 @@
 
 use libairs::ancestors::AncestorGenerator;
 use libairs::dna::{SequencePosition, VariantSite};
-use libairs::ts::TreeSequenceGenerator;
+use libairs::ts::ViterbiMatcher;
 
 #[test]
 fn test_mutation_on_recombination_site() {
@@ -20,14 +20,9 @@ fn test_mutation_on_recombination_site() {
     let len = SequencePosition::from_usize(4);
     let ancestors = ag.generate_ancestors(len);
 
-    let ancestor_matcher = TreeSequenceGenerator::new(
-        ancestors,
-        SequencePosition::from_usize(4),
-        1e-2,
-        1e-20,
-        SequencePosition::from_vec(vec![1, 2, 3]),
-    );
-    let ts = ancestor_matcher.generate_tree_sequence().nodes;
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+    ancestor_matcher.match_ancestors();
+    let ts = ancestor_matcher.get_tree_sequence().nodes;
 
     assert_eq!(ts.len(), 4); // root node + 3 ancestor nodes
 

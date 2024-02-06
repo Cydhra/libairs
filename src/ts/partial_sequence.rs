@@ -57,7 +57,7 @@ impl PartialTreeSequence {
         self.mutations.push(mutations);
     }
 
-    pub(crate) fn as_tree_sequence(&self, ancestors: AncestorArray) -> TreeSequence {
+    pub(crate) fn as_tree_sequence(&self, ancestors: &AncestorArray) -> TreeSequence {
         TreeSequence {
             nodes: self
                 .edges
@@ -79,7 +79,7 @@ impl PartialTreeSequence {
                     )
                 })
                 .collect(),
-            ancestors: ancestors,
+            ancestors: ancestors.clone(),
         }
     }
 }

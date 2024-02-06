@@ -1,6 +1,10 @@
 use crate::ancestors::{Ancestor, AncestralSequence, VariantIndex};
 use crate::dna::SequencePosition;
+use std::fs::File;
+use std::io;
+use std::io::Write;
 use std::ops::{Deref, Index};
+use std::path::Path;
 
 /// This is a helper struct for the Viterbi algorithm that manages the ancestral sequences.
 #[derive(Debug, Clone)]
@@ -48,6 +52,20 @@ impl AncestorArray {
         } else {
             self.variant_positions[index.0]
         }
+    }
+
+    /// Export the ancestor array in a TSV format that can be read by the test suite
+    pub fn export_ancestors(&self, path: &Path) -> io::Result<()> {
+        let mut node_file = path.to_path_buf();
+        node_file.push("ancestors.tsv");
+        let mut writer = File::create(node_file)?;
+
+        writer.write_fmt(format_args!("start\tend\tage\tfocal_sites\tstate\n"))?;
+        for ancestor in self.ancestors.iter() {
+            ancestor.export(&mut writer)?;
+        }
+
+        Ok(())
     }
 }
 

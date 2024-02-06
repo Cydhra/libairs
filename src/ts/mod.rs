@@ -3,65 +3,13 @@ mod matcher;
 mod partial_sequence;
 mod tree_sequence;
 
-use crate::ancestors::AncestorArray;
-use crate::dna::SequencePosition;
-use crate::ts::matcher::ViterbiMatcher;
-use crate::ts::tree_sequence::TreeSequence;
-use std::fs::File;
-use std::io;
-use std::io::Write;
-use std::ops::Deref;
-use std::path::Path;
-
-// TODO remove this once the ViterbiMatcher can be used conveniently
-pub struct TreeSequenceGenerator {
-    pub ancestor_sequences: AncestorArray,
-    matcher: ViterbiMatcher,
-    variant_positions: Vec<SequencePosition>,
-    sequence_length: SequencePosition,
-}
-
-impl TreeSequenceGenerator {
-    pub fn new(
-        ancestor_sequences: AncestorArray,
-        sequence_length: SequencePosition,
-        recombination_rate: f64,
-        mismatch_rate: f64,
-        variant_positions: Vec<SequencePosition>,
-    ) -> Self {
-        Self {
-            ancestor_sequences: ancestor_sequences.clone(),
-            matcher: ViterbiMatcher::new(ancestor_sequences, recombination_rate, mismatch_rate),
-            variant_positions,
-            sequence_length,
-        }
-    }
-
-    pub fn generate_tree_sequence(mut self) -> TreeSequence {
-        let partial_sequence = self.matcher.match_ancestors();
-        partial_sequence.as_tree_sequence(self.ancestor_sequences)
-    }
-
-    /// Export the tree sequence in a TSV format that can be read by the test suite
-    pub fn export_ancestors(&self, path: &Path) -> io::Result<()> {
-        let mut node_file = path.to_path_buf();
-        node_file.push("ancestors.tsv");
-        let mut writer = File::create(node_file)?;
-
-        writer.write_fmt(format_args!("start\tend\tage\tfocal_sites\tstate\n"))?;
-        for ancestor in self.ancestor_sequences.deref() {
-            ancestor.export(&mut writer)?;
-        }
-
-        Ok(())
-    }
-}
+pub use matcher::ViterbiMatcher;
 
 #[cfg(test)]
 mod tests {
     use crate::ancestors::AncestorGenerator;
     use crate::dna::{SequencePosition, VariantSite};
-    use crate::ts::TreeSequenceGenerator;
+    use crate::ts::matcher::ViterbiMatcher;
     use std::ops::Deref;
 
     #[test]
@@ -86,14 +34,9 @@ mod tests {
 
         let ancestors = ag.generate_ancestors(len);
         let ancestors_copy = ancestors.deref().clone();
-        let ancestor_matcher = TreeSequenceGenerator::new(
-            ancestors,
-            SequencePosition::from_usize(5),
-            1e-2,
-            1e-20,
-            SequencePosition::from_vec(vec![1, 2, 3, 4, 5]),
-        );
-        let ts = ancestor_matcher.generate_tree_sequence().nodes;
+        let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+        ancestor_matcher.match_ancestors();
+        let ts = ancestor_matcher.get_tree_sequence().nodes;
 
         assert_eq!(ts.len(), 4);
         assert_eq!(ts[0].ancestor(), 0);
@@ -146,14 +89,9 @@ mod tests {
 
         let ancestors = ag.generate_ancestors(len);
         let ancestors_copy = ancestors.deref().clone();
-        let ancestor_matcher = TreeSequenceGenerator::new(
-            ancestors,
-            len,
-            1e-2,
-            1e-20,
-            SequencePosition::from_vec(vec![1, 2, 4, 5, 6, 7]),
-        );
-        let ts = ancestor_matcher.generate_tree_sequence().nodes;
+        let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+        ancestor_matcher.match_ancestors();
+        let ts = ancestor_matcher.get_tree_sequence().nodes;
 
         assert_eq!(ts.len(), 5);
 

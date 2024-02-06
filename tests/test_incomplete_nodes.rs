@@ -3,7 +3,7 @@
 
 use libairs::ancestors::AncestorGenerator;
 use libairs::dna::{SequencePosition, VariantSite};
-use libairs::ts::TreeSequenceGenerator;
+use libairs::ts::ViterbiMatcher;
 use std::ops::Deref;
 
 #[test]
@@ -29,14 +29,9 @@ fn test_incomplete_nodes() {
     assert_eq!(ancestors.len(), 4);
     assert_eq!(ancestors.deref()[3].haplotype(), &vec![1, 1, 1, 1]);
 
-    let ancestor_matcher = TreeSequenceGenerator::new(
-        ancestors,
-        len,
-        1e-2,
-        1e-20,
-        SequencePosition::from_vec(vec![1, 2, 3, 4, 5]),
-    );
-    let ts = ancestor_matcher.generate_tree_sequence().nodes;
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+    ancestor_matcher.match_ancestors();
+    let ts = ancestor_matcher.get_tree_sequence().nodes;
 
     assert_eq!(ts.len(), 4);
     assert_eq!(ts[3].edges().len(), 2);

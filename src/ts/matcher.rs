@@ -2,6 +2,7 @@ use crate::ancestors::{Ancestor, AncestorArray};
 use crate::ancestors::{AncestralSequence, VariantIndex};
 use crate::ts::ancestor_iterator::AncestorIndex;
 use crate::ts::partial_sequence::{PartialSequenceEdge, PartialTreeSequence};
+use crate::ts::tree_sequence::TreeSequence;
 
 /// A matcher runs the viterbi algorithm for a set of sequences.
 /// It will generate a tree sequence from an array of ancestral sequences and can then match
@@ -13,6 +14,7 @@ use crate::ts::partial_sequence::{PartialSequenceEdge, PartialTreeSequence};
 pub struct ViterbiMatcher {
     ancestors: AncestorArray,
     ancestor_iterator: AncestorIndex,
+    partial_tree_sequence: PartialTreeSequence,
     recombination_prob: f64,
     mutation_prob: f64,
 }
@@ -21,9 +23,11 @@ impl ViterbiMatcher {
     /// Create a new matcher for the given ancestral sequences
     pub fn new(ancestors: AncestorArray, recombination_prob: f64, mutation_prob: f64) -> Self {
         let ancestor_iterator = AncestorIndex::new();
+        let ancestor_count = ancestors.len();
         Self {
             ancestors,
             ancestor_iterator,
+            partial_tree_sequence: PartialTreeSequence::with_capacity(ancestor_count),
             recombination_prob,
             mutation_prob,
         }
@@ -32,7 +36,7 @@ impl ViterbiMatcher {
     /// Find a copying path for the given sequence given the ancestor iterator as a partial
     /// tree sequence.
     #[must_use]
-    pub fn find_copy_path(
+    fn find_copy_path(
         &self,
         candidate: &AncestralSequence,
         limit_nodes: usize,
@@ -157,12 +161,10 @@ impl ViterbiMatcher {
     /// Generate a tree sequence from the given ancestor array.
     /// This will modify the internal state to represent the tree sequence for all ancestors
     /// within the array.
-    pub fn match_ancestors(&mut self) -> PartialTreeSequence {
-        let mut partial_tree_sequence = PartialTreeSequence::with_capacity(self.ancestors.len());
-
+    pub fn match_ancestors(&mut self) {
         // edges for root node
         let root = Ancestor(0);
-        partial_tree_sequence.push(
+        self.partial_tree_sequence.push(
             vec![PartialSequenceEdge::new(
                 self.ancestors[root].start(),
                 self.ancestors[root].end(),
@@ -185,10 +187,8 @@ impl ViterbiMatcher {
             let (edges, mutations) = self.find_copy_path(ancestor, num_ancestors);
             self.ancestor_iterator
                 .insert_sequence_node(ancestor_index, &edges, &mutations);
-            partial_tree_sequence.push(edges, mutations);
+            self.partial_tree_sequence.push(edges, mutations);
         }
-
-        partial_tree_sequence
     }
 
     /// Insert a set of samples into an ancestral tree sequence. The samples will be matched
@@ -198,7 +198,7 @@ impl ViterbiMatcher {
     }
 
     /// Finalize the tree sequence.
-    pub fn get_tree_sequence(&self) -> ! {
-        todo!()
+    pub fn get_tree_sequence(&self) -> TreeSequence {
+        self.partial_tree_sequence.as_tree_sequence(&self.ancestors)
     }
 }
