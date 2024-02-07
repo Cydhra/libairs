@@ -212,3 +212,9 @@ impl Display for VariantIndex {
 /// An index into the ancestor array which uniquely identifies an ancestor
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub(crate) struct Ancestor(pub(crate) usize);
+
+impl Display for Ancestor {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
