@@ -4,6 +4,7 @@
 //! It can be imported into tskit using [`tskit.load_text()`](https://tskit.dev/tskit/docs/stable/python-api.html#tskit.load_text).
 
 use libairs::dna::SequencePosition;
+use libairs::ts::ViterbiMatcher;
 use std::env;
 use std::path::PathBuf;
 use vcfire::VcfFile;
@@ -51,24 +52,16 @@ fn main() {
     let mut target_file = PathBuf::from(&vcf);
 
     let ancestor_generator = libairs::convenience::from_vcf(&vcf, compressed).unwrap();
-    let ancestors = ancestor_generator.generate_ancestors();
-    let matcher = libairs::ts::TreeSequenceGenerator::new(
-        ancestors,
-        sequence_length,
-        1e-2,
-        1e-20,
-        ancestor_generator
-            .sites
-            .iter()
-            .map(|s| s.position)
-            .collect(),
-    );
+    let ancestors = ancestor_generator.generate_ancestors(sequence_length);
     target_file.pop();
-    matcher
+    ancestors
         .export_ancestors(&target_file)
         .expect("failed to export ancestors");
 
-    let tree_sequence = matcher.generate_tree_sequence();
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+    ancestor_matcher.match_ancestors();
+
+    let tree_sequence = ancestor_matcher.get_tree_sequence();
 
     tree_sequence
         .tskit_export(&target_file)

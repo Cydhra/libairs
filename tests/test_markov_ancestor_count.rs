@@ -5,7 +5,7 @@
 
 use libairs::ancestors::AncestorGenerator;
 use libairs::dna::{SequencePosition, VariantSite};
-use libairs::ts::TreeSequenceGenerator;
+use libairs::ts::ViterbiMatcher;
 
 #[test]
 fn test_markov_ancestor_count() {
@@ -25,47 +25,40 @@ fn test_markov_ancestor_count() {
             .map(|(i, site)| VariantSite::new(site.to_vec(), i + 1)),
     );
 
-    let ancestors = ag.generate_ancestors();
-    let ancestor_matcher = TreeSequenceGenerator::new(
-        ancestors,
-        SequencePosition::from_usize(7),
-        1e-2,
-        1e-20,
-        SequencePosition::from_vec(vec![1, 2, 3, 4, 5, 6]),
-    );
-    let ts = ancestor_matcher.generate_tree_sequence().0;
+    let len = SequencePosition::from_usize(7);
+    let ancestors = ag.generate_ancestors(len);
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+    ancestor_matcher.match_ancestors();
+    let ts = ancestor_matcher.get_tree_sequence().nodes;
 
     // when the ancestor count is incorrect, the algorithm will recombine at the wrong spots. So we test the correct
     // layout of the tree sequence
 
     // the first nodes (1, 2) after the root are only connected to the root
-    assert_eq!(ts[1].node_intervals.len(), 1);
-    assert_eq!(ts[1].node_intervals[0].parent, 0);
+    assert_eq!(ts[1].edges().len(), 1);
+    assert_eq!(ts[1].edges()[0].parent, 0);
 
-    assert_eq!(ts[2].node_intervals.len(), 1);
-    assert_eq!(ts[2].node_intervals[0].parent, 0);
+    assert_eq!(ts[2].edges().len(), 1);
+    assert_eq!(ts[2].edges()[0].parent, 0);
 
     // the next node is connected to one of the previous nodes, and then to the other one
-    assert_eq!(ts[3].node_intervals.len(), 2);
-    assert!(ts[3].node_intervals.iter().any(|ni| ni.parent == 1));
-    assert!(ts[3].node_intervals.iter().any(|ni| ni.parent == 2));
+    assert_eq!(ts[3].edges().len(), 2);
+    assert!(ts[3].edges().iter().any(|ni| ni.parent == 1));
+    assert!(ts[3].edges().iter().any(|ni| ni.parent == 2));
 
     // the next two nodes build a path from the previous node downwards
-    assert_eq!(ts[4].node_intervals.len(), 1);
-    assert_eq!(ts[4].node_intervals[0].parent, 3);
+    assert_eq!(ts[4].edges().len(), 1);
+    assert_eq!(ts[4].edges()[0].parent, 3);
 
-    assert_eq!(ts[5].node_intervals.len(), 1);
-    assert_eq!(ts[5].node_intervals[0].parent, 4);
+    assert_eq!(ts[5].edges().len(), 1);
+    assert_eq!(ts[5].edges()[0].parent, 4);
 
     // the last node is the most interesting one, because it is the node that got recombined at the wrong side when
     // airs counted ancestors incorrectly. It is supposed to connect to (3), and then at site 5 it will reconnect to the
     // root. airs did that at site 6 when the error was present
-    assert_eq!(ts[6].node_intervals.len(), 2);
-    assert_eq!(ts[6].node_intervals[0].parent, 3);
-    assert_eq!(ts[6].node_intervals[0].end, SequencePosition::from_usize(5)); // exclusive
-    assert_eq!(ts[6].node_intervals[1].parent, 0);
-    assert_eq!(
-        ts[6].node_intervals[1].start,
-        SequencePosition::from_usize(5)
-    );
+    assert_eq!(ts[6].edges().len(), 2);
+    assert_eq!(ts[6].edges()[0].parent, 3);
+    assert_eq!(ts[6].edges()[0].end, 5); // exclusive
+    assert_eq!(ts[6].edges()[1].parent, 0);
+    assert_eq!(ts[6].edges()[1].start, 5);
 }

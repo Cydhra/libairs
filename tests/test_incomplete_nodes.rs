@@ -3,7 +3,8 @@
 
 use libairs::ancestors::AncestorGenerator;
 use libairs::dna::{SequencePosition, VariantSite};
-use libairs::ts::TreeSequenceGenerator;
+use libairs::ts::ViterbiMatcher;
+use std::ops::Deref;
 
 #[test]
 fn test_incomplete_nodes() {
@@ -22,26 +23,19 @@ fn test_incomplete_nodes() {
             .map(|(i, site)| VariantSite::new(site.to_vec(), i + 1)),
     );
 
-    let ancestors = ag.generate_ancestors();
+    let len = SequencePosition::from_usize(6);
+    let ancestors = ag.generate_ancestors(len);
 
     assert_eq!(ancestors.len(), 4);
-    assert_eq!(ancestors[3].haplotype(), &vec![1, 1, 1, 1]);
+    assert_eq!(ancestors.deref()[3].haplotype(), &vec![1, 1, 1, 1]);
 
-    let ancestor_matcher = TreeSequenceGenerator::new(
-        ancestors,
-        SequencePosition::from_usize(6),
-        1e-2,
-        1e-20,
-        SequencePosition::from_vec(vec![1, 2, 3, 4, 5]),
-    );
-    let ts = ancestor_matcher.generate_tree_sequence().0;
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+    ancestor_matcher.match_ancestors();
+    let ts = ancestor_matcher.get_tree_sequence().nodes;
 
     assert_eq!(ts.len(), 4);
-    assert_eq!(ts[3].node_intervals.len(), 2);
-    assert_eq!(
-        ts[3].node_intervals[0].start,
-        SequencePosition::from_usize(0)
-    );
-    assert_eq!(ts[3].node_intervals[0].end, ts[3].node_intervals[1].start);
-    assert_eq!(ts[3].node_intervals[1].end, SequencePosition::from_usize(5)); // test that the end is placed correctly, i.e. exclusive and less than the sequence length
+    assert_eq!(ts[3].edges().len(), 2);
+    assert_eq!(ts[3].edges()[0].start, 0);
+    assert_eq!(ts[3].edges()[0].end, ts[3].edges()[1].start);
+    assert_eq!(ts[3].edges()[1].end, 5); // test that the end is placed correctly, i.e. exclusive and less than the sequence length
 }
