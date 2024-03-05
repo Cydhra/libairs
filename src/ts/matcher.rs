@@ -208,7 +208,17 @@ impl ViterbiMatcher {
     /// Insert a set of samples into an ancestral tree sequence. The samples will be matched
     /// against the existing sequence, but not against each other.
     pub fn match_samples(&mut self, samples: &[AncestralSequence]) {
-        todo!()
+        for sample in samples {
+            let (edges, mutations) = Self::find_copy_path(
+                &self.ancestors,
+                &mut self.ancestor_iterator,
+                self.recombination_prob,
+                self.mutation_prob,
+                sample,
+                self.ancestors.len(),
+            );
+            self.partial_tree_sequence.push(edges, mutations);
+        }
     }
 
     /// Finalize the tree sequence.
