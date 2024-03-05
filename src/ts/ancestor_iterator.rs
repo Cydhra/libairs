@@ -394,10 +394,11 @@ impl<'o> MarginalTree<'o> {
         active_nodes.clear();
         recombination_sites
             .iter_mut()
-            .for_each(|i| i[0..ancestor_length].iter_mut().for_each(|b| *b = false));
+            .for_each(|i| i[0..ancestor_length].fill(false));
         mutation_sites
             .iter_mut()
-            .for_each(|i| i[0..ancestor_length].iter_mut().for_each(|b| *b = false));
+            .for_each(|i| i[0..ancestor_length].fill(false));
+        last_compressed.fill(0);
 
         // the other states are updated whenever nodes are added to the marginal tree
 
@@ -603,7 +604,6 @@ impl<'o> MarginalTree<'o> {
         self.parents[node.0] = None;
         self.children[node.0].clear();
         self.uncompressed_parents[node.0] = None;
-        self.last_compressed[node.0] = 0;
     }
 
     /// Insert a new node into the tree. This is done whenever a new node begins, it is not the
@@ -620,7 +620,6 @@ impl<'o> MarginalTree<'o> {
 
         self.children[child.0].clear();
         self.is_compressed[child.0] = true;
-        self.last_compressed[child.0] = 0;
 
         if !keep_compressed {
             // update the compressed parent. If the parent is compressed, its compressed parent
