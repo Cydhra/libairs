@@ -29,7 +29,8 @@ fn test_incomplete_nodes() {
     assert_eq!(ancestors.len(), 4);
     assert_eq!(ancestors.deref()[3].haplotype(), &vec![1, 1, 1, 1]);
 
-    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+    let mut ancestor_matcher =
+        ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_positions().len());
     ancestor_matcher.match_ancestors();
     let ts = ancestor_matcher.get_tree_sequence().nodes;
 

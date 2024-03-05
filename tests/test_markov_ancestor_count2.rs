@@ -28,7 +28,8 @@ fn test_markov_ancestor_count2() {
 
     let len = SequencePosition::from_usize(9);
     let ancestors = ag.generate_ancestors(len);
-    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+    let mut ancestor_matcher =
+        ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_positions().len());
     ancestor_matcher.match_ancestors();
     let ts = ancestor_matcher.get_tree_sequence().nodes;
 
