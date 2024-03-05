@@ -53,6 +53,9 @@ pub(crate) struct AncestorIndex {
     /// The last site index (relative to current ancestor, not a variant index) where the node was compressed.
     /// Starting from that index, the mutation and recombination sites of that node are invalid
     last_compressed: Vec<usize>,
+
+    /// pre-allocated stack for the DFS in subtree updates
+    stack: Vec<Ancestor>,
 }
 
 impl AncestorIndex {
@@ -70,6 +73,7 @@ impl AncestorIndex {
             recombination_sites: vec![vec![false; variant_count]; max_nodes],
             mutation_sites: vec![vec![false; variant_count]; max_nodes],
             last_compressed: vec![0; max_nodes],
+            stack: Vec::new(),
         }
     }
 
@@ -373,7 +377,7 @@ impl<'o> MarginalTree<'o> {
         start: VariantIndex,
         num_nodes: usize,
         limit_nodes: usize,
-        sequence_length: usize,
+        ancestor_length: usize,
         parents: &'o mut [Option<Ancestor>],
         children: &'o mut [Vec<Ancestor>],
         uncompressed_parents: &'o mut [Option<Ancestor>],
@@ -386,8 +390,17 @@ impl<'o> MarginalTree<'o> {
     ) -> Self {
         debug_assert!(num_nodes > 0, "Tree must have at least one node");
 
-        // TODO these allocations take a lot of time, maybe we can pre-allocate one marginal tree per thread
-        //  and update it in-place?
+        // re-initialize vectors into the default state where needed
+        active_nodes.clear();
+        recombination_sites
+            .iter_mut()
+            .for_each(|i| i[0..ancestor_length].iter_mut().for_each(|b| *b = false));
+        mutation_sites
+            .iter_mut()
+            .for_each(|i| i[0..ancestor_length].iter_mut().for_each(|b| *b = false));
+
+        // the other states are updated whenever nodes are added to the marginal tree
+
         let mut marginal_tree = Self {
             parents,
             children,
@@ -400,7 +413,7 @@ impl<'o> MarginalTree<'o> {
             last_compressed,
             limit_nodes,
             start,
-            current_sequence_length: sequence_length,
+            current_sequence_length: ancestor_length,
         };
 
         marginal_tree.add_initial_node(Ancestor(0));
@@ -587,6 +600,10 @@ impl<'o> MarginalTree<'o> {
         self.active_nodes.push(node);
         self.is_compressed[node.0] = false;
         self.likelihoods[node.0] = 1.0;
+        self.parents[node.0] = None;
+        self.children[node.0].clear();
+        self.uncompressed_parents[node.0] = None;
+        self.last_compressed[node.0] = 0;
     }
 
     /// Insert a new node into the tree. This is done whenever a new node begins, it is not the
@@ -600,6 +617,10 @@ impl<'o> MarginalTree<'o> {
     fn insert_new_node(&mut self, parent: Ancestor, child: Ancestor, keep_compressed: bool) {
         self.parents[child.0] = Some(parent);
         self.children[parent.0].push(child);
+
+        self.children[child.0].clear();
+        self.is_compressed[child.0] = true;
+        self.last_compressed[child.0] = 0;
 
         if !keep_compressed {
             // update the compressed parent. If the parent is compressed, its compressed parent
