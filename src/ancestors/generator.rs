@@ -364,6 +364,27 @@ impl AncestorGenerator {
         AncestorArray::new(ancestors, self.variant_positions(), sequence_length)
     }
 
+    /// Calculate the DNA sample sequences from the variant sites
+    pub fn generate_samples(&self) -> Vec<AncestralSequence> {
+        // transpose the variant sites matrix
+        let mut samples = vec![
+            AncestralSequence::from_ancestral_state(self.sites.len(), 0f64);
+            self.sites[0].genotypes.len()
+        ];
+        for (site_index, genotypes) in self
+            .sites
+            .iter()
+            .map(|variant_site| &variant_site.genotypes)
+            .enumerate()
+        {
+            for (i, variant) in genotypes.iter().enumerate() {
+                samples[i][site_index] = *variant;
+            }
+        }
+
+        samples
+    }
+
     pub fn tskit_export_sites(&self, path: &Path) -> io::Result<()> {
         let mut site_file = path.to_path_buf();
         site_file.push("sites.tsv");
