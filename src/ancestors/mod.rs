@@ -9,6 +9,7 @@ use rayon::prelude::IntoParallelRefIterator;
 mod ancestor_array;
 mod generator;
 
+use crate::variants::VariantIndex;
 pub(crate) use ancestor_array::AncestorArray;
 pub use generator::AncestorGenerator;
 
@@ -166,46 +167,6 @@ impl Index<VariantIndex> for AncestralSequence {
 impl IndexMut<VariantIndex> for AncestralSequence {
     fn index_mut(&mut self, index: VariantIndex) -> &mut Self::Output {
         &mut self.state[index.0]
-    }
-}
-
-/// An index into the [`AncestorArray`]
-///
-/// [`AncestorArray`]: AncestorArray
-#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub(crate) struct VariantIndex(usize);
-
-impl VariantIndex {
-    /// Create a new variant index from a raw index. Only for testing purposes, actual module code shouldn't work
-    /// with raw values
-    #[cfg(test)]
-    pub(crate) fn from_usize(index: usize) -> Self {
-        Self(index)
-    }
-
-    /// Get the next variant index after this one
-    pub(crate) fn next(&self) -> Self {
-        Self(self.0 + 1)
-    }
-
-    /// Calculate the distance in variants between this index and another. Does not return the distance in sequence bases.
-    pub(crate) fn get_variant_distance(&self, other: VariantIndex) -> usize {
-        if self.0 > other.0 {
-            self.0 - other.0
-        } else {
-            other.0 - self.0
-        }
-    }
-
-    /// Get the underlying usize value of the variant index.
-    pub fn unwrap(&self) -> usize {
-        self.0
-    }
-}
-
-impl Display for VariantIndex {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.0, f)
     }
 }
 

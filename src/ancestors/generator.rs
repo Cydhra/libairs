@@ -1,7 +1,5 @@
-use crate::ancestors::{
-    AncestorArray, AncestralSequence, VariantIndex, ANCESTRAL_STATE, DERIVED_STATE,
-};
-use crate::variants::{SequencePosition, VariantSite};
+use crate::ancestors::{AncestorArray, AncestralSequence, ANCESTRAL_STATE, DERIVED_STATE};
+use crate::variants::{SequencePosition, VariantIndex, VariantSite};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::io::Write;

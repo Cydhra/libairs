@@ -1,5 +1,5 @@
-use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence, VariantIndex};
-use crate::variants::SequencePosition;
+use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence};
+use crate::variants::{SequencePosition, VariantIndex};
 use std::io;
 use std::io::Write;
 use std::path::Path;

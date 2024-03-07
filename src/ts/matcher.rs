@@ -1,8 +1,8 @@
-use crate::ancestors::{Ancestor, AncestorArray};
-use crate::ancestors::{AncestralSequence, VariantIndex};
+use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence};
 use crate::ts::ancestor_iterator::AncestorIndex;
 use crate::ts::partial_sequence::{PartialSequenceEdge, PartialTreeSequence};
 use crate::ts::tree_sequence::TreeSequence;
+use crate::variants::VariantIndex;
 
 /// A matcher runs the viterbi algorithm for a set of sequences.
 /// It will generate a tree sequence from an array of ancestral sequences and can then match

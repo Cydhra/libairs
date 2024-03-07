@@ -2,8 +2,9 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::iter::Peekable;
 
-use crate::ancestors::{Ancestor, VariantIndex};
+use crate::ancestors::Ancestor;
 use crate::ts::partial_sequence::PartialSequenceEdge;
+use crate::variants::VariantIndex;
 
 pub(crate) type Site<'a, 'o> = (VariantIndex, &'a mut MarginalTree<'o>);
 
