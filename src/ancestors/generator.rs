@@ -1,7 +1,7 @@
 use crate::ancestors::{
     AncestorArray, AncestralSequence, VariantIndex, ANCESTRAL_STATE, DERIVED_STATE,
 };
-use crate::dna::{SequencePosition, VariantSite};
+use crate::variants::{SequencePosition, VariantSite};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::io::Write;
@@ -407,7 +407,7 @@ impl AncestorGenerator {
 mod tests {
     use super::*;
     use crate::ancestors::Ancestor;
-    use crate::dna::VariantSite;
+    use crate::variants::VariantSite;
 
     #[test]
     fn compute_trivial_ancestors() {

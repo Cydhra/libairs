@@ -2,8 +2,8 @@
 //! likely to recombine. This test will likely get obsolete in the future, when airs intentionally diverges from tsinfer's behavior.
 
 use libairs::ancestors::AncestorGenerator;
-use libairs::dna::{SequencePosition, VariantSite};
 use libairs::ts::ViterbiMatcher;
+use libairs::variants::{SequencePosition, VariantSite};
 
 #[test]
 fn test_incomplete_nodes() {

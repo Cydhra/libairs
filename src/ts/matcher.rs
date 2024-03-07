@@ -1,6 +1,5 @@
 use crate::ancestors::{Ancestor, AncestorArray};
 use crate::ancestors::{AncestralSequence, VariantIndex};
-use crate::dna::SequencePosition;
 use crate::ts::ancestor_iterator::AncestorIndex;
 use crate::ts::partial_sequence::{PartialSequenceEdge, PartialTreeSequence};
 use crate::ts::tree_sequence::TreeSequence;

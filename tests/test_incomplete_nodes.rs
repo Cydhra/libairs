@@ -2,8 +2,8 @@
 //! the right edge end position to be inclusive, while it is exclusive.
 
 use libairs::ancestors::AncestorGenerator;
-use libairs::dna::{SequencePosition, VariantSite};
 use libairs::ts::ViterbiMatcher;
+use libairs::variants::{SequencePosition, VariantSite};
 use std::ops::Deref;
 
 #[test]

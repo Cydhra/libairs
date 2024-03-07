@@ -3,8 +3,8 @@
 //! of ancestors theoretically available, even if the ancestors state is unknown at that site.
 
 use libairs::ancestors::AncestorGenerator;
-use libairs::dna::{SequencePosition, VariantSite};
 use libairs::ts::ViterbiMatcher;
+use libairs::variants::{SequencePosition, VariantSite};
 
 #[test]
 fn test_markov_ancestor_count2() {

@@ -3,7 +3,6 @@ use std::collections::BTreeSet;
 use std::iter::Peekable;
 
 use crate::ancestors::{Ancestor, VariantIndex};
-use crate::dna::SequencePosition;
 use crate::ts::partial_sequence::PartialSequenceEdge;
 
 pub(crate) type Site<'a, 'o> = (VariantIndex, &'a mut MarginalTree<'o>);

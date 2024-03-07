@@ -6,8 +6,8 @@
 use std::ops::Deref;
 
 use libairs::ancestors::AncestorGenerator;
-use libairs::dna::{SequencePosition, VariantSite};
 use libairs::ts::ViterbiMatcher;
+use libairs::variants::{SequencePosition, VariantSite};
 
 #[test]
 fn test_incomplete_inner_nodes() {

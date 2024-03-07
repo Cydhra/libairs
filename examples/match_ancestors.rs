@@ -3,8 +3,8 @@
 //! The tree sequence is exported to a file matching the VCF file but with the extension `.trees`.
 //! It can be imported into tskit using [`tskit.load_text()`](https://tskit.dev/tskit/docs/stable/python-api.html#tskit.load_text).
 
-use libairs::dna::SequencePosition;
 use libairs::ts::ViterbiMatcher;
+use libairs::variants::SequencePosition;
 use std::env;
 use std::path::PathBuf;
 use vcfire::VcfFile;

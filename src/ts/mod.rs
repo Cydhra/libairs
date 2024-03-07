@@ -8,8 +8,8 @@ pub use matcher::ViterbiMatcher;
 #[cfg(test)]
 mod tests {
     use crate::ancestors::AncestorGenerator;
-    use crate::dna::{SequencePosition, VariantSite};
     use crate::ts::matcher::ViterbiMatcher;
+    use crate::variants::{SequencePosition, VariantSite};
     use std::ops::Deref;
 
     #[test]

@@ -3,8 +3,8 @@
 //! but not on the ancestor we were recombing to at that site
 
 use libairs::ancestors::AncestorGenerator;
-use libairs::dna::{SequencePosition, VariantSite};
 use libairs::ts::ViterbiMatcher;
+use libairs::variants::{SequencePosition, VariantSite};
 
 #[test]
 fn test_mutation_on_recombination_site() {

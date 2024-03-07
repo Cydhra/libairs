@@ -4,8 +4,8 @@
 //! of younger nodes.
 
 use libairs::ancestors::AncestorGenerator;
-use libairs::dna::{SequencePosition, VariantSite};
 use libairs::ts::ViterbiMatcher;
+use libairs::variants::{SequencePosition, VariantSite};
 
 #[test]
 fn test_incomplete_node_start() {

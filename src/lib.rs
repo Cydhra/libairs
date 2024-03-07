@@ -1,6 +1,6 @@
 pub mod ancestors;
 
-pub mod dna;
+pub mod variants;
 
 pub mod ts;
 

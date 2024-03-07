@@ -1,5 +1,5 @@
 use crate::ancestors::AncestorGenerator;
-use crate::dna::VariantSite;
+use crate::variants::VariantSite;
 use std::io;
 use vcfire::VcfFile;
 

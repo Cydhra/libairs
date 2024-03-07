@@ -1,5 +1,5 @@
 use crate::ancestors::{Ancestor, AncestralSequence, VariantIndex};
-use crate::dna::SequencePosition;
+use crate::variants::SequencePosition;
 use std::fs::File;
 use std::io;
 use std::io::Write;

@@ -4,8 +4,8 @@
 //! Markov Chain in tsinfer is modelled)
 
 use libairs::ancestors::AncestorGenerator;
-use libairs::dna::{SequencePosition, VariantSite};
 use libairs::ts::ViterbiMatcher;
+use libairs::variants::{SequencePosition, VariantSite};
 
 #[test]
 fn test_markov_ancestor_count() {
