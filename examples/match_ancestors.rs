@@ -3,6 +3,7 @@
 //! The tree sequence is exported to a file matching the VCF file but with the extension `.trees`.
 //! It can be imported into tskit using [`tskit.load_text()`](https://tskit.dev/tskit/docs/stable/python-api.html#tskit.load_text).
 
+use libairs::ancestors::AncestorGenerator;
 use libairs::ts::ViterbiMatcher;
 use libairs::variants::SequencePosition;
 use std::env;
@@ -37,22 +38,22 @@ fn main() {
         .unwrap()
         .1
         .clone();
-    let sequence_length = SequencePosition::from_usize(
-        contig_config[1..contig_config.len() - 1]
-            .split(',')
-            .find(|s| s.starts_with("length="))
-            .unwrap()
-            .split('=')
-            .nth(1)
-            .unwrap()
-            .parse::<usize>()
-            .unwrap(),
-    );
+    let sequence_length = contig_config[1..contig_config.len() - 1]
+        .split(',')
+        .find(|s| s.starts_with("length="))
+        .unwrap()
+        .split('=')
+        .nth(1)
+        .unwrap()
+        .parse::<usize>()
+        .unwrap();
 
     let mut target_file = PathBuf::from(&vcf);
 
     let ancestor_generator = libairs::convenience::from_vcf(&vcf, compressed).unwrap();
-    let ancestors = ancestor_generator.generate_ancestors(sequence_length);
+
+    let ancestors =
+        ancestor_generator.generate_ancestors(SequencePosition::from_usize(sequence_length));
     target_file.pop();
     ancestors
         .export_ancestors(&target_file)

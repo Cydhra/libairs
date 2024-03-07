@@ -416,10 +416,10 @@ mod tests {
 
         let ag = AncestorGenerator {
             sites: vec![
-                VariantSite::new(site1, 1),
-                VariantSite::new(site2, 2),
-                VariantSite::new(site3, 3),
-                VariantSite::new(site4, 4),
+                VariantSite::new_raw(site1, 1),
+                VariantSite::new_raw(site2, 2),
+                VariantSite::new_raw(site3, 3),
+                VariantSite::new_raw(site4, 4),
             ],
         };
 
@@ -447,10 +447,10 @@ mod tests {
 
         let ag = AncestorGenerator {
             sites: vec![
-                VariantSite::new(site1, 1),
-                VariantSite::new(site2, 2),
-                VariantSite::new(site3, 3),
-                VariantSite::new(site4, 4),
+                VariantSite::new_raw(site1, 1),
+                VariantSite::new_raw(site2, 2),
+                VariantSite::new_raw(site3, 3),
+                VariantSite::new_raw(site4, 4),
             ],
         };
 

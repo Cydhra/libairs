@@ -24,8 +24,8 @@ impl VariantSite {
     /// - `genotypes` a vector if `n` integers, each defining which allele is present at the site.
     /// 0 is the reference allele, 1 is the derived allele. Any value greater than 1 will be
     /// treated as 1.
-    /// - `position` the position of the site in the genome.
-    pub fn new(genotypes: Vec<u8>, position: usize) -> Self {
+    /// - `position` the [`SequencePosition`] of the site in the genome.
+    pub fn new(genotypes: Vec<u8>, position: SequencePosition) -> Self {
         let mut derived_sites = 0;
         let mut highest_state = 0;
         genotypes.iter().for_each(|&state| {
@@ -44,10 +44,16 @@ impl VariantSite {
         let is_singleton = derived_sites == 1;
         VariantSite {
             genotypes,
-            position: SequencePosition(position),
+            position,
             relative_age: age,
             is_biallelic,
             is_singleton,
         }
+    }
+
+    /// Convenience function for test cases
+    #[cfg(test)]
+    pub fn new_raw(genotypes: Vec<u8>, position: usize) -> Self {
+        Self::new(genotypes, SequencePosition::from_usize(position))
     }
 }

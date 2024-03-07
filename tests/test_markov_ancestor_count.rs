@@ -22,7 +22,7 @@ fn test_markov_ancestor_count() {
         sites
             .iter()
             .enumerate()
-            .map(|(i, site)| VariantSite::new(site.to_vec(), i + 1)),
+            .map(|(i, site)| VariantSite::new(site.to_vec(), SequencePosition::from_usize(i + 1))),
     );
 
     let len = SequencePosition::from_usize(7);

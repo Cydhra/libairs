@@ -22,11 +22,11 @@ mod tests {
 
         let ag = AncestorGenerator::from_iter(
             vec![
-                VariantSite::new(site1, 1),
-                VariantSite::new(site2, 2),
-                VariantSite::new(site3, 3),
-                VariantSite::new(site4, 4),
-                VariantSite::new(site5, 5),
+                VariantSite::new_raw(site1, 1),
+                VariantSite::new_raw(site2, 2),
+                VariantSite::new_raw(site3, 3),
+                VariantSite::new_raw(site4, 4),
+                VariantSite::new_raw(site5, 5),
             ]
             .into_iter(),
         );
@@ -77,12 +77,12 @@ mod tests {
 
         let ag = AncestorGenerator::from_iter(
             vec![
-                VariantSite::new(site1, 1),
-                VariantSite::new(site2, 2),
-                VariantSite::new(site4, 4),
-                VariantSite::new(site5, 5),
-                VariantSite::new(site6, 6),
-                VariantSite::new(site7, 7),
+                VariantSite::new_raw(site1, 1),
+                VariantSite::new_raw(site2, 2),
+                VariantSite::new_raw(site4, 4),
+                VariantSite::new_raw(site5, 5),
+                VariantSite::new_raw(site6, 6),
+                VariantSite::new_raw(site7, 7),
             ]
             .into_iter(),
         );

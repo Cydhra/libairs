@@ -1,10 +1,12 @@
 use std::fmt::{Display, Formatter};
 use std::ops::{Add, Sub};
 
+mod builder;
 mod data;
 mod sequence;
 mod site;
 
+pub use builder::VariantDataBuilder;
 pub use data::VariantData;
 pub use sequence::VariantSequence;
 pub use site::VariantSite;

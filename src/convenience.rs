@@ -1,8 +1,9 @@
 use crate::ancestors::AncestorGenerator;
-use crate::variants::VariantSite;
+use crate::variants::{SequencePosition, VariantSite};
 use std::io;
 use vcfire::VcfFile;
 
+// TODO change this implementation to use the builder interface and VariantData instead
 pub fn from_vcf(file: &str, compressed: bool) -> io::Result<AncestorGenerator> {
     let input = VcfFile::parse(file, compressed)?;
     let generator = AncestorGenerator::from_iter(input.records()?.map(|record| {
@@ -21,7 +22,7 @@ pub fn from_vcf(file: &str, compressed: bool) -> io::Result<AncestorGenerator> {
                     })
                 })
                 .collect(),
-            record.position as usize,
+            SequencePosition::from_usize(record.position as usize),
         )
     }));
     Ok(generator)

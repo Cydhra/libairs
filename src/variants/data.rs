@@ -11,8 +11,17 @@ pub struct VariantData {
 }
 
 impl VariantData {
-    fn new() -> Self {
-        todo!("implement")
+    /// Construct a new VariantData instance
+    pub(super) fn new(
+        sites: Vec<VariantSite>,
+        positions: Vec<SequencePosition>,
+        sequence_length: SequencePosition,
+    ) -> Self {
+        Self {
+            sites,
+            positions,
+            sequence_length,
+        }
     }
 
     /// Get the sequence length of the genome this variant data is about. It is not the length of the
