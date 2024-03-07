@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::io;
 use std::io::Write;
-use std::ops::{Index, IndexMut};
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelRefIterator;
@@ -9,7 +9,7 @@ use rayon::prelude::IntoParallelRefIterator;
 mod ancestor_array;
 mod generator;
 
-use crate::variants::VariantIndex;
+use crate::variants::{VariantIndex, VariantSequence};
 pub(crate) use ancestor_array::AncestorArray;
 pub use generator::AncestorGenerator;
 
@@ -21,7 +21,7 @@ const DERIVED_STATE: u8 = 1;
 /// more than two variants (ancestral and one derived state) per site.
 #[derive(Clone)]
 pub struct AncestralSequence {
-    state: Vec<u8>,
+    state: VariantSequence,
     focal_sites: Vec<VariantIndex>,
     /// start of valid data in the state vector, inclusive
     start: VariantIndex,
@@ -33,7 +33,7 @@ pub struct AncestralSequence {
 impl AncestralSequence {
     fn from_ancestral_state(len: usize, age: f64) -> Self {
         AncestralSequence {
-            state: vec![0u8; len],
+            state: VariantSequence::from_ancestral_state(len),
             focal_sites: Vec::new(),
             start: VariantIndex(0),
             end: VariantIndex(len),
@@ -50,7 +50,7 @@ impl AncestralSequence {
     /// [`start`]: Self::start
     /// [`end`]: Self::end
     pub fn haplotype(&self) -> &[u8] {
-        &self.state[self.start.0..self.end.0]
+        &self.state[self.start..self.end]
     }
 
     /// Get an enumerated iterator over the haplotype sequence. This sequence starts at the first
@@ -64,7 +64,7 @@ impl AncestralSequence {
             .iter()
             .enumerate()
             .skip(self.start.0)
-            .take(self.end.0 - self.start.0)
+            .take(self.start.get_variant_distance(self.end))
             .map(|(idx, b)| (VariantIndex(idx), b))
     }
 
@@ -94,7 +94,7 @@ impl AncestralSequence {
     /// Get the length of the ancestral sequence. Only known sites are considered, so the length
     /// might be shorter than the length of the underlying DNA sequence.
     pub fn len(&self) -> usize {
-        self.end.0 - self.start.0
+        self.end.get_variant_distance(self.start)
     }
 
     /// Dump the ancestral sequence into a text file for the testing suite.
@@ -107,7 +107,7 @@ impl AncestralSequence {
             focal_sites = self.focal_sites.iter().map(|s| s.0).collect::<Vec<_>>(),
         ))?;
 
-        for b in &self.state[self.start.0..self.end.0] {
+        for b in &self.state[self.start..self.end] {
             writer.write_fmt(format_args!("{}", b))?;
         }
 
@@ -142,17 +142,18 @@ impl Debug for AncestralSequence {
     }
 }
 
+// TODO can we get rid of this implementation to force the new-type?
 impl Index<usize> for AncestralSequence {
     type Output = u8;
 
     fn index(&self, index: usize) -> &Self::Output {
-        &self.state[index]
+        &self.state.deref()[index]
     }
 }
 
 impl IndexMut<usize> for AncestralSequence {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.state[index]
+        &mut self.state.deref_mut()[index]
     }
 }
 
@@ -160,13 +161,13 @@ impl Index<VariantIndex> for AncestralSequence {
     type Output = u8;
 
     fn index(&self, index: VariantIndex) -> &Self::Output {
-        &self.state[index.0]
+        &self.state[index]
     }
 }
 
 impl IndexMut<VariantIndex> for AncestralSequence {
     fn index_mut(&mut self, index: VariantIndex) -> &mut Self::Output {
-        &mut self.state[index.0]
+        &mut self.state[index]
     }
 }
 

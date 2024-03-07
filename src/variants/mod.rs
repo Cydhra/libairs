@@ -1,15 +1,18 @@
 use std::fmt::{Display, Formatter};
+use std::ops::{Add, Sub};
 
 mod data;
+mod sequence;
 mod site;
 
 pub use data::VariantData;
+pub use sequence::VariantSequence;
 pub use site::VariantSite;
 
 /// A position in a DNA sequence. This newtype ensures that sequence positions and variant indices (indices into the
 /// variant site vector) aren't mixed up.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct SequencePosition(usize); // TODO do not make this public
+pub struct SequencePosition(usize);
 
 impl SequencePosition {
     /// Create a new sequence position from a usize.
@@ -70,5 +73,21 @@ impl VariantIndex {
 impl Display for VariantIndex {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)
+    }
+}
+
+impl Add for VariantIndex {
+    type Output = VariantIndex;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        VariantIndex(self.0 + rhs.0)
+    }
+}
+
+impl Sub for VariantIndex {
+    type Output = VariantIndex;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        VariantIndex(self.0 - rhs.0)
     }
 }
