@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 rayon = "1.8.0"
 radix-heap = "0.3.7" # 0.3.7 was the last one that supported peek_key
-twox-hash = "1.6"
 memchr = "2.7.1"
 vcfire = { git = "https://github.com/Cydhra/vcfire", rev = "3db5fb7" } # probably should be optional because of native dependency
 

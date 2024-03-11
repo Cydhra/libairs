@@ -1,11 +1,9 @@
 use crate::ancestors::{AncestorArray, AncestralSequence, ANCESTRAL_STATE, DERIVED_STATE};
 use crate::variants::{VariantData, VariantIndex, VariantSite};
 use std::collections::HashMap;
-use std::hash::BuildHasherDefault;
 use std::io::Write;
 use std::path::Path;
 use std::{io, mem};
-use twox_hash::XxHash64;
 
 /// Generates ancestral sequences for a given set of variant sites. The ancestral sequences are
 /// generated using heuristic methods that use a small number of variant sites as focal sites and
@@ -236,12 +234,7 @@ impl AncestorGenerator {
         let mut focal_sites: Vec<Vec<VariantIndex>> = Vec::new();
         let mut current_age: f64 = -1f64;
 
-        // Todo we are reconstructing the hashmap a lot, this seems unnecessary
-        let mut current_focal_sites: HashMap<
-            Vec<u8>,
-            Vec<VariantIndex>,
-            BuildHasherDefault<XxHash64>,
-        > = Default::default();
+        let mut current_focal_sites: HashMap<Vec<u8>, Vec<VariantIndex>> = Default::default();
         for (focal_site, site) in sites {
             if f64::abs(site.relative_age - current_age) < 1e-6 {
                 if current_focal_sites.contains_key(&site.genotypes) {
@@ -260,7 +253,7 @@ impl AncestorGenerator {
                         .map(|(_, v)| v.clone())
                         .collect::<Vec<_>>(),
                 );
-                current_focal_sites = Default::default();
+                current_focal_sites.clear();
                 current_focal_sites.insert(site.genotypes.clone(), vec![focal_site]);
             }
         }
