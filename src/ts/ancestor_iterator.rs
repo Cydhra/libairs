@@ -240,7 +240,6 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum SequenceEventKind {
-    Sentinel,
     Start { parent: Ancestor },
     ChangeParent { new_parent: Ancestor },
     Mutation,
@@ -256,9 +255,6 @@ impl PartialOrd<Self> for SequenceEventKind {
 impl Ord for SequenceEventKind {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Self::Sentinel, Self::Sentinel) => Ordering::Equal,
-            (Self::Sentinel, _) => Ordering::Less,
-            (_, Self::Sentinel) => Ordering::Greater,
             (Self::Start { parent: p1 }, Self::Start { parent: p2 }) => p1.cmp(p2),
             (Self::Start { .. }, _) => Ordering::Less,
             (_, Self::Start { .. }) => Ordering::Greater,
@@ -280,18 +276,6 @@ pub(crate) struct SequenceEvent {
     site: VariantIndex,
     node: Ancestor,
     kind: SequenceEventKind,
-}
-
-impl SequenceEvent {
-    /// Returns a sentinel event that is smaller or equal to the smallest event at the given site.
-    /// This is useful for defining ranges in the BTreeSet.
-    fn sentinel(pos: VariantIndex) -> Self {
-        Self {
-            site: pos,
-            node: Ancestor(0),
-            kind: SequenceEventKind::Sentinel,
-        }
-    }
 }
 
 impl PartialOrd<Self> for SequenceEvent {
@@ -801,13 +785,6 @@ impl<'o> MarginalTree<'o> {
                     kind: SequenceEventKind::End,
                 } => {
                     self.remove_node(*node);
-                }
-                SequenceEvent {
-                    site: _,
-                    node: _,
-                    kind: SequenceEventKind::Sentinel,
-                } => {
-                    panic!("Sentinel event should not be in the queue");
                 }
             }
         }

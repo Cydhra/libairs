@@ -80,11 +80,6 @@ impl AncestralSequence {
         self.end
     }
 
-    /// Get the set of focal sites that were used to generate this ancestral sequence.
-    pub(crate) fn focal_sites(&self) -> &[VariantIndex] {
-        &self.focal_sites
-    }
-
     /// Get the inferred relative age of the ancestral sequence. This is derived from the inferred
     /// relative age of the focal sites that were used to infer this ancestor.
     pub fn relative_age(&self) -> f64 {
