@@ -9,7 +9,7 @@ pub use matcher::ViterbiMatcher;
 mod tests {
     use crate::ancestors::AncestorGenerator;
     use crate::ts::matcher::ViterbiMatcher;
-    use crate::variants::{SequencePosition, VariantSite};
+    use crate::variants::VariantDataBuilder;
     use std::ops::Deref;
 
     #[test]
@@ -20,22 +20,17 @@ mod tests {
         let site4 = vec![0, 0, 0, 1, 1, 1];
         let site5 = vec![0, 1, 0, 0, 0, 1];
 
-        let ag = AncestorGenerator::from_iter(
-            vec![
-                VariantSite::new_raw(site1, 1),
-                VariantSite::new_raw(site2, 2),
-                VariantSite::new_raw(site3, 3),
-                VariantSite::new_raw(site4, 4),
-                VariantSite::new_raw(site5, 5),
-            ]
-            .into_iter(),
-        );
-        let len = SequencePosition::from_usize(6);
+        let variant_data = VariantDataBuilder::from_iter(
+            6,
+            vec![(site1, 1), (site2, 2), (site3, 3), (site4, 4), (site5, 5)],
+        )
+        .finalize();
 
-        let ancestors = ag.generate_ancestors(len);
+        let ag = AncestorGenerator::from_variant_data(variant_data);
+        let ancestors = ag.generate_ancestors();
         let ancestors_copy = ancestors.deref().clone();
         let mut ancestor_matcher =
-            ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_positions().len());
+            ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_data.len());
         ancestor_matcher.match_ancestors();
         let ts = ancestor_matcher.get_tree_sequence().nodes;
 
@@ -75,23 +70,25 @@ mod tests {
         let site6 = vec![0, 1, 1, 0, 0, 1];
         let site7 = vec![0, 1, 1, 0, 0, 1];
 
-        let ag = AncestorGenerator::from_iter(
+        let variant_data = VariantDataBuilder::from_iter(
+            7,
             vec![
-                VariantSite::new_raw(site1, 1),
-                VariantSite::new_raw(site2, 2),
-                VariantSite::new_raw(site4, 4),
-                VariantSite::new_raw(site5, 5),
-                VariantSite::new_raw(site6, 6),
-                VariantSite::new_raw(site7, 7),
+                (site1, 1),
+                (site2, 2),
+                (site4, 4),
+                (site5, 5),
+                (site6, 6),
+                (site7, 7),
             ]
             .into_iter(),
-        );
-        let len = SequencePosition::from_usize(7);
+        )
+        .finalize();
 
-        let ancestors = ag.generate_ancestors(len);
+        let ag = AncestorGenerator::from_variant_data(variant_data);
+        let ancestors = ag.generate_ancestors();
         let ancestors_copy = ancestors.deref().clone();
         let mut ancestor_matcher =
-            ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_positions().len());
+            ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_data.len());
         ancestor_matcher.match_ancestors();
         let ts = ancestor_matcher.get_tree_sequence().nodes;
 

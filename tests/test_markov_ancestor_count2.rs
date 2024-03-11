@@ -2,9 +2,9 @@
 //! It used the amount of active ancestor at any given site, but the Markov Chain requires it to use the full amount
 //! of ancestors theoretically available, even if the ancestors state is unknown at that site.
 
-use libairs::ancestors::AncestorGenerator;
 use libairs::ts::ViterbiMatcher;
-use libairs::variants::{SequencePosition, VariantSite};
+
+mod common;
 
 #[test]
 fn test_markov_ancestor_count2() {
@@ -19,17 +19,9 @@ fn test_markov_ancestor_count2() {
         [1, 1, 0, 0, 1, 1, 0, 1],
     ];
 
-    let ag = AncestorGenerator::from_iter(
-        sites
-            .iter()
-            .enumerate()
-            .map(|(i, site)| VariantSite::new(site.to_vec(), SequencePosition::from_usize(i + 1))),
-    );
-
-    let len = SequencePosition::from_usize(9);
-    let ancestors = ag.generate_ancestors(len);
-    let mut ancestor_matcher =
-        ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_positions().len());
+    let ag = common::create_ancestor_generator(9, &sites);
+    let ancestors = ag.generate_ancestors();
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_data.len());
     ancestor_matcher.match_ancestors();
     let ts = ancestor_matcher.get_tree_sequence().nodes;
 

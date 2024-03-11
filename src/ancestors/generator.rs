@@ -1,5 +1,5 @@
 use crate::ancestors::{AncestorArray, AncestralSequence, ANCESTRAL_STATE, DERIVED_STATE};
-use crate::variants::{SequencePosition, VariantIndex, VariantSite};
+use crate::variants::{VariantData, VariantIndex, VariantSite};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::io::Write;
@@ -12,67 +12,35 @@ use twox_hash::XxHash64;
 /// infer the ancestral state for surrounding sites. For each set of focal sites, a single ancestral
 /// sequence is generated.
 pub struct AncestorGenerator {
-    sites: Vec<VariantSite>,
+    pub variant_data: VariantData,
 }
 
 impl AncestorGenerator {
     /// Create a new ancestor generator from an iterator over variant sites.
-    pub fn from_iter(iter: impl Iterator<Item = VariantSite>) -> Self {
-        Self {
-            sites: iter.filter(|site| Self::is_valid_site(site)).collect(),
-        }
-    }
-
-    /// Create a new ancestor generator without variant sites.
-    pub fn empty() -> Self {
-        Self { sites: Vec::new() }
-    }
-
-    /// Create a new ancestor generator without variant site, but with a given capacity.
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            sites: Vec::with_capacity(capacity),
-        }
-    }
-
-    /// Whether a site is valid for the generator. A site is valid if it is not a singleton and
-    /// is biallelic.
-    fn is_valid_site(site: &VariantSite) -> bool {
-        !site.is_singleton && site.is_biallelic
-    }
-
-    /// Add a variant site to the generator.
-    pub fn add_site(&mut self, site: VariantSite) {
-        if Self::is_valid_site(&site) {
-            self.sites.push(site);
-        }
-    }
-
-    /// Extract the sequence positions of the variant sites.
-    pub fn variant_positions(&self) -> Vec<SequencePosition> {
-        self.sites.iter().map(|s| s.position).collect()
+    pub fn from_variant_data(variant_data: VariantData) -> Self {
+        Self { variant_data }
     }
 
     /// For a given set of focal sites, compute an ancestor that uses those focal sites. The focal
     /// site is given by a sorted set of indices into the set of variant sites.
-    fn generate_ancestor(&self, focal_sites: &[usize]) -> AncestralSequence {
+    fn generate_ancestor(&self, focal_sites: &[VariantIndex]) -> AncestralSequence {
         debug_assert!(!focal_sites.is_empty());
         debug_assert!(focal_sites.windows(2).all(|sites| sites[0] < sites[1]));
 
         let mut ancestral_sequence = AncestralSequence::from_ancestral_state(
-            self.sites.len(),
-            self.sites[focal_sites[0]].relative_age,
+            self.variant_data.len(),
+            self.variant_data[focal_sites[0]].relative_age,
         );
-        let sites = self.sites.len();
+        let sites = self.variant_data.len();
 
         // extend ancestor to the left of the first focal site
         let modified_left = self.extend_ancestor(
             &mut self
-                .sites
+                .variant_data
                 .iter()
                 .enumerate()
                 .rev()
-                .skip(sites - focal_sites[0]),
+                .skip(sites - focal_sites[0].unwrap()),
             focal_sites[0],
             &mut ancestral_sequence,
             true,
@@ -84,11 +52,11 @@ impl AncestorGenerator {
             let focal_site_j = focal_sites[foc_index + 1];
             self.extend_ancestor(
                 &mut self
-                    .sites
+                    .variant_data
                     .iter()
                     .enumerate()
-                    .skip(focal_site_i + 1)
-                    .take(focal_site_j - focal_site_i - 1),
+                    .skip(focal_site_i.unwrap() + 1)
+                    .take(focal_site_j.unwrap() - focal_site_i.unwrap() - 1),
                 focal_site_i,
                 &mut ancestral_sequence,
                 false,
@@ -98,16 +66,20 @@ impl AncestorGenerator {
         // extend ancestor to the right of the last focal site
         let last_focal_site = *focal_sites.last().unwrap();
         let modified_right = self.extend_ancestor(
-            &mut self.sites.iter().enumerate().skip(last_focal_site + 1),
+            &mut self
+                .variant_data
+                .iter()
+                .enumerate()
+                .skip(last_focal_site.unwrap() + 1),
             last_focal_site,
             &mut ancestral_sequence,
             true,
         );
 
         // TODO truncate ancestral sequence to save memory. this should be implemented using functionality from BitVec
-        ancestral_sequence.focal_sites = focal_sites.iter().map(|&f| VariantIndex(f)).collect();
-        ancestral_sequence.start = VariantIndex(focal_sites[0] - modified_left);
-        ancestral_sequence.end = VariantIndex(last_focal_site + modified_right + 1);
+        ancestral_sequence.focal_sites = focal_sites.iter().copied().collect();
+        ancestral_sequence.start = focal_sites[0] - modified_left;
+        ancestral_sequence.end = last_focal_site + modified_right + 1;
 
         ancestral_sequence
     }
@@ -131,7 +103,7 @@ impl AncestorGenerator {
     fn extend_ancestor(
         &self,
         site_iter: &mut dyn Iterator<Item = (usize, &VariantSite)>,
-        focal_site: usize,
+        focal_site: VariantIndex,
         ancestral_sequence: &mut AncestralSequence,
         termination_condition: bool,
     ) -> usize {
@@ -141,7 +113,7 @@ impl AncestorGenerator {
 
         // the set of samples that are still considered part of the subtree derived from this ancestor
         // the generation process ends, once this set reaches half it's size
-        let focal_set = self.sites[focal_site]
+        let focal_set = self.variant_data[focal_site]
             .genotypes
             .iter()
             .enumerate()
@@ -150,7 +122,7 @@ impl AncestorGenerator {
             .enumerate()
             .collect::<Vec<_>>();
         let focal_set_size = focal_set.len();
-        let focal_age = self.sites[focal_site].relative_age;
+        let focal_age = self.variant_data[focal_site].relative_age;
 
         // the current set of genotype states for the current site
         let mut current_set = vec![true; focal_set_size];
@@ -254,19 +226,22 @@ impl AncestorGenerator {
     }
 
     /// Generate a set of ancestral sequences with the variant sites added to the generator.
-    pub fn generate_ancestors(&self, sequence_length: SequencePosition) -> AncestorArray {
+    pub fn generate_ancestors(&self) -> AncestorArray {
         // fixme this entire process is inefficient, we should sort the original sites
-        let mut sites = self.sites.iter().enumerate().collect::<Vec<_>>();
+        let mut sites = self.variant_data.iter_with_index().collect::<Vec<_>>();
         sites.sort_unstable_by(|(_, a), (_, b)| {
             a.relative_age.partial_cmp(&b.relative_age).unwrap()
         });
 
-        let mut focal_sites: Vec<Vec<usize>> = Vec::new();
+        let mut focal_sites: Vec<Vec<VariantIndex>> = Vec::new();
         let mut current_age: f64 = -1f64;
 
         // Todo we are reconstructing the hashmap a lot, this seems unnecessary
-        let mut current_focal_sites: HashMap<Vec<u8>, Vec<usize>, BuildHasherDefault<XxHash64>> =
-            Default::default();
+        let mut current_focal_sites: HashMap<
+            Vec<u8>,
+            Vec<VariantIndex>,
+            BuildHasherDefault<XxHash64>,
+        > = Default::default();
         for (focal_site, site) in sites {
             if f64::abs(site.relative_age - current_age) < 1e-6 {
                 if current_focal_sites.contains_key(&site.genotypes) {
@@ -305,20 +280,22 @@ impl AncestorGenerator {
                 let mut partial_focal_site = Vec::new();
                 for i in 0..focal_site.len() - 1 {
                     partial_focal_site.push(focal_site[i]);
-                    let focal_site_size = self.sites[focal_site[i]]
+                    let focal_site_size = self.variant_data[focal_site[i]]
                         .genotypes
                         .iter()
                         .filter(|&&s| s == DERIVED_STATE)
                         .count();
 
-                    let must_split = self.sites[focal_site[i] + 1..focal_site[i + 1]]
+                    let must_split = self.variant_data[focal_site[i] + 1..focal_site[i + 1]]
                         .iter()
-                        .filter(|&site| site.relative_age > self.sites[focal_site[i]].relative_age)
+                        .filter(|&site| {
+                            site.relative_age > self.variant_data[focal_site[i]].relative_age
+                        })
                         .any(|site| {
                             let consensus = site
                                 .genotypes
                                 .iter()
-                                .zip(self.sites[focal_site[i]].genotypes.iter())
+                                .zip(self.variant_data[focal_site[i]].genotypes.iter())
                                 .filter(|&(_, &focal_sample)| focal_sample == DERIVED_STATE)
                                 .filter(|&(sample, _)| *sample == DERIVED_STATE)
                                 .count();
@@ -347,8 +324,9 @@ impl AncestorGenerator {
             .collect();
 
         // artificially add the root ancestor
-        let mut ancestral_state = AncestralSequence::from_ancestral_state(self.sites.len(), 1.0);
-        ancestral_state.end = VariantIndex(self.sites.len());
+        let mut ancestral_state =
+            AncestralSequence::from_ancestral_state(self.variant_data.len(), 1.0);
+        ancestral_state.end = VariantIndex(self.variant_data.len());
         ancestors.push(ancestral_state);
 
         // TODO parallel sort ancestors by age (par_sort_unstable_by)
@@ -359,18 +337,26 @@ impl AncestorGenerator {
                 .reverse()
         });
 
-        AncestorArray::new(ancestors, self.variant_positions(), sequence_length)
+        let len = self.variant_data.get_sequence_length();
+        // TODO we probably do not want to transfer the positions to the ancestor array, since
+        //  we have them in sample data anyway
+        AncestorArray::new(
+            ancestors,
+            Vec::from(self.variant_data.variant_positions()),
+            len,
+        )
     }
 
     /// Calculate the DNA sample sequences from the variant sites
     pub fn generate_samples(&self) -> Vec<AncestralSequence> {
         // transpose the variant sites matrix
-        let mut samples = vec![
-            AncestralSequence::from_ancestral_state(self.sites.len(), 0f64);
-            self.sites[0].genotypes.len()
-        ];
+        let mut samples =
+            vec![
+                AncestralSequence::from_ancestral_state(self.variant_data.len(), 0f64);
+                self.variant_data.get_num_samples()
+            ];
         for (site_index, genotypes) in self
-            .sites
+            .variant_data
             .iter()
             .map(|variant_site| &variant_site.genotypes)
             .enumerate()
@@ -389,7 +375,7 @@ impl AncestorGenerator {
         let mut writer = std::fs::File::create(site_file)?;
         writer.write_fmt(format_args!("id\tposition\tancestral_state\n"))?;
 
-        for (i, site) in self.sites.iter().enumerate() {
+        for (i, site) in self.variant_data.iter().enumerate() {
             writer.write_fmt(format_args!(
                 "{id}\t{position}\t{ancestral_state}\n",
                 id = i,
@@ -405,7 +391,7 @@ impl AncestorGenerator {
 mod tests {
     use super::*;
     use crate::ancestors::Ancestor;
-    use crate::variants::VariantSite;
+    use crate::variants::VariantDataBuilder;
 
     #[test]
     fn compute_trivial_ancestors() {
@@ -414,18 +400,12 @@ mod tests {
         let site3 = vec![0, 1, 0, 0, 1];
         let site4 = vec![0, 0, 0, 1, 1];
 
-        let ag = AncestorGenerator {
-            sites: vec![
-                VariantSite::new_raw(site1, 1),
-                VariantSite::new_raw(site2, 2),
-                VariantSite::new_raw(site3, 3),
-                VariantSite::new_raw(site4, 4),
-            ],
-        };
+        let variant_data =
+            VariantDataBuilder::from_iter(5, vec![(site1, 1), (site2, 2), (site3, 3), (site4, 4)])
+                .finalize();
 
-        let len = SequencePosition::from_usize(5);
-
-        let ancestors = ag.generate_ancestors(len);
+        let ag = AncestorGenerator::from_variant_data(variant_data);
+        let ancestors = ag.generate_ancestors();
 
         assert_eq!(ancestors.len(), 5);
 
@@ -445,18 +425,12 @@ mod tests {
         let site3 = vec![0, 1, 1, 0, 0];
         let site4 = vec![0, 0, 0, 1, 1];
 
-        let ag = AncestorGenerator {
-            sites: vec![
-                VariantSite::new_raw(site1, 1),
-                VariantSite::new_raw(site2, 2),
-                VariantSite::new_raw(site3, 3),
-                VariantSite::new_raw(site4, 4),
-            ],
-        };
+        let variant_data =
+            VariantDataBuilder::from_iter(5, vec![(site1, 1), (site2, 2), (site3, 3), (site4, 4)])
+                .finalize();
 
-        let len = SequencePosition::from_usize(5);
-
-        let ancestors = ag.generate_ancestors(len);
+        let ag = AncestorGenerator::from_variant_data(variant_data);
+        let ancestors = ag.generate_ancestors();
 
         assert_eq!(ancestors.len(), 3);
 

@@ -5,9 +5,9 @@
 
 use std::ops::Deref;
 
-use libairs::ancestors::AncestorGenerator;
 use libairs::ts::ViterbiMatcher;
-use libairs::variants::{SequencePosition, VariantSite};
+
+mod common;
 
 #[test]
 fn test_incomplete_inner_nodes() {
@@ -21,19 +21,12 @@ fn test_incomplete_inner_nodes() {
         [1, 0, 1, 1, 1, 0, 1, 0],
     ];
 
-    let ag = AncestorGenerator::from_iter(
-        sites
-            .iter()
-            .enumerate()
-            .map(|(i, site)| VariantSite::new(site.to_vec(), SequencePosition::from_usize(i + 1))),
-    );
+    let ag = common::create_ancestor_generator(8, &sites);
 
-    let len = SequencePosition::from_usize(8);
-    let ancestors = ag.generate_ancestors(len);
+    let ancestors = ag.generate_ancestors();
     assert_eq!(ancestors.deref()[5].len(), 6); // only 6 sites, instead of 7
 
-    let mut ancestor_matcher =
-        ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_positions().len());
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_data.len());
     ancestor_matcher.match_ancestors();
     let ts = ancestor_matcher.get_tree_sequence().nodes;
 

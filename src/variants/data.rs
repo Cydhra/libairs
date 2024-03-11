@@ -6,7 +6,7 @@ use std::ops::{Index, Range};
 /// partial tree sequence.
 pub struct VariantData {
     sites: Vec<VariantSite>,
-    pub(crate) positions: Vec<SequencePosition>,
+    positions: Vec<SequencePosition>,
     sequence_length: SequencePosition,
     num_samples: usize,
 }
@@ -56,7 +56,7 @@ impl VariantData {
 
     /// Conveniently iterate through the [`VariantSite`]s in this instance, yielding the
     /// [`VariantIndex`] of the site as well.
-    pub fn iter_with_index<'s>(
+    pub(crate) fn iter_with_index<'s>(
         &'s self,
     ) -> impl Iterator<Item = (VariantIndex, &VariantSite)> + ExactSizeIterator + DoubleEndedIterator + 's
     {
@@ -64,6 +64,12 @@ impl VariantData {
             .iter()
             .enumerate()
             .map(|(i, s)| (VariantIndex(i), s))
+    }
+
+    /// Get the array that maps variant indices to sequence positions.
+    /// TODO: maybe it's unnecessary to expose this here
+    pub fn variant_positions(&self) -> &[SequencePosition] {
+        &self.positions
     }
 
     /// Get the sequence length of the genome this variant data is about. It is not the length of the

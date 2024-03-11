@@ -2,26 +2,18 @@
 //! This happened because airs checked for a mutation on the ancestor we were recombing from,
 //! but not on the ancestor we were recombing to at that site
 
-use libairs::ancestors::AncestorGenerator;
 use libairs::ts::ViterbiMatcher;
-use libairs::variants::{SequencePosition, VariantSite};
+
+mod common;
 
 #[test]
 fn test_mutation_on_recombination_site() {
     let sites = [[0, 1, 1, 0, 1, 1], [0, 1, 1, 1, 1, 1], [1, 1, 1, 1, 0, 1]];
 
-    let ag = AncestorGenerator::from_iter(
-        sites
-            .iter()
-            .enumerate()
-            .map(|(i, site)| VariantSite::new(site.to_vec(), SequencePosition::from_usize(i + 1))),
-    );
+    let ag = common::create_ancestor_generator(4, &sites);
+    let ancestors = ag.generate_ancestors();
 
-    let len = SequencePosition::from_usize(4);
-    let ancestors = ag.generate_ancestors(len);
-
-    let mut ancestor_matcher =
-        ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_positions().len());
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_data.len());
     ancestor_matcher.match_ancestors();
     let ts = ancestor_matcher.get_tree_sequence().nodes;
 

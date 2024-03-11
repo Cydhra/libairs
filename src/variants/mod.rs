@@ -86,10 +86,34 @@ impl Add for VariantIndex {
     }
 }
 
+impl Add<usize> for VariantIndex {
+    type Output = VariantIndex;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        VariantIndex(self.0 + rhs)
+    }
+}
+
 impl Sub for VariantIndex {
     type Output = VariantIndex;
 
     fn sub(self, rhs: Self) -> Self::Output {
         VariantIndex(self.0 - rhs.0)
+    }
+}
+
+impl Sub<VariantIndex> for usize {
+    type Output = VariantIndex;
+
+    fn sub(self, rhs: VariantIndex) -> Self::Output {
+        VariantIndex(self - rhs.0)
+    }
+}
+
+impl Sub<usize> for VariantIndex {
+    type Output = VariantIndex;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        VariantIndex(self.0 - rhs)
     }
 }

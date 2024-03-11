@@ -1,9 +1,9 @@
 //! tests whether airs mimics tsinfer's behavior of always choosing the oldest ancestor when multiple ancestors are equally
 //! likely to recombine. This test will likely get obsolete in the future, when airs intentionally diverges from tsinfer's behavior.
 
-use libairs::ancestors::AncestorGenerator;
 use libairs::ts::ViterbiMatcher;
-use libairs::variants::{SequencePosition, VariantSite};
+
+mod common;
 
 #[test]
 fn test_incomplete_nodes() {
@@ -15,17 +15,9 @@ fn test_incomplete_nodes() {
         [1, 1, 1, 1, 1, 0, 1, 1],
     ];
 
-    let ag = AncestorGenerator::from_iter(
-        sites
-            .iter()
-            .enumerate()
-            .map(|(i, site)| VariantSite::new(site.to_vec(), SequencePosition::from_usize(i + 1))),
-    );
-
-    let len = SequencePosition::from_usize(6);
-    let ancestors = ag.generate_ancestors(len);
-    let mut ancestor_matcher =
-        ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_positions().len());
+    let ag = common::create_ancestor_generator(6, &sites);
+    let ancestors = ag.generate_ancestors();
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_data.len());
     ancestor_matcher.match_ancestors();
     let ts = ancestor_matcher.get_tree_sequence().nodes;
 
