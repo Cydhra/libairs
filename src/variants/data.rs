@@ -139,7 +139,7 @@ impl SampleData {
     }
 
     /// Iterate over the sample sequences in this instance
-    pub fn iter<'s>(&'s self) -> impl Iterator + 's {
+    pub fn iter<'s>(&'s self) -> impl Iterator<Item = &VariantSequence> + 's {
         self.samples.iter()
     }
 

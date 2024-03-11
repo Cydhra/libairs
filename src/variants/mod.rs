@@ -7,7 +7,7 @@ mod sequence;
 mod site;
 
 pub use builder::VariantDataBuilder;
-pub use data::VariantData;
+pub use data::{SampleData, VariantData};
 pub use sequence::VariantSequence;
 pub use site::VariantSite;
 
