@@ -5,8 +5,6 @@
 
 use std::ops::Deref;
 
-use libairs::ts::ViterbiMatcher;
-
 mod common;
 
 #[test]
@@ -22,13 +20,11 @@ fn test_incomplete_inner_nodes() {
     ];
 
     let ag = common::create_ancestor_generator(8, &sites);
+    let ancestors = common::generate_ancestors(ag);
 
-    let ancestors = ag.generate_ancestors();
     assert_eq!(ancestors.deref()[5].len(), 6); // only 6 sites, instead of 7
 
-    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_data.len());
-    ancestor_matcher.match_ancestors();
-    let ts = ancestor_matcher.get_tree_sequence().nodes;
+    let ts = common::match_ancestors(ancestors);
 
     assert_eq!(ts.len(), 7);
 

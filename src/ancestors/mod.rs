@@ -3,14 +3,14 @@ use std::io;
 use std::io::Write;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 
+use crate::variants::{VariantIndex, VariantSequence};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelRefIterator;
 
 mod ancestor_array;
 mod generator;
 
-use crate::variants::{VariantIndex, VariantSequence};
-pub(crate) use ancestor_array::AncestorArray;
+pub use ancestor_array::AncestorArray;
 pub use generator::AncestorGenerator;
 
 const ANCESTRAL_STATE: u8 = 0;

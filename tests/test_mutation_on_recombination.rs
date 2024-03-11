@@ -2,8 +2,6 @@
 //! This happened because airs checked for a mutation on the ancestor we were recombing from,
 //! but not on the ancestor we were recombing to at that site
 
-use libairs::ts::ViterbiMatcher;
-
 mod common;
 
 #[test]
@@ -11,11 +9,8 @@ fn test_mutation_on_recombination_site() {
     let sites = [[0, 1, 1, 0, 1, 1], [0, 1, 1, 1, 1, 1], [1, 1, 1, 1, 0, 1]];
 
     let ag = common::create_ancestor_generator(4, &sites);
-    let ancestors = ag.generate_ancestors();
-
-    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_data.len());
-    ancestor_matcher.match_ancestors();
-    let ts = ancestor_matcher.get_tree_sequence().nodes;
+    let ancestors = common::generate_ancestors(ag);
+    let ts = common::match_ancestors(ancestors);
 
     assert_eq!(ts.len(), 4); // root node + 3 ancestor nodes
 

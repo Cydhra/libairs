@@ -1,7 +1,6 @@
 //! tests a regression in which the generator would end an edge in the tree sequence too early, because it considered
 //! the right edge end position to be inclusive, while it is exclusive.
 
-use libairs::ts::ViterbiMatcher;
 use std::ops::Deref;
 
 mod common;
@@ -17,14 +16,12 @@ fn test_incomplete_nodes() {
     ];
 
     let ag = common::create_ancestor_generator(6, &sites);
-    let ancestors = ag.generate_ancestors();
+    let ancestors = common::generate_ancestors(ag);
 
     assert_eq!(ancestors.len(), 4);
     assert_eq!(ancestors.deref()[3].haplotype(), &vec![1, 1, 1, 1]);
 
-    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_data.len());
-    ancestor_matcher.match_ancestors();
-    let ts = ancestor_matcher.get_tree_sequence().nodes;
+    let ts = common::match_ancestors(ancestors);
 
     assert_eq!(ts.len(), 4);
     assert_eq!(ts[3].edges().len(), 2);

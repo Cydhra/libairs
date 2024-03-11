@@ -4,6 +4,7 @@ mod partial_sequence;
 mod tree_sequence;
 
 pub use matcher::ViterbiMatcher;
+pub use tree_sequence::*;
 
 #[cfg(test)]
 mod tests {
@@ -29,8 +30,7 @@ mod tests {
         let ag = AncestorGenerator::from_variant_data(variant_data);
         let ancestors = ag.generate_ancestors();
         let ancestors_copy = ancestors.deref().clone();
-        let mut ancestor_matcher =
-            ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_data.len());
+        let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
         ancestor_matcher.match_ancestors();
         let ts = ancestor_matcher.get_tree_sequence().nodes;
 
@@ -87,8 +87,7 @@ mod tests {
         let ag = AncestorGenerator::from_variant_data(variant_data);
         let ancestors = ag.generate_ancestors();
         let ancestors_copy = ancestors.deref().clone();
-        let mut ancestor_matcher =
-            ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_data.len());
+        let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
         ancestor_matcher.match_ancestors();
         let ts = ancestor_matcher.get_tree_sequence().nodes;
 

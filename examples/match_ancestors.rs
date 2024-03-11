@@ -50,6 +50,9 @@ fn main() {
 
     let ancestor_generator =
         libairs::convenience::from_vcf(&vcf, compressed, sequence_length).unwrap();
+    ancestor_generator
+        .tskit_export_sites(&target_file.as_path())
+        .expect("failed to export sites");
 
     let ancestors = ancestor_generator.generate_ancestors();
     target_file.pop();
@@ -57,12 +60,7 @@ fn main() {
         .export_ancestors(&target_file)
         .expect("failed to export ancestors");
 
-    let mut ancestor_matcher = ViterbiMatcher::new(
-        ancestors,
-        1e-2,
-        1e-20,
-        ancestor_generator.variant_data.len(),
-    );
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
     ancestor_matcher.match_ancestors();
 
     let tree_sequence = ancestor_matcher.get_tree_sequence();
@@ -70,8 +68,4 @@ fn main() {
     tree_sequence
         .tskit_export(&target_file)
         .expect("failed to export tree sequence");
-
-    ancestor_generator
-        .tskit_export_sites(&target_file.as_path())
-        .expect("failed to export sites");
 }

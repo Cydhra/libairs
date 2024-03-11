@@ -12,7 +12,7 @@ use twox_hash::XxHash64;
 /// infer the ancestral state for surrounding sites. For each set of focal sites, a single ancestral
 /// sequence is generated.
 pub struct AncestorGenerator {
-    pub variant_data: VariantData,
+    variant_data: VariantData,
 }
 
 impl AncestorGenerator {
@@ -226,7 +226,7 @@ impl AncestorGenerator {
     }
 
     /// Generate a set of ancestral sequences with the variant sites added to the generator.
-    pub fn generate_ancestors(&self) -> AncestorArray {
+    pub fn generate_ancestors(self) -> AncestorArray {
         // fixme this entire process is inefficient, we should sort the original sites
         let mut sites = self.variant_data.iter_with_index().collect::<Vec<_>>();
         sites.sort_unstable_by(|(_, a), (_, b)| {
@@ -338,13 +338,8 @@ impl AncestorGenerator {
         });
 
         let len = self.variant_data.get_sequence_length();
-        // TODO we probably do not want to transfer the positions to the ancestor array, since
-        //  we have them in sample data anyway
-        AncestorArray::new(
-            ancestors,
-            Vec::from(self.variant_data.variant_positions()),
-            len,
-        )
+
+        AncestorArray::new(ancestors, self.variant_data, len)
     }
 
     /// Calculate the DNA sample sequences from the variant sites

@@ -3,8 +3,6 @@
 //! to also count the current ancestor (i.e. count the possibility of recombining to itself, because this is how the
 //! Markov Chain in tsinfer is modelled)
 
-use libairs::ts::ViterbiMatcher;
-
 mod common;
 
 #[test]
@@ -19,10 +17,8 @@ fn test_markov_ancestor_count() {
     ];
 
     let ag = common::create_ancestor_generator(7, &sites);
-    let ancestors = ag.generate_ancestors();
-    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_data.len());
-    ancestor_matcher.match_ancestors();
-    let ts = ancestor_matcher.get_tree_sequence().nodes;
+    let ancestors = common::generate_ancestors(ag);
+    let ts = common::match_ancestors(ancestors);
 
     // when the ancestor count is incorrect, the algorithm will recombine at the wrong spots. So we test the correct
     // layout of the tree sequence

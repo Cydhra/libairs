@@ -2,8 +2,6 @@
 //! It used the amount of active ancestor at any given site, but the Markov Chain requires it to use the full amount
 //! of ancestors theoretically available, even if the ancestors state is unknown at that site.
 
-use libairs::ts::ViterbiMatcher;
-
 mod common;
 
 #[test]
@@ -20,10 +18,8 @@ fn test_markov_ancestor_count2() {
     ];
 
     let ag = common::create_ancestor_generator(9, &sites);
-    let ancestors = ag.generate_ancestors();
-    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20, ag.variant_data.len());
-    ancestor_matcher.match_ancestors();
-    let ts = ancestor_matcher.get_tree_sequence().nodes;
+    let ancestors = common::generate_ancestors(ag);
+    let ts = common::match_ancestors(ancestors);
 
     // when the ancestor count is incorrect, the algorithm will recombine the last ancestor too early, which will
     // increase the number of trees in the sequence

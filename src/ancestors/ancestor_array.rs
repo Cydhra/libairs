@@ -1,6 +1,6 @@
 use crate::ancestors::{Ancestor, AncestralSequence};
-use crate::variants::SequencePosition;
 use crate::variants::VariantIndex;
+use crate::variants::{SequencePosition, VariantData};
 use std::fs::File;
 use std::io;
 use std::io::Write;
@@ -8,12 +8,12 @@ use std::ops::{Deref, Index};
 use std::path::Path;
 
 /// This is a helper struct for the Viterbi algorithm that manages the ancestral sequences.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AncestorArray {
     ancestors: Vec<AncestralSequence>,
 
-    /// Maps variant indices to sequence positions
-    variant_positions: Vec<SequencePosition>,
+    /// The variant data that the ancestral sequences are based on
+    variant_data: VariantData,
 
     /// The length of the sequence
     sequence_length: SequencePosition,
@@ -21,12 +21,12 @@ pub struct AncestorArray {
 impl AncestorArray {
     pub(crate) fn new(
         ancestors: Vec<AncestralSequence>,
-        variant_positions: Vec<SequencePosition>,
+        variant_data: VariantData,
         sequence_length: SequencePosition,
     ) -> Self {
         Self {
             ancestors,
-            variant_positions,
+            variant_data,
             sequence_length,
         }
     }
@@ -34,6 +34,11 @@ impl AncestorArray {
     /// Get the number of ancestors in the array
     pub fn len(&self) -> usize {
         self.ancestors.len()
+    }
+
+    /// Get the number of variants that the ancestors in the array are based on
+    pub fn get_num_variants(&self) -> usize {
+        self.variant_data.len()
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = (Ancestor, &AncestralSequence)> {
@@ -47,10 +52,10 @@ impl AncestorArray {
     pub(crate) fn variant_index_to_sequence_pos(&self, index: VariantIndex) -> SequencePosition {
         if index.0 == 0 {
             SequencePosition::from_usize(0)
-        } else if index.0 == self.variant_positions.len() {
+        } else if index.0 == self.variant_data.len() {
             self.sequence_length
         } else {
-            self.variant_positions[index.0]
+            self.variant_data[index].position
         }
     }
 
