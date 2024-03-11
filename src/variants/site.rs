@@ -50,10 +50,4 @@ impl VariantSite {
             is_singleton,
         }
     }
-
-    /// Convenience function for test cases
-    #[cfg(test)]
-    pub fn new_raw(genotypes: Vec<u8>, position: usize) -> Self {
-        Self::new(genotypes, SequencePosition::from_usize(position))
-    }
 }
