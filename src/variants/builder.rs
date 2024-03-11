@@ -62,7 +62,7 @@ impl VariantDataBuilder {
         assert!(self.num_samples == 0 || state.len() == self.num_samples);
 
         if self.num_samples == 0 {
-            self.num_samples == state.len();
+            self.num_samples = state.len();
         }
 
         let sequence_position = SequencePosition::from_usize(sequence_position);
