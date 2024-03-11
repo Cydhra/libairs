@@ -1,14 +1,14 @@
 use super::{SequencePosition, VariantIndex, VariantSequence, VariantSite};
-use std::ops::Index;
-use std::vec::IntoIter;
+use std::ops::{Index, Range};
 
 /// Holds variant data and associated metadata.
 /// This data is used as input for both ancestor generation and matching sample data against the
 /// partial tree sequence.
 pub struct VariantData {
     sites: Vec<VariantSite>,
-    positions: Vec<SequencePosition>,
+    pub(crate) positions: Vec<SequencePosition>,
     sequence_length: SequencePosition,
+    num_samples: usize,
 }
 
 impl VariantData {
@@ -17,11 +17,13 @@ impl VariantData {
         sites: Vec<VariantSite>,
         positions: Vec<SequencePosition>,
         sequence_length: SequencePosition,
+        num_samples: usize,
     ) -> Self {
         Self {
             sites,
             positions,
             sequence_length,
+            num_samples,
         }
     }
 
@@ -45,6 +47,25 @@ impl VariantData {
         }
     }
 
+    /// Iterate through the [`VariantSite`]s in this instance
+    pub fn iter<'s>(
+        &'s self,
+    ) -> impl Iterator<Item = &VariantSite> + ExactSizeIterator + DoubleEndedIterator + 's {
+        self.sites.iter()
+    }
+
+    /// Conveniently iterate through the [`VariantSite`]s in this instance, yielding the
+    /// [`VariantIndex`] of the site as well.
+    pub fn iter_with_index<'s>(
+        &'s self,
+    ) -> impl Iterator<Item = (VariantIndex, &VariantSite)> + ExactSizeIterator + DoubleEndedIterator + 's
+    {
+        self.sites
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (VariantIndex(i), s))
+    }
+
     /// Get the sequence length of the genome this variant data is about. It is not the length of the
     /// variant site vector, but the genome length.
     ///
@@ -52,6 +73,16 @@ impl VariantData {
     /// A [`SequencePosition`] containing the genome length
     pub fn get_sequence_length(&self) -> SequencePosition {
         self.sequence_length
+    }
+
+    /// Get the number of samples that make up each variant site
+    pub fn get_num_samples(&self) -> usize {
+        self.num_samples
+    }
+
+    /// Get the number of variant sites in the collection
+    pub fn len(&self) -> usize {
+        self.sites.len()
     }
 
     /// Convert a variant index to a sequence position
@@ -72,6 +103,14 @@ impl Index<VariantIndex> for VariantData {
 
     fn index(&self, index: VariantIndex) -> &Self::Output {
         &self.sites[index.0]
+    }
+}
+
+impl Index<Range<VariantIndex>> for VariantData {
+    type Output = [VariantSite];
+
+    fn index(&self, index: Range<VariantIndex>) -> &Self::Output {
+        &self.sites[index.start.0..index.end.0]
     }
 }
 

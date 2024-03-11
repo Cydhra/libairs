@@ -65,7 +65,12 @@ impl VariantDataBuilder {
 
     /// Generate [`VariantData`] from the current builder state.
     pub fn finalize(self) -> VariantData {
-        VariantData::new(self.sites, self.positions, self.sequence_length)
+        VariantData::new(
+            self.sites,
+            self.positions,
+            self.sequence_length,
+            self.num_samples,
+        )
     }
 
     /// Whether a site is valid for the algorithm. A site is valid if it is not a singleton and
