@@ -415,10 +415,10 @@ impl<'o> MarginalTree<'o> {
         self.active_nodes.clone().into_iter()
     }
 
-    /// Get the number of active nodes in the tree.
+    /// Get the number of valid nodes in the tree.
     /// This includes nodes that cannot be copied from at the current location, but might
     /// influence nodes that can be copied from.
-    /// This also includes free nodes that aren't matched against the tree yet.
+    /// This also includes free nodes that aren't inserted into the tree yet.
     /// This value is interesting mostly for the Markov Chain during the Viterbi algorithm.
     pub(crate) fn num_nodes(&self) -> usize {
         self.likelihoods.len()
