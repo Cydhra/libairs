@@ -23,6 +23,23 @@ impl VariantDataBuilder {
         }
     }
 
+    /// Construct a new builder from an iterator over variant sites and their sequence positions.
+    ///
+    /// # Parameters
+    /// - `sequence_length` the length of the reference genome
+    /// - `iter` an iterator over pairs of variant sites and their sequence positions in
+    /// increasing order of sequence position
+    pub fn from_iter<I>(sequence_length: usize, iter: I) -> Self
+    where
+        I: IntoIterator<Item = (Vec<MutationState>, usize)>,
+    {
+        let mut builder = Self::new(sequence_length);
+        for (site, position) in iter {
+            builder.add_variant_site(site, position);
+        }
+        builder
+    }
+
     /// Add a variant site to the variant data. If the variant site cannot be used for inference
     /// (for example, if it is a singleton mutation), it will be ignored.
     /// This behavior will likely change in the future, so the algorithm can at least encode the
