@@ -475,20 +475,29 @@ impl<'o> MarginalTree<'o> {
     /// # Parameters
     /// - `site_index`: The index of the current site relative to the beginning of the candidate.
     pub(crate) fn recompress_tree(&mut self, site_index: usize) {
-        let mut recompress = Vec::new();
-        // Todo do this in a single pass loop
-        self.active_nodes.iter().for_each(|&node| {
+        self.active_nodes.retain(|&node| {
             debug_assert!(self.is_compressed[node.0] == false);
 
             if let Some(parent) = self.uncompressed_parents[node.0] {
                 if self.likelihoods[node.0] == self.likelihoods[parent.0] {
-                    recompress.push(node);
-                }
-            }
-        });
+                    self.last_compressed[node.0] = site_index + 1;
+                    self.is_compressed[node.0] = true;
 
-        recompress.into_iter().for_each(|node| {
-            self.recompress_node(node, self.uncompressed_parents[node.0].unwrap(), site_index);
+                    let mut queue = self.children[node.0].clone();
+                    while let Some(node) = queue.pop() {
+                        if self.uncompressed_parents[node.0] == Some(node) {
+                            self.uncompressed_parents[node.0] = Some(parent);
+
+                            queue.extend(self.children[node.0].iter().copied());
+                        }
+                    }
+                    false
+                } else {
+                    true
+                }
+            } else {
+                true
+            }
         });
     }
 
