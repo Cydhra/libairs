@@ -50,12 +50,13 @@ fn main() {
 
     let ancestor_generator =
         libairs::convenience::from_vcf(&vcf, compressed, sequence_length).unwrap();
+
+    target_file.pop();
     ancestor_generator
         .tskit_export_sites(&target_file.as_path())
         .expect("failed to export sites");
 
     let ancestors = ancestor_generator.generate_ancestors();
-    target_file.pop();
     ancestors
         .export_ancestors(&target_file)
         .expect("failed to export ancestors");
