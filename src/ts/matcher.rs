@@ -23,7 +23,7 @@ impl ViterbiMatcher {
     /// Create a new matcher for the given ancestral sequences
     pub fn new(ancestors: AncestorArray, recombination_prob: f64, mutation_prob: f64) -> Self {
         let ancestor_iterator =
-            AncestorIndex::new(ancestors.len(), ancestors.get_num_variants(), 1);
+            AncestorIndex::new(ancestors.len(), ancestors.get_num_variants(), 40);
         let ancestor_count = ancestors.len();
         Self {
             ancestors,

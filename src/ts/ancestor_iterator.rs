@@ -54,9 +54,13 @@ pub(crate) struct AncestorIndex {
     /// Starting from that index, the mutation and recombination sites of that node are invalid
     last_compressed: Vec<usize>,
 
-    /// How many iterations should be left between recompression attempts of the Marginal Tree
-    /// during the Viterbi algorithm. A value of 0 is illegal.
-    recompression_interval: usize,
+    /// Inverse recompression threshold.
+    /// A threshold of 100 means that recompression of the marginal tree is attempted when
+    /// more than 1% of the nodes are active,
+    /// a threshold of 50 means that recompression is attempted when more than 2% of the nodes are active.
+    /// A threshold of 1 means that recompression is attempted when more than 100% of the nodes are active,
+    /// i.e. never.
+    inv_recompression_threshold: usize,
 }
 
 impl AncestorIndex {
@@ -64,10 +68,10 @@ impl AncestorIndex {
     pub(crate) fn new(
         max_nodes: usize,
         variant_count: usize,
-        recompression_interval: usize,
+        inv_recompression_threshold: usize,
     ) -> Self {
         assert!(
-            recompression_interval > 0,
+            inv_recompression_threshold > 0,
             "Recompression interval must be greater than 0"
         );
         Self {
@@ -82,7 +86,7 @@ impl AncestorIndex {
             recombination_sites: vec![vec![false; variant_count]; max_nodes],
             mutation_sites: vec![vec![false; variant_count]; max_nodes],
             last_compressed: vec![0; max_nodes],
-            recompression_interval,
+            inv_recompression_threshold,
         }
     }
 
@@ -179,7 +183,7 @@ impl AncestorIndex {
             &mut self.recombination_sites[0..limit_nodes],
             &mut self.mutation_sites[0..limit_nodes],
             &mut self.last_compressed[0..limit_nodes],
-            self.recompression_interval,
+            self.inv_recompression_threshold,
         );
 
         let site = start;
@@ -227,7 +231,9 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<
                 .advance_to_site(&mut self.queue, self.site.next(), false, false);
 
             consumer((self.site, &mut self.marginal_tree));
-            if self.site.0 % self.marginal_tree.recompression_interval == 0 {
+            if self.marginal_tree.active_nodes.len()
+                > self.marginal_tree.limit_nodes / self.marginal_tree.inv_recompression_threshold
+            {
                 self.marginal_tree
                     .recompress_tree(self.site.get_variant_distance(self.start));
             }
@@ -367,9 +373,13 @@ pub(crate) struct MarginalTree<'o> {
     /// Length of the sequence processed by the current tree
     current_sequence_length: usize,
 
-    /// How many iterations should be left between recompression attempts of the Marginal Tree
-    /// during the Viterbi algorithm. A value of 0 is illegal.
-    recompression_interval: usize,
+    /// Inverse recompression threshold.
+    /// A threshold of 100 means that recompression of the marginal tree is attempted when
+    /// more than 1% of the nodes are active,
+    /// a threshold of 50 means that recompression is attempted when more than 2% of the nodes are active.
+    /// A threshold of 1 means that recompression is attempted when more than 100% of the nodes are active,
+    /// i.e. never.
+    inv_recompression_threshold: usize,
 }
 
 impl<'o> MarginalTree<'o> {
@@ -416,7 +426,7 @@ impl<'o> MarginalTree<'o> {
             limit_nodes,
             start,
             current_sequence_length: ancestor_length,
-            recompression_interval,
+            inv_recompression_threshold: recompression_interval,
         };
 
         marginal_tree.add_initial_node(Ancestor(0));
