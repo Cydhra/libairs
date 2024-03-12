@@ -462,11 +462,11 @@ impl<'o> MarginalTree<'o> {
                     self.is_compressed[node.0] = true;
 
                     let mut queue = self.children[node.0].clone();
-                    while let Some(node) = queue.pop() {
-                        if self.uncompressed_parents[node.0] == Some(node) {
-                            self.uncompressed_parents[node.0] = Some(parent);
+                    while let Some(child) = queue.pop() {
+                        if self.uncompressed_parents[child.0] == Some(node) {
+                            self.uncompressed_parents[child.0] = Some(parent);
 
-                            queue.extend(self.children[node.0].iter().copied());
+                            queue.extend(self.children[child.0].iter().copied());
                         }
                     }
                     false
