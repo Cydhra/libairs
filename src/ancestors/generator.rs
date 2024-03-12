@@ -337,9 +337,7 @@ impl AncestorGenerator {
                 .reverse()
         });
 
-        let len = self.variant_data.get_sequence_length();
-
-        AncestorArray::new(ancestors, self.variant_data, len)
+        AncestorArray::new(ancestors, self.variant_data)
     }
 
     /// Calculate the DNA sample sequences from the variant sites

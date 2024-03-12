@@ -14,20 +14,12 @@ pub struct AncestorArray {
 
     /// The variant data that the ancestral sequences are based on
     variant_data: VariantData,
-
-    /// The length of the sequence
-    sequence_length: SequencePosition,
 }
 impl AncestorArray {
-    pub(crate) fn new(
-        ancestors: Vec<AncestralSequence>,
-        variant_data: VariantData,
-        sequence_length: SequencePosition,
-    ) -> Self {
+    pub(crate) fn new(ancestors: Vec<AncestralSequence>, variant_data: VariantData) -> Self {
         Self {
             ancestors,
             variant_data,
-            sequence_length,
         }
     }
 
@@ -50,13 +42,7 @@ impl AncestorArray {
 
     /// Convert a variant index to a sequence position
     pub(crate) fn variant_index_to_sequence_pos(&self, index: VariantIndex) -> SequencePosition {
-        if index.0 == 0 {
-            SequencePosition::from_usize(0)
-        } else if index.0 == self.variant_data.len() {
-            self.sequence_length
-        } else {
-            self.variant_data[index].position
-        }
+        self.variant_data.variant_index_to_sequence_pos(index)
     }
 
     /// Export the ancestor array in a TSV format that can be read by the test suite

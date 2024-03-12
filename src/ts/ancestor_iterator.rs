@@ -53,9 +53,6 @@ pub(crate) struct AncestorIndex {
     /// The last site index (relative to current ancestor, not a variant index) where the node was compressed.
     /// Starting from that index, the mutation and recombination sites of that node are invalid
     last_compressed: Vec<usize>,
-
-    /// pre-allocated stack for the DFS in subtree updates
-    stack: Vec<Ancestor>,
 }
 
 impl AncestorIndex {
@@ -73,7 +70,6 @@ impl AncestorIndex {
             recombination_sites: vec![vec![false; variant_count]; max_nodes],
             mutation_sites: vec![vec![false; variant_count]; max_nodes],
             last_compressed: vec![0; max_nodes],
-            stack: Vec::new(),
         }
     }
 
@@ -446,19 +442,6 @@ impl<'o> MarginalTree<'o> {
         &mut self.mutation_sites[node.0][index]
     }
 
-    fn find_uncompressed_parent(&self, node: Ancestor) -> Option<Ancestor> {
-        let mut parent = self.parents[node.0];
-
-        while let Some(p) = parent {
-            if !self.is_compressed(p) {
-                break;
-            }
-            parent = self.parents[p.0];
-        }
-
-        parent
-    }
-
     /// Return whether the node is currently compressed.
     fn is_compressed(&self, node: Ancestor) -> bool {
         self.is_compressed[node.0]
@@ -796,6 +779,19 @@ mod tests {
     use super::*;
     use std::hint::black_box;
 
+    fn find_uncompressed_parent(tree: &MarginalTree, node: Ancestor) -> Option<Ancestor> {
+        let mut parent = tree.parents[node.0];
+
+        while let Some(p) = parent {
+            if !tree.is_compressed(p) {
+                break;
+            }
+            parent = tree.parents[p.0];
+        }
+
+        parent
+    }
+
     #[test]
     fn test_empty_range() {
         // test whether iterating over an empty range doesn't crash and calls the closure zero times
@@ -818,8 +814,8 @@ mod tests {
                 assert_eq!(site, VariantIndex::from_usize(counter));
                 assert_eq!(tree.num_nodes(), 2);
                 assert_eq!(tree.nodes().count(), 2);
-                assert_eq!(tree.find_uncompressed_parent(Ancestor(0)), None);
-                assert_eq!(tree.find_uncompressed_parent(Ancestor(1)), None);
+                assert_eq!(find_uncompressed_parent(tree, Ancestor(0)), None);
+                assert_eq!(find_uncompressed_parent(tree, Ancestor(1)), None);
                 counter += 1;
             });
     }
@@ -1429,43 +1425,43 @@ mod tests {
                 // always trigger recompression
                 match counter {
                     0 => {
-                        assert_eq!(tree.find_uncompressed_parent(Ancestor(0)), None);
+                        assert_eq!(find_uncompressed_parent(tree, Ancestor(0)), None);
                         assert_eq!(
-                            tree.find_uncompressed_parent(Ancestor(1)),
+                            find_uncompressed_parent(tree, Ancestor(1)),
                             Some(Ancestor(0))
                         );
                         assert_eq!(
-                            tree.find_uncompressed_parent(Ancestor(2)),
+                            find_uncompressed_parent(tree, Ancestor(2)),
                             Some(Ancestor(1))
                         );
                     }
                     1 => {
-                        assert_eq!(tree.find_uncompressed_parent(Ancestor(0)), None);
+                        assert_eq!(find_uncompressed_parent(tree, Ancestor(0)), None);
                         // ancestor 1 is compressed
                         assert_eq!(
-                            tree.find_uncompressed_parent(Ancestor(2)),
+                            find_uncompressed_parent(tree, Ancestor(2)),
                             Some(Ancestor(0))
                         );
                     }
                     2 => {
-                        assert_eq!(tree.find_uncompressed_parent(Ancestor(0)), None);
+                        assert_eq!(find_uncompressed_parent(tree, Ancestor(0)), None);
                         assert_eq!(
-                            tree.find_uncompressed_parent(Ancestor(1)),
+                            find_uncompressed_parent(tree, Ancestor(1)),
                             Some(Ancestor(0))
                         );
                         assert_eq!(
-                            tree.find_uncompressed_parent(Ancestor(2)),
+                            find_uncompressed_parent(tree, Ancestor(2)),
                             Some(Ancestor(1))
                         );
                     }
                     4 => {
-                        assert_eq!(tree.find_uncompressed_parent(Ancestor(0)), None);
+                        assert_eq!(find_uncompressed_parent(tree, Ancestor(0)), None);
                         assert_eq!(
-                            tree.find_uncompressed_parent(Ancestor(1)),
+                            find_uncompressed_parent(tree, Ancestor(1)),
                             Some(Ancestor(0))
                         );
                         assert_eq!(
-                            tree.find_uncompressed_parent(Ancestor(2)),
+                            find_uncompressed_parent(tree, Ancestor(2)),
                             Some(Ancestor(1))
                         );
 
@@ -1473,13 +1469,13 @@ mod tests {
                         *tree.likelihood(Ancestor(1)) = 0.1;
                     }
                     5 => {
-                        assert_eq!(tree.find_uncompressed_parent(Ancestor(0)), None);
+                        assert_eq!(find_uncompressed_parent(tree, Ancestor(0)), None);
                         assert_eq!(
-                            tree.find_uncompressed_parent(Ancestor(1)),
+                            find_uncompressed_parent(tree, Ancestor(1)),
                             Some(Ancestor(0))
                         );
                         assert_eq!(
-                            tree.find_uncompressed_parent(Ancestor(2)),
+                            find_uncompressed_parent(tree, Ancestor(2)),
                             Some(Ancestor(0))
                         );
 
@@ -1487,7 +1483,7 @@ mod tests {
                         *tree.likelihood(Ancestor(1)) = 0.0;
                     }
                     _ => {
-                        assert_eq!(tree.find_uncompressed_parent(Ancestor(0)), None);
+                        assert_eq!(find_uncompressed_parent(tree, Ancestor(0)), None);
                     }
                 }
                 counter += 1usize;
