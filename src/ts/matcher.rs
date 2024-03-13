@@ -3,6 +3,7 @@ use crate::ts::ancestor_iterator::AncestorIndex;
 use crate::ts::partial_sequence::{PartialSequenceEdge, PartialTreeSequence};
 use crate::ts::tree_sequence::TreeSequence;
 use crate::variants::VariantIndex;
+use std::vec;
 
 /// A matcher runs the viterbi algorithm for a set of sequences.
 /// It will generate a tree sequence from an array of ancestral sequences and can then match
@@ -13,7 +14,6 @@ use crate::variants::VariantIndex;
 /// - [`ViterbiMatcher::match_samples`]: Match a set of samples against the partial tree sequence
 pub struct ViterbiMatcher {
     ancestors: AncestorArray,
-    ancestor_iterator: AncestorIndex,
     partial_tree_sequence: PartialTreeSequence,
     recombination_prob: f64,
     mutation_prob: f64,
@@ -30,16 +30,9 @@ impl ViterbiMatcher {
         use_recompression_threshold: bool,
         inverse_recompression_threshold: usize,
     ) -> Self {
-        let ancestor_iterator = AncestorIndex::new(
-            ancestors.len(),
-            ancestors.get_num_variants(),
-            use_recompression_threshold,
-            inverse_recompression_threshold,
-        );
         let ancestor_count = ancestors.len();
         Self {
             ancestors,
-            ancestor_iterator,
             partial_tree_sequence: PartialTreeSequence::with_capacity(ancestor_count),
             recombination_prob,
             mutation_prob,
@@ -178,6 +171,19 @@ impl ViterbiMatcher {
     /// This will modify the internal state to represent the tree sequence for all ancestors
     /// within the array.
     pub fn match_ancestors(&mut self) {
+        // TODO make this configurable
+        let num_threads = 1usize;
+
+        let mut ancestor_iterators = vec![
+            AncestorIndex::new(
+                self.ancestors.len(),
+                self.ancestors.get_num_variants(),
+                self.use_recompression_threshold,
+                self.inverse_recompression_threshold,
+            );
+            num_threads.into()
+        ];
+
         // edges for root node
         let root = Ancestor(0);
         self.partial_tree_sequence.push(
@@ -202,14 +208,13 @@ impl ViterbiMatcher {
 
             let (edges, mutations) = Self::find_copy_path(
                 &self.ancestors,
-                &mut self.ancestor_iterator,
+                &mut ancestor_iterators[0],
                 self.recombination_prob,
                 self.mutation_prob,
                 ancestor,
                 num_ancestors,
             );
-            self.ancestor_iterator
-                .insert_sequence_node(ancestor_index, &edges, &mutations);
+            ancestor_iterators[0].insert_sequence_node(ancestor_index, &edges, &mutations);
             self.partial_tree_sequence.push(edges, mutations);
         }
     }
@@ -217,10 +222,26 @@ impl ViterbiMatcher {
     /// Insert a set of samples into an ancestral tree sequence. The samples will be matched
     /// against the existing sequence, but not against each other.
     pub fn match_samples(&mut self, samples: &[AncestralSequence]) {
+        // TODO change this method to take the iterators as a parameter, so we dont need to
+        //  reallocate them when we match ancestors and samples in one go anyway
+
+        // TODO the iterators are empty, matching samples will fail!
+        let num_threads = 1usize;
+
+        let mut ancestor_iterators = vec![
+            AncestorIndex::new(
+                self.ancestors.len(),
+                self.ancestors.get_num_variants(),
+                self.use_recompression_threshold,
+                self.inverse_recompression_threshold,
+            );
+            num_threads.into()
+        ];
+
         for sample in samples {
             let (edges, mutations) = Self::find_copy_path(
                 &self.ancestors,
-                &mut self.ancestor_iterator,
+                &mut ancestor_iterators[0],
                 self.recombination_prob,
                 self.mutation_prob,
                 sample,
