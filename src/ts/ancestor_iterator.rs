@@ -98,6 +98,33 @@ impl AncestorIndex {
         }
     }
 
+    pub(crate) fn insert_free_node(
+        &mut self,
+        node: Ancestor,
+        start: VariantIndex,
+        end: VariantIndex,
+    ) {
+        assert_eq!(
+            node.0, self.num_nodes,
+            "Tree nodes must be inserted in order: {} != {}",
+            node.0, self.num_nodes
+        );
+        self.num_nodes += 1;
+
+        // insert start and end of the ancestor
+        self.edge_index.insert(SequenceEvent {
+            site: start,
+            node,
+            kind: SequenceEventKind::StartFree,
+        });
+
+        self.edge_index.insert(SequenceEvent {
+            site: end,
+            node,
+            kind: SequenceEventKind::End,
+        });
+    }
+
     /// Insert a tree sequence node into the partial tree sequence, which will be exploited by the
     /// iterator to compress trees.
     /// The nodes must be inserted in order of increasing index.
@@ -115,20 +142,34 @@ impl AncestorIndex {
         edges: &[PartialSequenceEdge],
         mutations: &[VariantIndex],
     ) {
-        self.num_nodes += 1;
-        assert_eq!(
-            tree_node.0,
-            self.num_nodes - 1,
-            "Tree nodes must be inserted in order"
-        );
+        if tree_node.0 >= self.num_nodes {
+            self.num_nodes += 1;
+            assert_eq!(
+                tree_node.0,
+                self.num_nodes - 1,
+                "Tree nodes must be inserted in order"
+            );
 
-        if !edges.is_empty() {
+            // insert the end only if this node has not been inserted before as a free node
             self.edge_index.insert(SequenceEvent {
                 site: edges.last().unwrap().end(),
                 node: tree_node,
                 kind: SequenceEventKind::End,
             });
+        } else {
+            // remove the start event of the inserted node, since we assume it has been inserted before
+            let success = self.edge_index.remove(&SequenceEvent {
+                site: edges.first().unwrap().start(),
+                node: tree_node,
+                kind: SequenceEventKind::StartFree,
+            });
+            assert!(
+                success,
+                "a tree node was inserted that had no free start event associated with it"
+            );
+        }
 
+        if !edges.is_empty() {
             self.edge_index.insert(SequenceEvent {
                 site: edges.first().unwrap().start(),
                 node: tree_node,
@@ -270,6 +311,7 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum SequenceEventKind {
     Start { parent: Ancestor },
+    StartFree,
     ChangeParent { new_parent: Ancestor },
     Mutation,
     End,
@@ -287,6 +329,9 @@ impl Ord for SequenceEventKind {
             (Self::Start { parent: p1 }, Self::Start { parent: p2 }) => p1.cmp(p2),
             (Self::Start { .. }, _) => Ordering::Less,
             (_, Self::Start { .. }) => Ordering::Greater,
+            (Self::StartFree, Self::StartFree) => Ordering::Equal,
+            (Self::StartFree, _) => Ordering::Less,
+            (_, Self::StartFree) => Ordering::Greater,
             (Self::ChangeParent { new_parent: p1 }, Self::ChangeParent { new_parent: p2 }) => {
                 p1.cmp(p2)
             }
@@ -447,10 +492,11 @@ impl<'o> MarginalTree<'o> {
             inv_recompression_threshold,
         };
 
-        marginal_tree.add_initial_node(Ancestor(0));
-        (num_nodes..limit_nodes)
-            .map(Ancestor)
-            .for_each(|n| marginal_tree.add_initial_node(n));
+        marginal_tree.add_initial_node(Ancestor(0), false);
+        assert!(
+            limit_nodes <= num_nodes,
+            "Limit nodes must be less than or equal to num nodes"
+        );
 
         marginal_tree
     }
@@ -619,14 +665,17 @@ impl<'o> MarginalTree<'o> {
     }
 
     /// Insert a node into the tree that has no parent, i.e. it is a free node or is the root node.
-    /// This method is used to initialize the tree sequence, and should not be called during the
-    /// Viterbi algorithm.
-    fn add_initial_node(&mut self, node: Ancestor) {
+    /// This method is used to initialize the tree sequence and to insert unmatched nodes.
+    ///
+    /// # Parameters
+    /// - `node` the free node to insert
+    /// - `during_viterbi` must be true, if the viterbi algorithm is already running
+    fn add_initial_node(&mut self, node: Ancestor, during_viterbi: bool) {
         debug_assert!(self.parents[node.0].is_none());
 
         self.active_nodes.push(node);
         self.is_compressed[node.0] = false;
-        self.likelihoods[node.0] = 1.0;
+        self.likelihoods[node.0] = if during_viterbi { 0.0 } else { 1.0 };
         self.parents[node.0] = None;
         self.children[node.0].clear();
         self.uncompressed_parents[node.0] = None;
@@ -757,8 +806,12 @@ impl<'o> MarginalTree<'o> {
             node.0
         );
 
-        self.children[self.parents[node.0].unwrap().0].retain(|&n| n != node);
-        self.parents[node.0] = None;
+        // if node has no parent, it is a free node and no updates are needed
+        if self.parents[node.0].is_some() {
+            self.children[self.parents[node.0].unwrap().0].retain(|&n| n != node);
+            self.parents[node.0] = None;
+        }
+
         self.is_compressed[node.0] = true;
         self.active_nodes.retain(|&n| n != node);
     }
@@ -812,6 +865,13 @@ impl<'o> MarginalTree<'o> {
                 SequenceEvent {
                     site: _,
                     node,
+                    kind: SequenceEventKind::StartFree,
+                } => {
+                    self.add_initial_node(*node, !(keep_compressed || mutations_only));
+                }
+                SequenceEvent {
+                    site: _,
+                    node,
                     kind: SequenceEventKind::ChangeParent { new_parent },
                 } => {
                     self.update_node_parent(
@@ -855,6 +915,13 @@ mod tests {
     fn test_empty_range() {
         // test whether iterating over an empty range doesn't crash and calls the closure zero times
         let mut ix = AncestorIndex::new(2, 1, false, 1);
+
+        ix.insert_free_node(
+            Ancestor(1),
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+        );
+
         ix.sites(
             VariantIndex::from_usize(10),
             VariantIndex::from_usize(10),
@@ -867,6 +934,17 @@ mod tests {
     fn test_ancestor_iteration() {
         let mut ix = AncestorIndex::new(2, 10, false, 1);
         let mut counter = 0;
+
+        ix.insert_free_node(
+            Ancestor(1),
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+        );
+        ix.insert_free_node(
+            Ancestor(2),
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+        );
 
         ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2)
             .for_each(|(site, tree)| {
