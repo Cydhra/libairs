@@ -45,10 +45,8 @@ impl ViterbiMatcher {
     /// tree sequence.
     #[must_use]
     fn find_copy_path(
-        ancestors: &AncestorArray,
+        &self,
         ancestor_iterator: &mut AncestorIndex,
-        recombination_prob: f64,
-        mutation_prob: f64,
         candidate: &AncestralSequence,
         limit_nodes: usize,
     ) -> (Vec<PartialSequenceEdge>, Vec<VariantIndex>) {
@@ -59,8 +57,8 @@ impl ViterbiMatcher {
 
         let mut max_likelihoods = vec![None; candidate.len()];
 
-        let rho: f64 = recombination_prob;
-        let mu: f64 = mutation_prob;
+        let rho: f64 = self.recombination_prob;
+        let mu: f64 = self.mutation_prob;
 
         let mut sites = ancestor_iterator.sites(candidate.start(), candidate.end(), limit_nodes);
 
@@ -80,7 +78,7 @@ impl ViterbiMatcher {
             let rev_mu = 1f64 - (num_alleles - 1f64) * mu;
 
             for ancestor_id in marginal_tree.nodes() {
-                let ancestral_sequence = &ancestors[ancestor_id];
+                let ancestral_sequence = &self.ancestors[ancestor_id];
                 let prob_no_recomb = *marginal_tree.likelihood(ancestor_id) * prob_no_recomb;
 
                 let pt = if prob_no_recomb > prob_recomb {
@@ -104,8 +102,8 @@ impl ViterbiMatcher {
                     max_site_likelihood = likelihood;
                     max_site_likelihood_ancestor = Some(ancestor_id);
                 } else if likelihood == max_site_likelihood
-                    && ancestors[ancestor_id].relative_age()
-                        > ancestors[max_site_likelihood_ancestor.unwrap()].relative_age()
+                    && self.ancestors[ancestor_id].relative_age()
+                        > self.ancestors[max_site_likelihood_ancestor.unwrap()].relative_age()
                 {
                     // always select the older one to mimic tsinfer behavior
                     max_site_likelihood_ancestor = Some(ancestor_id);
@@ -141,8 +139,8 @@ impl ViterbiMatcher {
                     .expect("no max likelihood ancestor found")
                     != current_ancestor
             {
-                debug_assert!(ancestors[current_ancestor].start() <= site);
-                debug_assert!(ancestors[current_ancestor].end() >= site);
+                debug_assert!(self.ancestors[current_ancestor].start() <= site);
+                debug_assert!(self.ancestors[current_ancestor].end() >= site);
 
                 edges.push(PartialSequenceEdge::new(
                     site,
@@ -206,14 +204,8 @@ impl ViterbiMatcher {
                 }
             }
 
-            let (edges, mutations) = Self::find_copy_path(
-                &self.ancestors,
-                &mut ancestor_iterators[0],
-                self.recombination_prob,
-                self.mutation_prob,
-                ancestor,
-                num_ancestors,
-            );
+            let (edges, mutations) =
+                self.find_copy_path(&mut ancestor_iterators[0], ancestor, num_ancestors);
             ancestor_iterators[0].insert_sequence_node(ancestor_index, &edges, &mutations);
             self.partial_tree_sequence.push(edges, mutations);
         }
@@ -239,14 +231,8 @@ impl ViterbiMatcher {
         ];
 
         for sample in samples {
-            let (edges, mutations) = Self::find_copy_path(
-                &self.ancestors,
-                &mut ancestor_iterators[0],
-                self.recombination_prob,
-                self.mutation_prob,
-                sample,
-                self.ancestors.len(),
-            );
+            let (edges, mutations) =
+                self.find_copy_path(&mut ancestor_iterators[0], sample, self.ancestors.len());
             self.partial_tree_sequence.push(edges, mutations);
         }
     }
