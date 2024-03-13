@@ -15,6 +15,7 @@ pub(crate) type Site<'a, 'o> = (VariantIndex, &'a mut MarginalTree<'o>);
 ///
 /// Whenever new tree edges are calculated, they can be inserted into the iterator so the tree
 /// compression improves for future iterations.
+#[derive(Clone)]
 pub(crate) struct AncestorIndex {
     edge_index: BTreeSet<SequenceEvent>,
     num_nodes: usize, // number of nodes in the tree sequence. All nodes with an index >= this
@@ -54,6 +55,11 @@ pub(crate) struct AncestorIndex {
     /// Starting from that index, the mutation and recombination sites of that node are invalid
     last_compressed: Vec<usize>,
 
+    /// Whether to use the recompression threshold to avoid recompressing when only a few nodes are
+    /// active. If this is false, the algorithm will recompress in every iteration, regardless of
+    /// efficacy.
+    use_recompression_threshold: bool,
+
     /// Inverse recompression threshold.
     /// A threshold of 100 means that recompression of the marginal tree is attempted when
     /// more than 1% of the nodes are active,
@@ -68,6 +74,7 @@ impl AncestorIndex {
     pub(crate) fn new(
         max_nodes: usize,
         variant_count: usize,
+        use_recompression_threshold: bool,
         inv_recompression_threshold: usize,
     ) -> Self {
         assert!(
@@ -86,6 +93,7 @@ impl AncestorIndex {
             recombination_sites: vec![vec![false; variant_count]; max_nodes],
             mutation_sites: vec![vec![false; variant_count]; max_nodes],
             last_compressed: vec![0; max_nodes],
+            use_recompression_threshold,
             inv_recompression_threshold,
         }
     }
@@ -183,6 +191,7 @@ impl AncestorIndex {
             &mut self.recombination_sites[0..limit_nodes],
             &mut self.mutation_sites[0..limit_nodes],
             &mut self.last_compressed[0..limit_nodes],
+            self.use_recompression_threshold,
             self.inv_recompression_threshold,
         );
 
@@ -231,8 +240,10 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<
                 .advance_to_site(&mut self.queue, self.site.next(), false, false);
 
             consumer((self.site, &mut self.marginal_tree));
-            if self.marginal_tree.active_nodes.len()
-                > self.marginal_tree.limit_nodes / self.marginal_tree.inv_recompression_threshold
+            if !self.marginal_tree.use_recompression_threshold
+                || self.marginal_tree.active_nodes.len()
+                    > self.marginal_tree.limit_nodes
+                        / self.marginal_tree.inv_recompression_threshold
             {
                 self.marginal_tree
                     .recompress_tree(self.site.get_variant_distance(self.start));
@@ -373,6 +384,11 @@ pub(crate) struct MarginalTree<'o> {
     /// Length of the sequence processed by the current tree
     current_sequence_length: usize,
 
+    /// Whether to use the recompression threshold to avoid recompressing when only a few nodes are
+    /// active. If this is false, the algorithm will recompress in every iteration, regardless of
+    /// efficacy.
+    use_recompression_threshold: bool,
+
     /// Inverse recompression threshold.
     /// A threshold of 100 means that recompression of the marginal tree is attempted when
     /// more than 1% of the nodes are active,
@@ -397,7 +413,8 @@ impl<'o> MarginalTree<'o> {
         recombination_sites: &'o mut [Vec<bool>],
         mutation_sites: &'o mut [Vec<bool>],
         last_compressed: &'o mut [usize],
-        recompression_interval: usize,
+        use_recompression_threshold: bool,
+        inv_recompression_threshold: usize,
     ) -> Self {
         debug_assert!(num_nodes > 0, "Tree must have at least one node");
 
@@ -426,7 +443,8 @@ impl<'o> MarginalTree<'o> {
             limit_nodes,
             start,
             current_sequence_length: ancestor_length,
-            inv_recompression_threshold: recompression_interval,
+            use_recompression_threshold,
+            inv_recompression_threshold,
         };
 
         marginal_tree.add_initial_node(Ancestor(0));
@@ -836,7 +854,7 @@ mod tests {
     #[test]
     fn test_empty_range() {
         // test whether iterating over an empty range doesn't crash and calls the closure zero times
-        let mut ix = AncestorIndex::new(2, 1, 1);
+        let mut ix = AncestorIndex::new(2, 1, false, 1);
         ix.sites(
             VariantIndex::from_usize(10),
             VariantIndex::from_usize(10),
@@ -847,7 +865,7 @@ mod tests {
 
     #[test]
     fn test_ancestor_iteration() {
-        let mut ix = AncestorIndex::new(2, 10, 1);
+        let mut ix = AncestorIndex::new(2, 10, false, 1);
         let mut counter = 0;
 
         ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2)
@@ -863,7 +881,7 @@ mod tests {
 
     #[test]
     fn test_simple_tree_compression() {
-        let mut ix = AncestorIndex::new(2, 10, 1);
+        let mut ix = AncestorIndex::new(2, 10, false, 1);
         let mut counter = 0;
 
         // insert edge from first to root node
@@ -898,7 +916,7 @@ mod tests {
 
     #[test]
     fn test_simple_tree_recompression() {
-        let mut ix = AncestorIndex::new(2, 10, 1);
+        let mut ix = AncestorIndex::new(2, 10, false, 1);
         let mut counter = 0;
 
         // insert edge from first to root node
@@ -940,7 +958,7 @@ mod tests {
     #[test]
     fn test_simple_tree_divergence() {
         // test whether a compressed node is decompressed when its parent changes to a different node
-        let mut ix = AncestorIndex::new(3, 9, 1);
+        let mut ix = AncestorIndex::new(3, 9, false, 1);
         let mut counter = 0;
 
         // insert edges for two nodes
@@ -992,7 +1010,7 @@ mod tests {
     #[test]
     fn test_recompression_divergence() {
         // test whether divergence works after recompression
-        let mut ix = AncestorIndex::new(2, 10, 1);
+        let mut ix = AncestorIndex::new(2, 10, false, 1);
         let mut counter = 0;
 
         ix.insert_sequence_node(
@@ -1026,7 +1044,7 @@ mod tests {
     #[test]
     fn test_mutation_on_recombination() {
         // test whether the correct nodes are decompressed when a mutation happens on a recombination
-        let mut ix = AncestorIndex::new(3, 10, 1);
+        let mut ix = AncestorIndex::new(3, 10, false, 1);
         let mut counter = 0;
 
         ix.insert_sequence_node(
@@ -1078,7 +1096,7 @@ mod tests {
     #[test]
     fn test_limit_nodes() {
         // test whether the correct nodes are in the tree if we limit the number of nodes
-        let mut ix = AncestorIndex::new(2, 10, 1);
+        let mut ix = AncestorIndex::new(2, 10, false, 1);
         let mut counter = 0;
 
         // insert two nodes, one will be ignored
@@ -1122,7 +1140,7 @@ mod tests {
     #[test]
     fn test_subset_iterator() {
         // test whether an incomplete range of sites iterated yields correct trees
-        let mut ix = AncestorIndex::new(3, 10, 1);
+        let mut ix = AncestorIndex::new(3, 10, false, 1);
         let mut counter = 2;
 
         // insert two nodes
@@ -1170,7 +1188,7 @@ mod tests {
     #[test]
     fn test_incomplete_ancestor() {
         // test whether an ancestor that ends early gets removed from the marginal tree
-        let mut ix = AncestorIndex::new(2, 10, 1);
+        let mut ix = AncestorIndex::new(2, 10, false, 1);
         let mut counter = 0;
 
         // insert incomplete ancestor
@@ -1210,7 +1228,7 @@ mod tests {
         // test whether the iterator copies the recombination and mutation sites from the parent when a child is
         // decompressed
 
-        let mut ix = AncestorIndex::new(3, 10, 1);
+        let mut ix = AncestorIndex::new(3, 10, false, 1);
         let mut counter = 0;
 
         // insert a child node that serves as a second node
@@ -1291,7 +1309,7 @@ mod tests {
         // test whether the iterator copies the recombination and mutation sites from the parent when a child is
         // decompressed
 
-        let mut ix = AncestorIndex::new(3, 10, 1);
+        let mut ix = AncestorIndex::new(3, 10, false, 1);
         let mut counter = 0;
 
         // insert a child node that serves as a second node
@@ -1371,7 +1389,7 @@ mod tests {
         // specifically it shouldn't remove nodes before their children have changed parents or have been removed,
         // and shouldnt insert nodes before their parents have been inserted
 
-        let mut ix = AncestorIndex::new(4, 10, 1);
+        let mut ix = AncestorIndex::new(4, 10, false, 1);
 
         ix.insert_sequence_node(
             Ancestor(1),
@@ -1422,7 +1440,7 @@ mod tests {
     #[test]
     fn test_uncompressed_tree_integrity() {
         // test whether the uncompressed tree array always points to the correct parent
-        let mut ix = AncestorIndex::new(3, 10, 1);
+        let mut ix = AncestorIndex::new(3, 10, false, 1);
         let mut counter = 0;
 
         ix.insert_sequence_node(

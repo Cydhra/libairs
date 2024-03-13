@@ -61,7 +61,7 @@ fn main() {
         .export_ancestors(&target_file)
         .expect("failed to export ancestors");
 
-    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20, false, 1);
     ancestor_matcher.match_ancestors();
 
     let tree_sequence = ancestor_matcher.get_tree_sequence();

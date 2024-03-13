@@ -30,7 +30,7 @@ mod tests {
         let ag = AncestorGenerator::from_variant_data(variant_data);
         let ancestors = ag.generate_ancestors();
         let ancestors_copy = ancestors.deref().clone();
-        let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+        let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20, false, 1);
         ancestor_matcher.match_ancestors();
         let ts = ancestor_matcher.get_tree_sequence().nodes;
 
@@ -87,7 +87,7 @@ mod tests {
         let ag = AncestorGenerator::from_variant_data(variant_data);
         let ancestors = ag.generate_ancestors();
         let ancestors_copy = ancestors.deref().clone();
-        let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+        let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20, false, 1);
         ancestor_matcher.match_ancestors();
         let ts = ancestor_matcher.get_tree_sequence().nodes;
 

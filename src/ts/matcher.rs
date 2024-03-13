@@ -17,13 +17,25 @@ pub struct ViterbiMatcher {
     partial_tree_sequence: PartialTreeSequence,
     recombination_prob: f64,
     mutation_prob: f64,
+    use_recompression_threshold: bool,
+    inverse_recompression_threshold: usize,
 }
 
 impl ViterbiMatcher {
     /// Create a new matcher for the given ancestral sequences
-    pub fn new(ancestors: AncestorArray, recombination_prob: f64, mutation_prob: f64) -> Self {
-        let ancestor_iterator =
-            AncestorIndex::new(ancestors.len(), ancestors.get_num_variants(), 40);
+    pub fn new(
+        ancestors: AncestorArray,
+        recombination_prob: f64,
+        mutation_prob: f64,
+        use_recompression_threshold: bool,
+        inverse_recompression_threshold: usize,
+    ) -> Self {
+        let ancestor_iterator = AncestorIndex::new(
+            ancestors.len(),
+            ancestors.get_num_variants(),
+            use_recompression_threshold,
+            inverse_recompression_threshold,
+        );
         let ancestor_count = ancestors.len();
         Self {
             ancestors,
@@ -31,6 +43,8 @@ impl ViterbiMatcher {
             partial_tree_sequence: PartialTreeSequence::with_capacity(ancestor_count),
             recombination_prob,
             mutation_prob,
+            use_recompression_threshold,
+            inverse_recompression_threshold,
         }
     }
 

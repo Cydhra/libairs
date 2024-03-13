@@ -26,7 +26,7 @@ pub fn generate_ancestors(ag: AncestorGenerator) -> AncestorArray {
 
 #[allow(dead_code)]
 pub fn match_ancestors(ancestors: AncestorArray) -> Vec<TreeSequenceNode> {
-    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20);
+    let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20, false, 1);
     ancestor_matcher.match_ancestors();
     ancestor_matcher.get_tree_sequence().nodes
 }
