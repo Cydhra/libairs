@@ -3,9 +3,6 @@ use std::io;
 use std::io::Write;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 
-use rayon::iter::ParallelIterator;
-use rayon::prelude::IntoParallelRefIterator;
-
 pub use ancestor_array::AncestorArray;
 pub use generator::AncestorGenerator;
 

@@ -43,7 +43,6 @@ impl VariantData {
 
         SampleData {
             samples,
-            positions: self.positions.clone(),
             sequence_length: self.sequence_length,
         }
     }
@@ -124,7 +123,6 @@ impl Index<Range<VariantIndex>> for VariantData {
 /// A collection of DNA sequence samples generated from variant data.
 pub struct SampleData {
     samples: Vec<VariantSequence>,
-    positions: Vec<SequencePosition>,
     sequence_length: SequencePosition,
 }
 
@@ -146,17 +144,6 @@ impl SampleData {
     /// Get the number of samples in the collection
     pub fn len(&self) -> usize {
         self.samples.len()
-    }
-
-    /// Convert a variant index to a sequence position
-    pub(crate) fn variant_index_to_sequence_pos(&self, index: VariantIndex) -> SequencePosition {
-        if index.0 == 0 {
-            SequencePosition::from_usize(0)
-        } else if index.0 == self.positions.len() {
-            self.sequence_length
-        } else {
-            self.positions[index.0]
-        }
     }
 }
 

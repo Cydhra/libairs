@@ -426,9 +426,6 @@ pub(crate) struct MarginalTree<'o> {
     /// Start index of the current iteration
     start: VariantIndex,
 
-    /// Length of the sequence processed by the current tree
-    current_sequence_length: usize,
-
     /// Whether to use the recompression threshold to avoid recompressing when only a few nodes are
     /// active. If this is false, the algorithm will recompress in every iteration, regardless of
     /// efficacy.
@@ -487,7 +484,6 @@ impl<'o> MarginalTree<'o> {
             last_compressed,
             limit_nodes,
             start,
-            current_sequence_length: ancestor_length,
             use_recompression_threshold,
             inv_recompression_threshold,
         };
@@ -573,27 +569,6 @@ impl<'o> MarginalTree<'o> {
                 true
             }
         });
-    }
-
-    /// Recompress a node into its parent node. The method assumes that the node has the same
-    /// likelihood as its parent, otherwise recompression is a logical error in Viterbi.
-    ///
-    /// # Parameters
-    /// - `node`: The node to recompress
-    /// - `parent`: The parent of the node
-    /// - `site_index`: The index of the current site relative to the beginning of the candidate.
-    fn recompress_node(&mut self, node: Ancestor, parent: Ancestor, site_index: usize) {
-        debug_assert!(self.likelihoods[node.0] == self.likelihoods[parent.0]);
-        debug_assert!(self.is_compressed[node.0] == false);
-        debug_assert!(self.is_compressed[parent.0] == false);
-        debug_assert!(node.0 != 0, "Root node cannot be compressed");
-
-        self.active_nodes.retain(|&n| n != node);
-        // store the first site where the node is compressed, so the next one
-        self.last_compressed[node.0] = site_index + 1;
-        self.is_compressed[node.0] = true;
-
-        self.update_subtree(node, Some(node), Some(parent));
     }
 
     /// Search the parent of the given node and update the uncompressed_tree_parents array, the is_compressed array
@@ -895,8 +870,9 @@ impl<'o> MarginalTree<'o> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::hint::black_box;
+
+    use super::*;
 
     fn find_uncompressed_parent(tree: &MarginalTree, node: Ancestor) -> Option<Ancestor> {
         let mut parent = tree.parents[node.0];
