@@ -3,6 +3,9 @@ use crate::ts::ancestor_iterator::AncestorIndex;
 use crate::ts::partial_sequence::{PartialSequenceEdge, PartialTreeSequence};
 use crate::ts::tree_sequence::TreeSequence;
 use crate::variants::VariantIndex;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::ParallelIterator;
+use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
 use std::vec;
 
 /// A matcher runs the viterbi algorithm for a set of sequences.
@@ -170,7 +173,8 @@ impl ViterbiMatcher {
     /// within the array.
     pub fn match_ancestors(&mut self) {
         // TODO make this configurable
-        let num_threads = 1usize;
+        let num_threads = std::thread::available_parallelism()
+            .expect("could not determine number of available threads");
 
         let mut ancestor_iterators = vec![
             AncestorIndex::new(
@@ -193,21 +197,61 @@ impl ViterbiMatcher {
             vec![],
         );
 
-        for (ancestor_index, ancestor) in self.ancestors.iter().skip(1) {
-            let mut num_ancestors = 0;
+        let mut current_ancestor_index = 1;
+        for chunk in self.ancestors.as_slice()[current_ancestor_index..].chunks(num_threads.into())
+        {
+            debug_assert!(chunk.len() <= num_threads.into());
 
-            // TODO precalculate this
-            for (_, old_ancestor) in self.ancestors.iter().take(ancestor_index.0) {
-                if old_ancestor.relative_age() > ancestor.relative_age() {
-                    // TODO we can perform an overlap check here
-                    num_ancestors += 1;
-                }
+            let ancestor_range = current_ancestor_index..current_ancestor_index + chunk.len();
+
+            // prepare the iterators for the chunk by adding the start and end of unmatched ancestors
+            // to the iterator, so that the marginal trees are initialized correctly with free nodes
+            for ancestor_id in ancestor_range.clone() {
+                let ancestor_id = Ancestor(ancestor_id);
+
+                let (start, end) = (
+                    self.ancestors[ancestor_id].start(),
+                    self.ancestors[ancestor_id].end(),
+                );
+                ancestor_iterators.iter_mut().for_each(|iterator| {
+                    iterator.insert_free_node(ancestor_id, start, end);
+                });
             }
 
-            let (edges, mutations) =
-                self.find_copy_path(&mut ancestor_iterators[0], ancestor, num_ancestors);
-            ancestor_iterators[0].insert_sequence_node(ancestor_index, &edges, &mutations);
-            self.partial_tree_sequence.push(edges, mutations);
+            let mut results = chunk
+                .par_iter()
+                .zip(ancestor_range)
+                .zip(ancestor_iterators.par_iter_mut())
+                .map(|((ancestor, ancestor_index), ancestor_iterator)| {
+                    let mut num_ancestors = 0;
+
+                    // TODO precalculate this
+                    for (_, old_ancestor) in self.ancestors.iter().take(ancestor_index) {
+                        if old_ancestor.relative_age() > ancestor.relative_age() {
+                            // TODO we can perform an overlap check here
+                            num_ancestors += 1;
+                        }
+                    }
+
+                    (
+                        ancestor_index,
+                        self.find_copy_path(ancestor_iterator, ancestor, num_ancestors),
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            // increase the index start for the next chunk
+            debug_assert!(results.len() == chunk.len());
+            current_ancestor_index += results.len();
+
+            // insert the results into the partial tree sequence and the iterators
+            results.sort_by(|(a, _), (b, _)| a.cmp(b));
+            for (ancestor_index, (edges, mutations)) in results {
+                ancestor_iterators.iter_mut().for_each(|iterator| {
+                    iterator.insert_sequence_node(Ancestor(ancestor_index), &edges, &mutations);
+                });
+                self.partial_tree_sequence.push(edges, mutations);
+            }
         }
     }
 
