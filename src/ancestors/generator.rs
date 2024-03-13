@@ -1,11 +1,16 @@
-use crate::ancestors::{AncestorArray, AncestralSequence, ANCESTRAL_STATE, DERIVED_STATE};
-use crate::variants::{VariantData, VariantIndex, VariantSite};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::io::Write;
 use std::path::Path;
 use std::{io, mem};
+
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
+use rayon::slice::ParallelSliceMut;
 use twox_hash::XxHash64;
+
+use crate::ancestors::{AncestorArray, AncestralSequence, ANCESTRAL_STATE, DERIVED_STATE};
+use crate::variants::{VariantData, VariantIndex, VariantSite};
 
 /// Generates ancestral sequences for a given set of variant sites. The ancestral sequences are
 /// generated using heuristic methods that use a small number of variant sites as focal sites and
@@ -319,7 +324,7 @@ impl AncestorGenerator {
 
         // TODO make the parallelization optional (par_iter)
         let mut ancestors: Vec<_> = focal_sites
-            .iter()
+            .par_iter()
             .map(|focal_sites| self.generate_ancestor(focal_sites))
             .collect();
 
@@ -330,7 +335,7 @@ impl AncestorGenerator {
         ancestors.push(ancestral_state);
 
         // TODO parallel sort ancestors by age (par_sort_unstable_by)
-        ancestors.sort_unstable_by(|a, b| {
+        ancestors.par_sort_unstable_by(|a, b| {
             a.relative_age()
                 .partial_cmp(&b.relative_age())
                 .unwrap()
@@ -382,9 +387,10 @@ impl AncestorGenerator {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::ancestors::Ancestor;
     use crate::variants::VariantDataBuilder;
+
+    use super::*;
 
     #[test]
     fn compute_trivial_ancestors() {
