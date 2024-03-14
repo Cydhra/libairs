@@ -6,21 +6,41 @@ use crate::ancestors::Ancestor;
 use crate::ts::partial_sequence::PartialSequenceEdge;
 use crate::variants::VariantIndex;
 
+/// A DNA sequence site visited during the viterbi algorithm.
+/// Consists of a [`VariantIndex`] and a mutable reference to the marginal tree at that site.
 pub(crate) type Site<'a, 'o> = (VariantIndex, &'a mut MarginalTree<'o>);
 
-/// A helper structure for the Viterbi algorithm that helps iterating through the sites, updating
+/// A helper structure for the Viterbi algorithm that helps to iterate through the sites, updating
 /// the marginal tree at the currently visited site and helping with tree compression.
-/// The iterator only produces indices into the ancestor sequence structure, it does not hold the
+/// The iterator only produces indices into the ancestor array and sequences, it does not hold the
 /// actual ancestors.
 ///
 /// Whenever new tree edges are calculated, they can be inserted into the iterator so the tree
 /// compression improves for future iterations.
+///
+/// To insert nodes that have no edges yet, call [`AncestorIndex::insert_free_node`]. This will
+/// make the ancestor available during Viterbi without compressing it into the tree.
+///
+/// To upgrade nodes with edges (enabling tree compression during the Viterbi algorithm), call
+/// [`AncestorIndex::insert_sequence_node`].
+///
+/// The iterator will start at the provided start point and iterate through all sites,
+/// updating the marginal tree for each site and then calling a consumer function
+/// with the [`VariantIndex`] and the [`MarginalTree`] (see: [`Site`])
 #[derive(Clone)]
 pub(crate) struct AncestorIndex {
+    /// A sorted set containing all tree-sequence events:
+    /// - Start of a new tree node
+    /// - Change of parent of a tree node
+    /// - End of a tree node
     edge_index: BTreeSet<SequenceEvent>,
-    num_nodes: usize, // number of nodes in the tree sequence. All nodes with an index >= this
-    // value are not part of the tree sequence yet, and are thus free nodes.
-    // The root node is always part of the tree, so this value is at least 1.
+
+    /// The number of nodes in the tree sequence.
+    /// This number is the maximum amount of nodes that have likelihoods during the Viterbi
+    /// algorithm.
+    /// The actual iterator can be limited to a smaller number of nodes.
+    /// Not all nodes included in this number necessarily have edges in the tree sequence.
+    num_nodes: usize,
 
     // the following are pre-allocated arrays that are used to store the state of the marginal tree
     /// The actual parents of the tree nodes. `None` for free nodes and the root, parents might be
@@ -70,7 +90,19 @@ pub(crate) struct AncestorIndex {
 }
 
 impl AncestorIndex {
-    /// Create a new empty ancestor iterator
+    /// Create a new empty ancestor iterator.
+    ///
+    /// # Parameters
+    /// - `max_nodes` the maximum number of tree nodes supported by the iterator. Memory allocations
+    /// will orient themselves around this number.
+    /// - `variant_count` the number of variants in the genome sequence
+    /// - `use_recompression_threshold` whether to use the recompression threshold to avoid
+    /// recompressing when only a few nodes are active. If this is false, the algorithm will
+    /// recompress in every iteration, regardless of efficacy.
+    /// - `inv_recompression_threshold` the inverse recompression threshold. The iterator will
+    /// attempt to recompress the marginal tree when more than `1/inv_recompression_threshold * num_nodes`
+    /// nodes of the marginal tree are active. If `use_recompression_threshold` is false, this
+    /// parameter is ignored.
     pub(crate) fn new(
         max_nodes: usize,
         variant_count: usize,
@@ -98,6 +130,23 @@ impl AncestorIndex {
         }
     }
 
+    /// Insert a free node into the iterator. This node will be available during the Viterbi
+    /// algorithm, but it will not be compressed into the tree (since it hasn't been matched against
+    /// the tree sequence yet).
+    ///
+    /// The nodes must be inserted in order of increasing index.
+    ///
+    /// A free node can be upgraded to a sequence node by calling [`AncestorIndex::insert_sequence_node`].
+    /// Upgrading does not need to be done in order.
+    ///
+    /// # Parameters
+    /// - `node`: The tree node that will be inserted into the tree sequence
+    /// - `start`: The index of the first variant site of its ancestral sequence. The node will
+    /// not participate in the Viterbi algorithm before this site.
+    /// - `end`: The index of the last variant site of its ancestral sequence.
+    ///
+    /// # Panics
+    /// Panics if the given tree node index is not the next index in the sequence.
     pub(crate) fn insert_free_node(
         &mut self,
         node: Ancestor,
@@ -127,7 +176,10 @@ impl AncestorIndex {
 
     /// Insert a tree sequence node into the partial tree sequence, which will be exploited by the
     /// iterator to compress trees.
-    /// The nodes must be inserted in order of increasing index.
+    /// Alternatively, if the node already exists and has no edges in the tree sequence
+    /// (i.e. is a free node), it will be upgraded into a tree node.
+    ///
+    /// The nodes must be inserted in order of increasing index. This does not apply to upgrading.
     ///
     /// # Parameters
     /// - `tree_node`: The tree node handle that will be inserted into the tree sequence
@@ -135,7 +187,8 @@ impl AncestorIndex {
     /// - `mutations`: The mutations that are associated with the tree node
     ///
     /// # Panics
-    /// Panics if the given tree node index is not the next index in the sequence.
+    /// Panics, if the given tree node index is not already a free node and is not the next index
+    /// in the sequence.
     pub(crate) fn insert_sequence_node(
         &mut self,
         tree_node: Ancestor,
@@ -165,7 +218,7 @@ impl AncestorIndex {
             });
             assert!(
                 success,
-                "a tree node was inserted that had no free start event associated with it"
+                "attempted to upgrade a node that had no free start event associated with it"
             );
         }
 
@@ -203,7 +256,7 @@ impl AncestorIndex {
     /// Iterate through the variant sites of the ancestral tree sequence.
     /// The iterator will start at the provided start point and iterate through all sites
     /// until the given end index (exclusive).
-    /// It provides the marginal tree for each site.
+    /// It provides the [`MarginalTree`] for each site.
     /// If multiple sites have the same marginal tree, it is provided multiple times.
     ///
     /// # Parameters
@@ -252,8 +305,11 @@ impl AncestorIndex {
 }
 
 /// Borrowed iterator through the partial tree sequence held by an [`AncestorIndex`].
-/// Not an actual implementation of IterMut, because it borrows the same marginal tree for each site
+/// Not an actual implementation of [`std::iter::IterMut`], because it borrows the same marginal tree for each site
 /// mutably, so we need to make sure the reference cannot escape the iterator.
+///
+/// This means this struct does not actually implement Iterator traits, but offers a single method
+/// [`PartialTreeSequenceIterator::for_each`], which consumers have to call to process the tree sequence.
 pub(crate) struct PartialTreeSequenceIterator<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> {
     marginal_tree: MarginalTree<'o>,
     start: VariantIndex,
