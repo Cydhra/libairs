@@ -66,12 +66,6 @@ impl VariantData {
             .map(|(i, s)| (VariantIndex(i), s))
     }
 
-    /// Get the array that maps variant indices to sequence positions.
-    /// TODO: maybe it's unnecessary to expose this here
-    pub fn variant_positions(&self) -> &[SequencePosition] {
-        &self.positions
-    }
-
     /// Get the sequence length of the genome this variant data is about. It is not the length of the
     /// variant site vector, but the genome length.
     ///
