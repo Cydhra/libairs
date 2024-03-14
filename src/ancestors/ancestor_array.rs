@@ -1,11 +1,12 @@
-use crate::ancestors::{Ancestor, AncestralSequence};
-use crate::variants::VariantIndex;
-use crate::variants::{SequencePosition, VariantData};
 use std::fs::File;
 use std::io;
 use std::io::Write;
 use std::ops::{Deref, Index};
 use std::path::Path;
+
+use crate::ancestors::{Ancestor, AncestralSequence};
+use crate::variants::{SampleData, VariantIndex};
+use crate::variants::{SequencePosition, VariantData};
 
 /// This is a helper struct for the Viterbi algorithm that manages the ancestral sequences.
 #[derive(Clone)]
@@ -48,6 +49,11 @@ impl AncestorArray {
     /// Convert a variant index to a sequence position
     pub(crate) fn variant_index_to_sequence_pos(&self, index: VariantIndex) -> SequencePosition {
         self.variant_data.variant_index_to_sequence_pos(index)
+    }
+
+    /// Obtain the DNA sample data that makes up the variant data
+    pub fn generate_sample_data(&self) -> SampleData {
+        self.variant_data.into_samples()
     }
 
     /// Export the ancestor array in a TSV format that can be read by the test suite
