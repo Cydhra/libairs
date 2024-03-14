@@ -307,6 +307,27 @@ impl ViterbiMatcher {
         }
     }
 
+    /// Calls [`do_match_ancestors`] and [`do_match_samples`] in sequence, without requiring
+    /// additional allocations in between.
+    /// This is more efficient than calling both individually.
+    pub fn infer_tree_sequence(&mut self) {
+        // TODO make this configurable
+        let num_threads = 4usize;
+
+        let mut ancestor_iterators = vec![
+            AncestorIndex::new(
+                self.ancestors.len(),
+                self.ancestors.get_num_variants(),
+                self.use_recompression_threshold,
+                self.inverse_recompression_threshold,
+            );
+            num_threads.into()
+        ];
+
+        self.do_match_ancestors(&mut ancestor_iterators, num_threads.into());
+        self.do_match_samples(&mut ancestor_iterators);
+    }
+
     /// Finalize the tree sequence.
     pub fn get_tree_sequence(&self) -> TreeSequence {
         self.partial_tree_sequence.as_tree_sequence(&self.ancestors)
