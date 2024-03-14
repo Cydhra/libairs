@@ -21,6 +21,11 @@ impl VariantSequence {
     pub fn from_ancestral_state(len: usize) -> Self {
         Self(vec![0; len])
     }
+
+    /// Create a new [`VariantSequence`] from a vector of mutation states
+    pub fn from_vec(vec: Vec<MutationState>) -> Self {
+        Self(vec)
+    }
 }
 
 /// Decay into the underlying [`Vec`]
@@ -35,6 +40,20 @@ impl Deref for VariantSequence {
 impl DerefMut for VariantSequence {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+impl Index<usize> for VariantSequence {
+    type Output = MutationState;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl IndexMut<usize> for VariantSequence {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.0[index]
     }
 }
 

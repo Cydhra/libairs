@@ -10,7 +10,7 @@ use rayon::slice::ParallelSliceMut;
 use twox_hash::XxHash64;
 
 use crate::ancestors::{AncestorArray, AncestralSequence, ANCESTRAL_STATE, DERIVED_STATE};
-use crate::variants::{VariantData, VariantIndex, VariantSite};
+use crate::variants::{VariantData, VariantIndex, VariantSequence, VariantSite};
 
 /// Generates ancestral sequences for a given set of variant sites. The ancestral sequences are
 /// generated using heuristic methods that use a small number of variant sites as focal sites and
@@ -28,14 +28,14 @@ impl AncestorGenerator {
 
     /// For a given set of focal sites, compute an ancestor that uses those focal sites. The focal
     /// site is given by a sorted set of indices into the set of variant sites.
-    fn generate_ancestor(&self, focal_sites: &[VariantIndex]) -> AncestralSequence {
+    fn generate_ancestor(
+        &self,
+        buffer_sequence: &mut VariantSequence,
+        focal_sites: &[VariantIndex],
+    ) -> AncestralSequence {
         debug_assert!(!focal_sites.is_empty());
         debug_assert!(focal_sites.windows(2).all(|sites| sites[0] < sites[1]));
 
-        let mut ancestral_sequence = AncestralSequence::from_ancestral_state(
-            self.variant_data.len(),
-            self.variant_data[focal_sites[0]].relative_age,
-        );
         let sites = self.variant_data.len();
 
         // extend ancestor to the left of the first focal site
@@ -47,7 +47,7 @@ impl AncestorGenerator {
                 .rev()
                 .skip(sites - focal_sites[0].unwrap()),
             focal_sites[0],
-            &mut ancestral_sequence,
+            buffer_sequence,
             true,
         );
 
@@ -63,7 +63,7 @@ impl AncestorGenerator {
                     .skip(focal_site_i.unwrap() + 1)
                     .take(focal_site_j.unwrap() - focal_site_i.unwrap() - 1),
                 focal_site_i,
-                &mut ancestral_sequence,
+                buffer_sequence,
                 false,
             );
         }
@@ -77,14 +77,17 @@ impl AncestorGenerator {
                 .enumerate()
                 .skip(last_focal_site.unwrap() + 1),
             last_focal_site,
-            &mut ancestral_sequence,
+            buffer_sequence,
             true,
         );
 
-        // TODO truncate ancestral sequence to save memory. this should be implemented using functionality from BitVec
-        ancestral_sequence.focal_sites = focal_sites.iter().copied().collect();
-        ancestral_sequence.start = focal_sites[0] - modified_left;
-        ancestral_sequence.end = last_focal_site + modified_right + 1;
+        let ancestral_sequence = AncestralSequence::copy_from(
+            buffer_sequence,
+            focal_sites[0] - modified_left,
+            last_focal_site + modified_right + 1,
+            focal_sites.iter().copied().collect(),
+            self.variant_data[focal_sites[0]].relative_age,
+        );
 
         ancestral_sequence
     }
@@ -109,7 +112,7 @@ impl AncestorGenerator {
         &self,
         site_iter: &mut dyn Iterator<Item = (usize, &VariantSite)>,
         focal_site: VariantIndex,
-        ancestral_sequence: &mut AncestralSequence,
+        ancestral_sequence: &mut VariantSequence,
         termination_condition: bool,
     ) -> usize {
         let mut modified_sites = 0;
@@ -325,7 +328,10 @@ impl AncestorGenerator {
         // TODO make the parallelization optional (par_iter)
         let mut ancestors: Vec<_> = focal_sites
             .par_iter()
-            .map(|focal_sites| self.generate_ancestor(focal_sites))
+            .map_with(
+                VariantSequence::from_ancestral_state(self.variant_data.len()),
+                |buffer, focal_sites| self.generate_ancestor(buffer, focal_sites),
+            )
             .collect();
 
         // artificially add the root ancestor

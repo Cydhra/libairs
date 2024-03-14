@@ -39,6 +39,23 @@ impl AncestralSequence {
         }
     }
 
+    /// Create a new ancestral sequence with state copied from another [`VariantSequence`].
+    fn copy_from(
+        variant_sequence: &VariantSequence,
+        start: VariantIndex,
+        end: VariantIndex,
+        focal_sites: Vec<VariantIndex>,
+        age: f64,
+    ) -> Self {
+        AncestralSequence {
+            state: VariantSequence::from_vec(variant_sequence[start..end].to_vec()),
+            focal_sites,
+            start,
+            end,
+            age,
+        }
+    }
+
     /// Get the haplotype sequence for the ancestral sequence. This sequence starts at the first
     /// known site and ends at the last known site. Where this sequence is located in the genome
     /// is defined by [`start`] and [`end`] respectively.
@@ -48,7 +65,7 @@ impl AncestralSequence {
     /// [`start`]: Self::start
     /// [`end`]: Self::end
     pub fn haplotype(&self) -> &[u8] {
-        &self.state[self.start..self.end]
+        &self.state
     }
 
     /// Get an enumerated iterator over the haplotype sequence. This sequence starts at the first
@@ -60,10 +77,8 @@ impl AncestralSequence {
     ) -> impl Iterator<Item = (VariantIndex, &'_ u8)> + DoubleEndedIterator + '_ {
         self.state
             .iter()
-            .enumerate()
-            .skip(self.start.0)
-            .take(self.start.get_variant_distance(self.end))
-            .map(|(idx, b)| (VariantIndex(idx), b))
+            .zip(self.start.0..self.end.0)
+            .map(|(bit, idx)| (VariantIndex(idx), bit))
     }
 
     /// Get the position of the first known site in the genome (inclusive), regarding the genome's variant site
@@ -100,7 +115,7 @@ impl AncestralSequence {
             focal_sites = self.focal_sites.iter().map(|s| s.0).collect::<Vec<_>>(),
         ))?;
 
-        for b in &self.state[self.start..self.end] {
+        for b in self.state.deref().iter() {
             writer.write_fmt(format_args!("{}", b))?;
         }
 
@@ -140,13 +155,13 @@ impl Index<usize> for AncestralSequence {
     type Output = u8;
 
     fn index(&self, index: usize) -> &Self::Output {
-        &self.state.deref()[index]
+        &self.state.deref()[index - self.start.0]
     }
 }
 
 impl IndexMut<usize> for AncestralSequence {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.state.deref_mut()[index]
+        &mut self.state.deref_mut()[index - self.start.0]
     }
 }
 
@@ -154,13 +169,13 @@ impl Index<VariantIndex> for AncestralSequence {
     type Output = u8;
 
     fn index(&self, index: VariantIndex) -> &Self::Output {
-        &self.state[index]
+        &self.state[index - self.start]
     }
 }
 
 impl IndexMut<VariantIndex> for AncestralSequence {
     fn index_mut(&mut self, index: VariantIndex) -> &mut Self::Output {
-        &mut self.state[index]
+        &mut self.state[index - self.start]
     }
 }
 
