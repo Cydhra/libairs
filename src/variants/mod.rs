@@ -47,7 +47,6 @@ pub(crate) struct VariantIndex(pub(crate) usize);
 impl VariantIndex {
     /// Create a new variant index from a raw index. Only for testing purposes, actual module code shouldn't work
     /// with raw values
-    #[cfg(test)]
     pub(crate) fn from_usize(index: usize) -> Self {
         Self(index)
     }

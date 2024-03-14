@@ -366,7 +366,7 @@ impl AncestorGenerator {
             .enumerate()
         {
             for (i, variant) in genotypes.iter().enumerate() {
-                samples[i][site_index] = *variant;
+                samples[i][VariantIndex::from_usize(site_index)] = *variant;
             }
         }
 

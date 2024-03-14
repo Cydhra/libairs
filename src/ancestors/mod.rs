@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::io;
 use std::io::Write;
-use std::ops::{Deref, DerefMut, Index, IndexMut};
+use std::ops::{Deref, Index, IndexMut};
 
 pub use ancestor_array::AncestorArray;
 pub use generator::AncestorGenerator;
@@ -147,21 +147,6 @@ impl Debug for AncestralSequence {
         }
         f.write_str(" ] }")?;
         Ok(())
-    }
-}
-
-// TODO can we get rid of this implementation to force the new-type?
-impl Index<usize> for AncestralSequence {
-    type Output = u8;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.state.deref()[index - self.start.0]
-    }
-}
-
-impl IndexMut<usize> for AncestralSequence {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.state.deref_mut()[index - self.start.0]
     }
 }
 
