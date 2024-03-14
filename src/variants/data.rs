@@ -1,4 +1,5 @@
 use super::{SequencePosition, VariantIndex, VariantSequence, VariantSite};
+use crate::ancestors::AncestralSequence;
 use std::ops::{Index, Range};
 
 /// Holds variant data and associated metadata.
@@ -42,7 +43,10 @@ impl VariantData {
         }
 
         SampleData {
-            samples,
+            samples: samples
+                .into_iter()
+                .map(|v| AncestralSequence::new_sample(v))
+                .collect(),
             sequence_length: self.sequence_length,
         }
     }
@@ -117,7 +121,7 @@ impl Index<Range<VariantIndex>> for VariantData {
 /// A collection of DNA sequence samples generated from variant data.
 #[derive(Clone)]
 pub struct SampleData {
-    samples: Vec<VariantSequence>,
+    samples: Vec<AncestralSequence>,
     sequence_length: SequencePosition,
 }
 
@@ -132,8 +136,13 @@ impl SampleData {
     }
 
     /// Iterate over the sample sequences in this instance
-    pub fn iter<'s>(&'s self) -> impl Iterator<Item = &VariantSequence> + 's {
+    pub fn iter<'s>(&'s self) -> impl Iterator<Item = &AncestralSequence> + 's {
         self.samples.iter()
+    }
+
+    /// Expose the sample data as a slice
+    pub fn as_slice(&self) -> &[AncestralSequence] {
+        &self.samples
     }
 
     /// Get the number of samples in the collection
@@ -144,7 +153,7 @@ impl SampleData {
 
 /// Turn the sample data into an iterator over its sample sequences
 impl IntoIterator for SampleData {
-    type Item = VariantSequence;
+    type Item = AncestralSequence;
     type IntoIter = <Vec<Self::Item> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {

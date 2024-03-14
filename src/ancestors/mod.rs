@@ -56,6 +56,20 @@ impl AncestralSequence {
         }
     }
 
+    /// Create an ancestral sequence that contains sample data from an actual input DNA sequence.
+    /// The age will be 0, as this sequence is not inferred from any other sequence.
+    /// The start and end indices are set to the full length of the sequence.
+    pub(crate) fn new_sample(sample_sequence: VariantSequence) -> Self {
+        let sequence_len = sample_sequence.len();
+        AncestralSequence {
+            state: sample_sequence,
+            focal_sites: Vec::new(),
+            start: VariantIndex(0),
+            end: VariantIndex(sequence_len),
+            age: 0.0,
+        }
+    }
+
     /// Get the haplotype sequence for the ancestral sequence. This sequence starts at the first
     /// known site and ends at the last known site. Where this sequence is located in the genome
     /// is defined by [`start`] and [`end`] respectively.

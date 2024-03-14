@@ -1,12 +1,14 @@
+use std::vec;
+
+use rayon::iter::ParallelIterator;
+use rayon::iter::{IndexedParallelIterator, ParallelBridge};
+use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
+
 use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence};
 use crate::ts::ancestor_iterator::AncestorIndex;
 use crate::ts::partial_sequence::{PartialSequenceEdge, PartialTreeSequence};
 use crate::ts::tree_sequence::TreeSequence;
 use crate::variants::VariantIndex;
-use rayon::iter::IndexedParallelIterator;
-use rayon::iter::ParallelIterator;
-use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
-use std::vec;
 
 /// A matcher runs the viterbi algorithm for a set of sequences.
 /// It will generate a tree sequence from an array of ancestral sequences and can then match
@@ -173,8 +175,7 @@ impl ViterbiMatcher {
     /// within the array.
     pub fn match_ancestors(&mut self) {
         // TODO make this configurable
-        let num_threads = std::thread::available_parallelism()
-            .expect("could not determine number of available threads");
+        let num_threads = 4usize;
 
         let mut ancestor_iterators = vec![
             AncestorIndex::new(
@@ -186,6 +187,10 @@ impl ViterbiMatcher {
             num_threads.into()
         ];
 
+        self.do_match_ancestors(&mut ancestor_iterators, num_threads.into())
+    }
+
+    fn do_match_ancestors(&mut self, ancestor_iterators: &mut [AncestorIndex], num_threads: usize) {
         // edges for root node
         let root = Ancestor(0);
         self.partial_tree_sequence.push(
@@ -198,9 +203,8 @@ impl ViterbiMatcher {
         );
 
         let mut current_ancestor_index = 1;
-        for chunk in self.ancestors.as_slice()[current_ancestor_index..].chunks(num_threads.into())
-        {
-            debug_assert!(chunk.len() <= num_threads.into());
+        for chunk in self.ancestors.as_slice()[current_ancestor_index..].chunks(num_threads) {
+            debug_assert!(chunk.len() <= num_threads);
 
             let ancestor_range = current_ancestor_index..current_ancestor_index + chunk.len();
 
@@ -257,27 +261,49 @@ impl ViterbiMatcher {
 
     /// Insert a set of samples into an ancestral tree sequence. The samples will be matched
     /// against the existing sequence, but not against each other.
-    pub fn match_samples(&mut self, samples: &[AncestralSequence]) {
-        // TODO change this method to take the iterators as a parameter, so we dont need to
-        //  reallocate them when we match ancestors and samples in one go anyway
-
-        // TODO the iterators are empty, matching samples will fail!
-        let num_threads = 1usize;
+    pub fn match_samples(&mut self) {
+        let num_threads = 4usize;
 
         let mut ancestor_iterators = vec![
-            AncestorIndex::new(
+            AncestorIndex::from_tree_sequence(
                 self.ancestors.len(),
                 self.ancestors.get_num_variants(),
                 self.use_recompression_threshold,
                 self.inverse_recompression_threshold,
+                &self.partial_tree_sequence,
             );
             num_threads.into()
         ];
 
-        for sample in samples {
-            let (edges, mutations) =
-                self.find_copy_path(&mut ancestor_iterators[0], sample, self.ancestors.len());
-            self.partial_tree_sequence.push(edges, mutations);
+        self.do_match_samples(&mut ancestor_iterators)
+    }
+
+    fn do_match_samples(&mut self, ancestor_iterators: &mut [AncestorIndex]) {
+        let samples = self.ancestors.generate_sample_data();
+        // assign samples to chunk in a way that all samples get assigned and one chunk may get less
+        let samples_per_chunk =
+            (samples.len() + (ancestor_iterators.len() - 1)) / ancestor_iterators.len();
+        let chunks = samples.as_slice().chunks(samples_per_chunk);
+
+        debug_assert!(ancestor_iterators.len() == chunks.len());
+
+        let results = ancestor_iterators
+            .into_iter()
+            .zip(chunks)
+            .par_bridge()
+            .map(|(ancestor_index, samples)| {
+                samples
+                    .into_iter()
+                    .map(|sample| self.find_copy_path(ancestor_index, sample, self.ancestors.len()))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        // insert results into the partial tree sequence and the iterators
+        for results in results {
+            for (edges, mutations) in results {
+                self.partial_tree_sequence.push(edges, mutations);
+            }
         }
     }
 

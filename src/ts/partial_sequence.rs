@@ -38,8 +38,8 @@ impl PartialSequenceEdge {
 /// Newtype over a collection of tree sequence edges with variant index intervals.
 /// Can be converted into a tree sequence.
 pub(crate) struct PartialTreeSequence {
-    edges: Vec<Vec<PartialSequenceEdge>>,
-    mutations: Vec<Vec<VariantIndex>>,
+    pub(super) edges: Vec<Vec<PartialSequenceEdge>>,
+    pub(super) mutations: Vec<Vec<VariantIndex>>,
 }
 
 impl PartialTreeSequence {
