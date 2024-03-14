@@ -34,7 +34,7 @@ impl VariantData {
     pub fn into_samples(&self) -> SampleData {
         // transpose sites into sample sequences
         let mut samples =
-            vec![VariantSequence::from_ancestral_state(self.sites.len()); self.sites.len()];
+            vec![VariantSequence::from_ancestral_state(self.sites.len()); self.num_samples];
         for (i, site) in self.sites.iter().enumerate() {
             for (j, state) in site.genotypes.iter().enumerate() {
                 samples[j][VariantIndex(i)] = *state;
@@ -115,6 +115,7 @@ impl Index<Range<VariantIndex>> for VariantData {
 }
 
 /// A collection of DNA sequence samples generated from variant data.
+#[derive(Clone)]
 pub struct SampleData {
     samples: Vec<VariantSequence>,
     sequence_length: SequencePosition,
