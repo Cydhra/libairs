@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use std::iter::Peekable;
 
 use crate::ancestors::Ancestor;
-use crate::ts::partial_sequence::PartialSequenceEdge;
+use crate::ts::partial_sequence::{PartialSequenceEdge, PartialTreeSequence};
 use crate::variants::VariantIndex;
 
 /// A DNA sequence site visited during the viterbi algorithm.
@@ -128,6 +128,48 @@ impl AncestorIndex {
             use_recompression_threshold,
             inv_recompression_threshold,
         }
+    }
+
+    /// Instantiate a new ancestor index and insert up to `max_nodes` nodes from the given tree
+    /// sequence.
+    ///
+    /// # Parameters
+    /// - `max_nodes`: The maximum number of nodes to insert into the iterator. Can be lower or higher
+    /// than the amount of nodes in the `tree_sequence`.
+    /// - `variant_count`: The number of variants in the genome sequence
+    /// - `use_recompression_threshold`: Whether to use the recompression threshold to avoid
+    /// recompressing when only a few nodes are active. If this is false, the algorithm will
+    /// recompress in every iteration, regardless of efficacy.
+    /// - `inv_recompression_threshold`: The inverse recompression threshold. The iterator will
+    /// attempt to recompress the marginal tree when more than `1/inv_recompression_threshold * num_nodes`
+    /// nodes of the marginal tree are active. If `use_recompression_threshold` is false, this
+    /// parameter is ignored.
+    /// - `tree_sequence`: The tree sequence to insert into the iterator
+    pub(crate) fn from_tree_sequence(
+        max_nodes: usize,
+        variant_count: usize,
+        use_recompression_threshold: bool,
+        inv_recompression_threshold: usize,
+        tree_sequence: &PartialTreeSequence,
+    ) -> Self {
+        let mut ancestor_index = Self::new(
+            max_nodes,
+            variant_count,
+            use_recompression_threshold,
+            inv_recompression_threshold,
+        );
+
+        for (node, (edges, mutations)) in tree_sequence
+            .edges
+            .iter()
+            .zip(tree_sequence.mutations.iter())
+            .enumerate()
+            .skip(1)
+        {
+            ancestor_index.insert_sequence_node(Ancestor(node), edges, mutations);
+        }
+
+        ancestor_index
     }
 
     /// Insert a free node into the iterator. This node will be available during the Viterbi
