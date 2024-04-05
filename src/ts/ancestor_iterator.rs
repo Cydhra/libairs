@@ -810,13 +810,16 @@ impl<'o> MarginalTree<'o> {
                     while let Some(child) = queue.pop() {
                         if self.uncompressed_parents[child.0] == Some(node) {
                             self.uncompressed_parents[child.0] = Some(parent);
-                            // insert event that informs traceback that starting from here we are compressed into node instead into the new parent
-                            self.viterbi_events[child.0].push(ViterbiEvent {
-                                kind: ViterbiEventKind::Copy(node),
-                                site: self.start + site_index,
-                            });
 
-                            queue.extend(self.children[child.0].iter().copied());
+                            if self.is_compressed[child.0] {
+                                // insert event that informs traceback that starting from here we are compressed into node instead into the new parent
+                                self.viterbi_events[child.0].push(ViterbiEvent {
+                                    kind: ViterbiEventKind::Copy(node),
+                                    site: self.start + site_index,
+                                });
+
+                                queue.extend(self.children[child.0].iter().copied());
+                            }
                         }
                     }
                     false
@@ -1011,13 +1014,17 @@ impl<'o> MarginalTree<'o> {
         while let Some(node) = queue.pop() {
             if self.uncompressed_parents[node.0] == old_parent {
                 self.uncompressed_parents[node.0] = new_parent;
-                // record event for traceback that starting from here we are compressed into the old parent
-                self.viterbi_events[node.0].push(ViterbiEvent {
-                    kind: ViterbiEventKind::Copy(old_parent.unwrap()),
-                    site: self.start + site_index,
-                });
 
-                queue.extend(self.children[node.0].iter().copied());
+                if self.is_compressed(node) {
+                    // record event for traceback that starting from here we are compressed into the old parent
+                    debug_assert!(self.viterbi_events[node.0].last().is_none() || self.viterbi_events[node.0].last().unwrap().kind != ViterbiEventKind::Copy(old_parent.unwrap()));
+                    self.viterbi_events[node.0].push(ViterbiEvent {
+                        kind: ViterbiEventKind::Copy(old_parent.unwrap()),
+                        site: self.start + site_index - 1,
+                    });
+
+                    queue.extend(self.children[node.0].iter().copied());
+                }
             }
         }
     }
