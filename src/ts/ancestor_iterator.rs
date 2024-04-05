@@ -581,8 +581,8 @@ impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
 
                     let end = match end_cursor {
                         Ok(mut pos) => {
-                            while self.marginal_tree.viterbi_events[ancestor.0].len() > pos + 1
-                                && self.marginal_tree.viterbi_events[ancestor.0][pos + 1].site
+                            while self.marginal_tree.viterbi_events[ancestor.0].len() > pos
+                                && self.marginal_tree.viterbi_events[ancestor.0][pos].site
                                     == event.site
                             {
                                 pos += 1;
@@ -594,10 +594,10 @@ impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
 
                     let start = match start_cursor {
                         Ok(mut pos) => {
-                            while self.marginal_tree.viterbi_events[ancestor.0][pos - 1].site
-                                == start_site
+                            while self.marginal_tree.viterbi_events[ancestor.0].len() > pos &&
+                                self.marginal_tree.viterbi_events[ancestor.0][pos].site == start_site
                             {
-                                pos -= 1;
+                                pos += 1;
                             }
                             pos
                         }
@@ -606,11 +606,11 @@ impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
 
                     self.inner = Some(Box::new(TracebackSequenceIterator {
                         marginal_tree: self.marginal_tree,
-                        start: VariantIndex::from_usize(start),
+                        start: start_site,
                         end: event.site,
-                        current: self.current,
+                        current: event.site,
                         current_ancestor: ancestor,
-                        iter: self.marginal_tree.viterbi_events[ancestor.0][start..=end]
+                        iter: self.marginal_tree.viterbi_events[ancestor.0][start..end]
                             .iter()
                             .rev()
                             .peekable(),

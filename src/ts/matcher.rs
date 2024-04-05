@@ -128,8 +128,7 @@ impl ViterbiMatcher {
         let mut edges: Vec<PartialSequenceEdge> = Vec::new();
         let mut mutations: Vec<VariantIndex> = Vec::new();
 
-        candidate_site_index -= 1;
-        let mut current_ancestor = max_likelihoods[candidate_site_index]
+        let mut current_ancestor = max_likelihoods[candidate_site_index - 1]
             .expect("no max likelihood ancestor found at last site");
         let mut ancestor_coverage_end = candidate.end();
         let mut last_site = candidate.end();
