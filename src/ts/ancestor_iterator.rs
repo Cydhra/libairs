@@ -523,14 +523,16 @@ impl<'o> TracebackSequenceIterator<'o, 'o> {
     pub fn switch_ancestor(&mut self, ancestor: Ancestor) {
         self.current_ancestor = ancestor;
 
+        // find the position BEFORE the current site in the new ancestor,
+        // since we do not want to copy the current site
         let new_cursor = self.marginal_tree.viterbi_events[ancestor.0]
             .binary_search_by(|e| e.site.cmp(&self.current));
         let pos = match new_cursor {
             Ok(mut pos) => {
-                while self.marginal_tree.viterbi_events[ancestor.0].len() > pos + 1
-                    && self.marginal_tree.viterbi_events[ancestor.0][pos + 1].site == self.current
+                while pos > 0
+                    && self.marginal_tree.viterbi_events[ancestor.0][pos - 1].site == self.current
                 {
-                    pos += 1;
+                    pos -= 1;
                 }
                 pos
             }
@@ -541,6 +543,10 @@ impl<'o> TracebackSequenceIterator<'o, 'o> {
             .iter()
             .rev()
             .peekable();
+
+        // println!("Switching to ancestor {} at site {}", ancestor.0, self.current);
+        // println!("Next site is {:?}", self.iter.peek().map(|e| e.site));
+
         self.inner = None;
     }
 }
@@ -569,7 +575,8 @@ impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
 
             match event.kind {
                 ViterbiEventKind::Copy(ancestor) => {
-                    let start_site = if let Some(ViterbiEvent { site, kind }) = self.iter.peek() {
+                    let start_site = if let Some(ViterbiEvent { site, kind: _ }) = self.iter.peek()
+                    {
                         *site
                     } else {
                         self.start
@@ -580,6 +587,8 @@ impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
                     let start_cursor = self.marginal_tree.viterbi_events[ancestor.0]
                         .binary_search_by(|e| e.site.cmp(&start_site));
 
+                    // find the position AFTER the current site in the new ancestor
+                    // since we want to also copy the current site
                     let end = match end_cursor {
                         Ok(mut pos) => {
                             while self.marginal_tree.viterbi_events[ancestor.0].len() > pos
@@ -593,10 +602,13 @@ impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
                         Err(pos) => pos,
                     };
 
+                    // find the position AFTER the start_cursor,
+                    // since we do not want to copy that site
                     let start = match start_cursor {
                         Ok(mut pos) => {
-                            while self.marginal_tree.viterbi_events[ancestor.0].len() > pos &&
-                                self.marginal_tree.viterbi_events[ancestor.0][pos].site == start_site
+                            while self.marginal_tree.viterbi_events[ancestor.0].len() > pos
+                                && self.marginal_tree.viterbi_events[ancestor.0][pos].site
+                                == start_site
                             {
                                 pos += 1;
                             }
@@ -605,6 +617,7 @@ impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
                         Err(pos) => pos,
                     };
 
+                    // println!("Copying from {} to {} ({} to {}) from {}", start, end, start_site, event.site, ancestor.0);
                     self.inner = Some(Box::new(TracebackSequenceIterator {
                         marginal_tree: self.marginal_tree,
                         start: start_site,
@@ -710,6 +723,8 @@ impl<'o> MarginalTree<'o> {
         use_recompression_threshold: bool,
         inv_recompression_threshold: usize,
     ) -> Self {
+        // println!("========================================================");
+        // println!("Creating new marginal tree: {} nodes, {} limit, {} start", num_nodes, limit_nodes, start);
         debug_assert!(num_nodes > 0, "Tree must have at least one node");
 
         // re-initialize vectors into the default state where needed
@@ -911,6 +926,11 @@ impl<'o> MarginalTree<'o> {
             // update the compressed parent. If the parent is compressed, its compressed parent
             // will be used, otherwise the parent itself will be used.
             if self.is_compressed(parent) {
+                debug_assert!(
+                    self.uncompressed_parents[parent.0].is_some(),
+                    "{} has no uncompressed parent",
+                    parent.0
+                );
                 self.uncompressed_parents[child.0] = self.uncompressed_parents[parent.0];
             } else {
                 self.uncompressed_parents[child.0] = Some(parent);
@@ -961,6 +981,7 @@ impl<'o> MarginalTree<'o> {
             // update the compressed parent. If the parent is compressed, its compressed parent
             // will be used, otherwise the parent itself will be used.
             if self.is_compressed(new_parent) {
+                debug_assert!(self.uncompressed_parents[new_parent.0].is_some());
                 self.uncompressed_parents[node.0] = self.uncompressed_parents[new_parent.0];
             } else {
                 self.uncompressed_parents[node.0] = Some(new_parent);
@@ -1017,7 +1038,6 @@ impl<'o> MarginalTree<'o> {
 
                 if self.is_compressed(node) {
                     // record event for traceback that starting from here we are compressed into the old parent
-                    debug_assert!(self.viterbi_events[node.0].last().is_none() || self.viterbi_events[node.0].last().unwrap().kind != ViterbiEventKind::Copy(old_parent.unwrap()));
                     self.viterbi_events[node.0].push(ViterbiEvent {
                         kind: ViterbiEventKind::Copy(old_parent.unwrap()),
                         site: self.start + site_index - 1,
