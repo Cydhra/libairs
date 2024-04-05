@@ -554,6 +554,7 @@ impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
             if element.is_none() {
                 self.inner = None;
             } else {
+                self.current = element.unwrap().site;
                 return element;
             }
         }
@@ -616,7 +617,7 @@ impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
                             .peekable(),
                         inner: None,
                     }));
-                    self.inner.as_mut().unwrap().next()
+                    self.next()
                 }
                 ViterbiEventKind::Decompress => self.next(),
                 _ => element,
