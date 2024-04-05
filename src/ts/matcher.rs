@@ -5,7 +5,7 @@ use rayon::iter::{IndexedParallelIterator, ParallelBridge};
 use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
 
 use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence};
-use crate::ts::ancestor_iterator::AncestorIndex;
+use crate::ts::ancestor_iterator::{AncestorIndex, ViterbiEventKind};
 use crate::ts::partial_sequence::{PartialSequenceEdge, PartialTreeSequence};
 use crate::ts::tree_sequence::TreeSequence;
 use crate::variants::VariantIndex;
@@ -89,14 +89,14 @@ impl ViterbiMatcher {
                 let pt = if prob_no_recomb > prob_recomb {
                     prob_no_recomb
                 } else {
-                    *marginal_tree.recombination_site(ancestor_id, candidate_site_index) = true;
+                    marginal_tree.insert_recombination_event(ancestor_id, site);
                     prob_recomb
                 };
 
                 let pe = if state == ancestral_sequence[site] {
                     rev_mu
                 } else {
-                    *marginal_tree.mutation_site(ancestor_id, candidate_site_index) = true;
+                    marginal_tree.insert_mutation_event(ancestor_id, site);
                     mu
                 };
 
@@ -128,36 +128,44 @@ impl ViterbiMatcher {
         let mut edges: Vec<PartialSequenceEdge> = Vec::new();
         let mut mutations: Vec<VariantIndex> = Vec::new();
 
-        let mut current_ancestor = max_likelihoods[candidate_site_index - 1]
+        candidate_site_index -= 1;
+        let mut current_ancestor = max_likelihoods[candidate_site_index]
             .expect("no max likelihood ancestor found at last site");
         let mut ancestor_coverage_end = candidate.end();
+        let mut last_site = candidate.end();
 
-        for (site, _) in candidate.site_iter().rev() {
-            candidate_site_index -= 1;
+        // iterate through the viterbi events of the current ancestor until we find a recombination
+        // event that coincides with a new most likely ancestor and then switch.
+        let mut viterbi_event_iter = sites.traceback(current_ancestor);
 
-            if sites.mutation_site(current_ancestor, candidate_site_index) {
-                mutations.push(site);
-            }
+        while let Some(event) = viterbi_event_iter.next() {
+            candidate_site_index -= last_site.get_variant_distance(event.site);
+            last_site = event.site;
 
-            if sites.recombination_site(current_ancestor, candidate_site_index)
-                && max_likelihoods[candidate_site_index - 1]
-                    .expect("no max likelihood ancestor found")
-                    != current_ancestor
-            {
-                debug_assert!(self.ancestors[current_ancestor].start() <= site);
-                debug_assert!(self.ancestors[current_ancestor].end() >= site);
+            match event.kind {
+                ViterbiEventKind::Mutation => mutations.push(event.site),
+                ViterbiEventKind::Recombination => {
+                    if max_likelihoods[candidate_site_index - 1]
+                        .expect("no max likelihood ancestor found")
+                        != current_ancestor
+                    {
+                        edges.push(PartialSequenceEdge::new(
+                            event.site,
+                            ancestor_coverage_end,
+                            current_ancestor,
+                        ));
 
-                edges.push(PartialSequenceEdge::new(
-                    site,
-                    ancestor_coverage_end,
-                    current_ancestor,
-                ));
+                        current_ancestor = max_likelihoods[candidate_site_index - 1]
+                            .expect("no max likelihood ancestor found");
+                        ancestor_coverage_end = event.site;
 
-                current_ancestor = max_likelihoods[candidate_site_index - 1]
-                    .expect("no max likelihood ancestor found");
-                ancestor_coverage_end = site;
+                        viterbi_event_iter.switch_ancestor(current_ancestor);
+                    }
+                }
+                _ => unreachable!("unexpected viterbi event kind in find_copy_path"),
             }
         }
+
         edges.push(PartialSequenceEdge::new(
             candidate.start(),
             ancestor_coverage_end,

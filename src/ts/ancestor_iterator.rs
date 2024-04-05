@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use std::iter::Peekable;
+use std::iter::{Peekable, Rev};
+use std::slice::Iter;
 
 use crate::ancestors::Ancestor;
 use crate::ts::partial_sequence::{PartialSequenceEdge, PartialTreeSequence};
@@ -9,6 +10,30 @@ use crate::variants::VariantIndex;
 /// A DNA sequence site visited during the viterbi algorithm.
 /// Consists of a [`VariantIndex`] and a mutable reference to the marginal tree at that site.
 pub(crate) type Site<'a, 'o> = (VariantIndex, &'a mut MarginalTree<'o>);
+
+/// Events that a single ancestor can experience during the Viterbi algorithm.
+/// These events are generated during the forward search and are used to reconstruct
+/// the most likely path during backtracing by storing where to look for mutations and recombinations.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct ViterbiEvent {
+    pub(super) kind: ViterbiEventKind,
+    pub(super) site: VariantIndex,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ViterbiEventKind {
+    /// Mutation event here
+    Mutation,
+
+    /// Recombination event here
+    Recombination,
+
+    /// Beginning from here, traceback is possible from the current ancestor
+    Decompress,
+
+    /// Beginning from here, traceback must be continued at the given `Ancestor`
+    Copy(Ancestor),
+}
 
 /// A helper structure for the Viterbi algorithm that helps to iterate through the sites, updating
 /// the marginal tree at the currently visited site and helping with tree compression.
@@ -65,11 +90,8 @@ pub(crate) struct AncestorIndex {
     /// they are ignored during the Viterbi algorithm.
     likelihoods: Vec<f64>,
 
-    /// Recombination sites array
-    recombination_sites: Vec<Vec<bool>>,
-
-    /// Mutation sites array
-    mutation_sites: Vec<Vec<bool>>,
+    /// Mutations, Recombinations and indirections
+    viterbi_events: Vec<Vec<ViterbiEvent>>,
 
     /// The last site index (relative to current ancestor, not a variant index) where the node was compressed.
     /// Starting from that index, the mutation and recombination sites of that node are invalid
@@ -122,8 +144,7 @@ impl AncestorIndex {
             is_compressed: vec![true; max_nodes],
             active_nodes: Vec::new(),
             likelihoods: vec![-1.0f64; max_nodes],
-            recombination_sites: vec![vec![false; variant_count]; max_nodes],
-            mutation_sites: vec![vec![false; variant_count]; max_nodes],
+            viterbi_events: vec![Vec::new(); max_nodes],
             last_compressed: vec![0; max_nodes],
             use_recompression_threshold,
             inv_recompression_threshold,
@@ -324,8 +345,7 @@ impl AncestorIndex {
             &mut self.is_compressed[0..limit_nodes],
             &mut self.active_nodes,
             &mut self.likelihoods[0..limit_nodes],
-            &mut self.recombination_sites[0..limit_nodes],
-            &mut self.mutation_sites[0..limit_nodes],
+            &mut self.viterbi_events[0..limit_nodes],
             &mut self.last_compressed[0..limit_nodes],
             self.use_recompression_threshold,
             self.inv_recompression_threshold,
@@ -391,18 +411,29 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<
         }
     }
 
-    /// Get the flag whether the given node requires recombination at the given index.
-    /// The index is a zero-based integer beginning at the first site of the current candidate, meaning it is not a
-    /// variant site index.
-    pub(crate) fn recombination_site(&self, node: Ancestor, index: usize) -> bool {
-        self.marginal_tree.recombination_sites[node.0][index]
-    }
-
-    /// Get the flag whether the given node requires mutation at the given site
-    /// The index is a zero-based integer beginning at the first site of the current candidate, meaning it is not a
-    /// variant site index.
-    pub(crate) fn mutation_site(&self, node: Ancestor, index: usize) -> bool {
-        self.marginal_tree.mutation_sites[node.0][index]
+    /// Create a traceback iterator through the Viterbi table generated during a previous call to
+    /// `for_each`. The iterator will be initialized with `current_ancestor` for the traceback and
+    /// automatically retrieve events from its correct ancestor whenever the actual ancestor is
+    /// compressed.
+    pub(crate) fn traceback<'s>(
+        &'s self,
+        current_ancestor: Ancestor,
+    ) -> TracebackSequenceIterator<'s, 'o>
+    where
+        's: 'o,
+    {
+        TracebackSequenceIterator {
+            marginal_tree: &self.marginal_tree,
+            start: self.start,
+            end: self.end,
+            current: self.end,
+            current_ancestor,
+            iter: self.marginal_tree.viterbi_events[current_ancestor.0]
+                .iter()
+                .rev()
+                .peekable(),
+            inner: None,
+        }
     }
 }
 
@@ -470,6 +501,132 @@ impl Ord for SequenceEvent {
     }
 }
 
+/// Iterator to iterate back through the viterbi table generated by the Viterbi algorithm.
+/// It holds the marginal tree that was modified by the Viterbi algorithm and iterates back through
+/// some aspects of the tree sequence, but only on the most likely path.
+///
+/// TODO this needs way more description
+pub(super) struct TracebackSequenceIterator<'a, 'o>
+where
+    'o: 'a,
+{
+    marginal_tree: &'a MarginalTree<'o>,
+    start: VariantIndex,
+    end: VariantIndex,
+    current: VariantIndex,
+    current_ancestor: Ancestor,
+    iter: Peekable<Rev<Iter<'o, ViterbiEvent>>>,
+    inner: Option<Box<TracebackSequenceIterator<'a, 'o>>>,
+}
+
+impl<'o> TracebackSequenceIterator<'o, 'o> {
+    pub fn switch_ancestor(&mut self, ancestor: Ancestor) {
+        self.current_ancestor = ancestor;
+
+        let new_cursor = self.marginal_tree.viterbi_events[ancestor.0]
+            .binary_search_by(|e| e.site.cmp(&self.current));
+        let pos = match new_cursor {
+            Ok(mut pos) => {
+                while self.marginal_tree.viterbi_events[ancestor.0].len() > pos + 1
+                    && self.marginal_tree.viterbi_events[ancestor.0][pos + 1].site == self.current
+                {
+                    pos += 1;
+                }
+                pos
+            }
+            Err(pos) => pos,
+        };
+
+        self.iter = self.marginal_tree.viterbi_events[ancestor.0][..pos]
+            .iter()
+            .rev()
+            .peekable();
+        self.inner = None;
+    }
+}
+
+impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
+    type Item = &'o ViterbiEvent;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(ref mut inner) = self.inner {
+            let element = inner.next();
+            if element.is_none() {
+                self.inner = None;
+            } else {
+                return element;
+            }
+        }
+
+        let element = self.iter.next();
+        if let Some(event) = element {
+            if event.site < self.start {
+                return None;
+            } else {
+                self.current = event.site;
+            }
+
+            match event.kind {
+                ViterbiEventKind::Copy(ancestor) => {
+                    let start_site = if let Some(ViterbiEvent { site, kind }) = self.iter.peek() {
+                        *site
+                    } else {
+                        self.start
+                    };
+
+                    let end_cursor = self.marginal_tree.viterbi_events[ancestor.0]
+                        .binary_search_by(|e| e.site.cmp(&event.site));
+                    let start_cursor = self.marginal_tree.viterbi_events[ancestor.0]
+                        .binary_search_by(|e| e.site.cmp(&start_site));
+
+                    let end = match end_cursor {
+                        Ok(mut pos) => {
+                            while self.marginal_tree.viterbi_events[ancestor.0].len() > pos + 1
+                                && self.marginal_tree.viterbi_events[ancestor.0][pos + 1].site
+                                    == event.site
+                            {
+                                pos += 1;
+                            }
+                            pos
+                        }
+                        Err(pos) => pos,
+                    };
+
+                    let start = match start_cursor {
+                        Ok(mut pos) => {
+                            while self.marginal_tree.viterbi_events[ancestor.0][pos - 1].site
+                                == start_site
+                            {
+                                pos -= 1;
+                            }
+                            pos
+                        }
+                        Err(pos) => pos,
+                    };
+
+                    self.inner = Some(Box::new(TracebackSequenceIterator {
+                        marginal_tree: self.marginal_tree,
+                        start: VariantIndex::from_usize(start),
+                        end: event.site,
+                        current: self.current,
+                        current_ancestor: ancestor,
+                        iter: self.marginal_tree.viterbi_events[ancestor.0][start..=end]
+                            .iter()
+                            .rev()
+                            .peekable(),
+                        inner: None,
+                    }));
+                    self.inner.as_mut().unwrap().next()
+                }
+                ViterbiEventKind::Decompress => self.next(),
+                _ => element,
+            }
+        } else {
+            None
+        }
+    }
+}
+
 /// An access structure into the tree sequence at a specific site.
 /// This structure is generated and by the [`AncestorIterator`] during iteration.
 /// It provides method for tree node compression during the viterbi algorithm.
@@ -508,11 +665,8 @@ pub(crate) struct MarginalTree<'o> {
     /// they are ignored during the Viterbi algorithm.
     likelihoods: &'o mut [f64],
 
-    /// Recombination sites array
-    recombination_sites: &'o mut [Vec<bool>],
-
-    /// Mutation sites array
-    mutation_sites: &'o mut [Vec<bool>],
+    /// Mutations, Recombinations and indirections
+    viterbi_events: &'o mut [Vec<ViterbiEvent>],
 
     /// The last site index (relative to current ancestor, not a variant index) where the node was compressed.
     /// Starting from that index, the mutation and recombination sites of that node are invalid
@@ -550,8 +704,7 @@ impl<'o> MarginalTree<'o> {
         is_compressed: &'o mut [bool],
         active_nodes: &'o mut Vec<Ancestor>,
         likelihoods: &'o mut [f64],
-        recombination_sites: &'o mut [Vec<bool>],
-        mutation_sites: &'o mut [Vec<bool>],
+        viterbi_events: &'o mut [Vec<ViterbiEvent>],
         last_compressed: &'o mut [usize],
         use_recompression_threshold: bool,
         inv_recompression_threshold: usize,
@@ -560,12 +713,7 @@ impl<'o> MarginalTree<'o> {
 
         // re-initialize vectors into the default state where needed
         active_nodes.clear();
-        recombination_sites
-            .iter_mut()
-            .for_each(|i| i[0..ancestor_length].fill(false));
-        mutation_sites
-            .iter_mut()
-            .for_each(|i| i[0..ancestor_length].fill(false));
+        viterbi_events.iter_mut().for_each(|i| i.clear());
         last_compressed.fill(0);
 
         // the other states are updated whenever nodes are added to the marginal tree
@@ -577,8 +725,7 @@ impl<'o> MarginalTree<'o> {
             is_compressed,
             active_nodes,
             likelihoods,
-            recombination_sites,
-            mutation_sites,
+            viterbi_events,
             last_compressed,
             limit_nodes,
             start,
@@ -616,20 +763,22 @@ impl<'o> MarginalTree<'o> {
         &mut self.likelihoods[node.0]
     }
 
-    /// Get access to the flag whether the given node requires recombination at the given index.
-    /// The index is a zero-based integer beginning at the first site of the current candidate, meaning it is not a
-    /// variant site index.
-    pub(crate) fn recombination_site(&mut self, node: Ancestor, index: usize) -> &mut bool {
-        debug_assert!(!self.is_compressed[node.0]);
-        &mut self.recombination_sites[node.0][index]
+    /// Insert a recombination for the given ancestor at the given site (absolute site, not relative
+    /// to the candidate)
+    pub(crate) fn insert_recombination_event(&mut self, node: Ancestor, site: VariantIndex) {
+        self.viterbi_events[node.0].push(ViterbiEvent {
+            kind: ViterbiEventKind::Recombination,
+            site,
+        });
     }
 
-    /// Get access to the flag whether the given node requires mutation at the given site
-    /// The index is a zero-based integer beginning at the first site of the current candidate, meaning it is not a
-    /// variant site index.
-    pub(crate) fn mutation_site(&mut self, node: Ancestor, index: usize) -> &mut bool {
-        debug_assert!(!self.is_compressed[node.0]);
-        &mut self.mutation_sites[node.0][index]
+    /// Insert a mutation for the given ancestor at the given site (absolute site, not relative to the
+    /// candidate)
+    pub(crate) fn insert_mutation_event(&mut self, node: Ancestor, site: VariantIndex) {
+        self.viterbi_events[node.0].push(ViterbiEvent {
+            kind: ViterbiEventKind::Mutation,
+            site,
+        });
     }
 
     /// Return whether the node is currently compressed.
@@ -650,11 +799,21 @@ impl<'o> MarginalTree<'o> {
                 if self.likelihoods[node.0] == self.likelihoods[parent.0] {
                     self.last_compressed[node.0] = site_index + 1;
                     self.is_compressed[node.0] = true;
+                    // insert event that informs traceback that starting from here we are uncompressed
+                    self.viterbi_events[node.0].push(ViterbiEvent {
+                        kind: ViterbiEventKind::Decompress,
+                        site: self.start + site_index,
+                    });
 
                     let mut queue = self.children[node.0].clone();
                     while let Some(child) = queue.pop() {
                         if self.uncompressed_parents[child.0] == Some(node) {
                             self.uncompressed_parents[child.0] = Some(parent);
+                            // insert event that informs traceback that starting from here we are compressed into node instead into the new parent
+                            self.viterbi_events[child.0].push(ViterbiEvent {
+                                kind: ViterbiEventKind::Copy(node),
+                                site: self.start + site_index,
+                            });
 
                             queue.extend(self.children[child.0].iter().copied());
                         }
@@ -700,41 +859,16 @@ impl<'o> MarginalTree<'o> {
 
             self.likelihoods[node.0] = self.likelihoods[uncompressed_parent.0];
 
+            // TODO we dont need last_compressed anymore, since we record compression events anyway?
             // copy the recombination and mutation sites from the parent
             let last_compressed_begin = self.last_compressed[node.0];
 
-            Self::copy_parent_sites(
-                &mut self.recombination_sites,
-                uncompressed_parent,
-                node,
-                last_compressed_begin,
-                site_index,
-            );
-            Self::copy_parent_sites(
-                &mut self.mutation_sites,
-                uncompressed_parent,
-                node,
-                last_compressed_begin,
-                site_index,
-            );
+            // record event for traceback that starting from here we are compressed into the parent
+            self.viterbi_events[node.0].push(ViterbiEvent {
+                kind: ViterbiEventKind::Copy(uncompressed_parent),
+                site: self.start + site_index - 1,
+            });
         }
-    }
-
-    /// Helper function to copy slices from two-dimensional arrays from a parent node to a child node. The code is a
-    /// bit awkward because we need to convince the borrow checker that the slices don't intersect.
-    fn copy_parent_sites(
-        sites: &mut [Vec<bool>],
-        parent: Ancestor,
-        node: Ancestor,
-        last_compressed_begin: usize,
-        site_index: usize,
-    ) {
-        debug_assert!(parent != node);
-        debug_assert!(parent < node, "Parent must be older than child");
-
-        let (parent_sites, child_sites) = sites.split_at_mut(node.0);
-        child_sites[0][last_compressed_begin..site_index]
-            .copy_from_slice(&parent_sites[parent.0][last_compressed_begin..site_index]);
     }
 
     /// Insert a node into the tree that has no parent, i.e. it is a free node or is the root node.
@@ -828,7 +962,7 @@ impl<'o> MarginalTree<'o> {
                 self.uncompressed_parents[node.0] = Some(new_parent);
             }
 
-            self.update_subtree(node, old_parent, Some(node))
+            self.update_subtree(node, old_parent, Some(node), site_index)
         }
     }
 
@@ -844,19 +978,30 @@ impl<'o> MarginalTree<'o> {
     fn update_node_mutation(&mut self, node: Ancestor, site_index: usize) {
         if self.is_compressed(node) {
             self.ensure_decompressed(node, site_index);
-            self.update_subtree(node, self.uncompressed_parents[node.0], Some(node));
+            self.update_subtree(
+                node,
+                self.uncompressed_parents[node.0],
+                Some(node),
+                site_index,
+            );
         }
     }
 
     /// Update a subtree to reflect a change of compression of its root.
     ///
-    /// `old_parent` is an option for convenience, but cannot be `None`
-    /// `new_parent` is an option for convenience, but cannot be `None`
+    /// # Parameters
+    /// - `subtree_root`: The root of the subtree to update
+    /// - `old_parent`: The previous uncompressed parent for the subtree. The parameter is an option
+    /// for implementation convenience, but cannot be `None`
+    /// - `new_parent` The new uncompressed parent for the subtree. The parameter is an option for
+    /// implementation convenience, but cannot be `None`
+    /// - `site_index`: The index of the current site relative to the beginning of the candidate.
     fn update_subtree(
         &mut self,
         subtree_root: Ancestor,
         old_parent: Option<Ancestor>,
         new_parent: Option<Ancestor>,
+        site_index: usize,
     ) {
         debug_assert!(old_parent.is_some());
         debug_assert!(new_parent.is_some());
@@ -865,6 +1010,11 @@ impl<'o> MarginalTree<'o> {
         while let Some(node) = queue.pop() {
             if self.uncompressed_parents[node.0] == old_parent {
                 self.uncompressed_parents[node.0] = new_parent;
+                // record event for traceback that starting from here we are compressed into the old parent
+                self.viterbi_events[node.0].push(ViterbiEvent {
+                    kind: ViterbiEventKind::Copy(old_parent.unwrap()),
+                    site: self.start + site_index,
+                });
 
                 queue.extend(self.children[node.0].iter().copied());
             }
@@ -912,6 +1062,9 @@ impl<'o> MarginalTree<'o> {
     ) {
         while event_queue.peek().is_some() && event_queue.peek().unwrap().site < site {
             let event = event_queue.next().unwrap();
+
+            // TODO this should be changed into the absolute index, since we no longer need the
+            //  relative index for anything
             let site_index = self.start.get_variant_distance(event.site);
 
             if event.node.0 >= self.limit_nodes {
@@ -1446,7 +1599,7 @@ mod tests {
                 _ => assert!(!*state, "mutation site {} should be false", i),
             });
 
-        iterator.marginal_tree.recombination_sites[2]
+        iterator.marginal_tree.viterbi_events[2]
             .iter()
             .enumerate()
             .for_each(|(i, state)| match i {
@@ -1526,7 +1679,7 @@ mod tests {
                 _ => assert!(!*state, "mutation site {} should be false", i),
             });
 
-        iterator.marginal_tree.recombination_sites[2]
+        iterator.marginal_tree.viterbi_events[2]
             .iter()
             .enumerate()
             .for_each(|(i, state)| match i {
