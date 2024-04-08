@@ -608,7 +608,7 @@ impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
                         Ok(mut pos) => {
                             while self.marginal_tree.viterbi_events[ancestor.0].len() > pos
                                 && self.marginal_tree.viterbi_events[ancestor.0][pos].site
-                                == start_site
+                                    == start_site
                             {
                                 pos += 1;
                             }
@@ -1149,6 +1149,7 @@ impl<'o> MarginalTree<'o> {
 
 #[cfg(test)]
 mod tests {
+    use crate::ts::ancestor_iterator::ViterbiEventKind::{Mutation, Recombination};
     use std::hint::black_box;
 
     use super::*;
@@ -1164,6 +1165,13 @@ mod tests {
         }
 
         parent
+    }
+
+    fn find_mutation_site(tree: &MarginalTree, site: usize, node: Ancestor) -> bool {
+        tree.viterbi_events[node.0]
+            .iter()
+            .find(|e| e.site.0 == site && e.kind == ViterbiEventKind::Mutation)
+            .is_some()
     }
 
     #[test]
@@ -1604,36 +1612,56 @@ mod tests {
                     .for_each(|n| tree.likelihoods[n.0] = n.0 as f64 * 0.1),
 
                 // insert mutations and recombination for nodes 0 and 1, and later check if 2 inherited them
-                2 => *tree.mutation_site(Ancestor(0), 2) = true,
-                3 => *tree.recombination_site(Ancestor(0), 3) = true,
+                2 => tree.insert_mutation_event(Ancestor(0), VariantIndex::from_usize(2)),
+                3 => tree.insert_recombination_event(Ancestor(0), VariantIndex::from_usize(3)),
                 4 => {
                     tree.likelihoods[2] = 0.1; // set likelihood of third node to that of second to trigger recompression
-                    *tree.mutation_site(Ancestor(0), 4) = true // this shouldnt be copied, because the second node is uncompressed at this site
+                    tree.insert_mutation_event(Ancestor(0), VariantIndex::from_usize(4))
+                    // this shouldnt be copied, because the second node is uncompressed at this site
                 }
-                6 => *tree.mutation_site(Ancestor(1), 6) = true,
-                7 => *tree.recombination_site(Ancestor(1), 7) = true,
+                6 => tree.insert_mutation_event(Ancestor(1), VariantIndex::from_usize(6)),
+                7 => tree.insert_recombination_event(Ancestor(1), VariantIndex::from_usize(7)),
                 _ => {}
             }
 
             counter += 1;
         });
 
-        iterator.marginal_tree.mutation_sites[2]
-            .iter()
-            .enumerate()
-            .for_each(|(i, state)| match i {
-                2 => assert!(*state, "mutation site {} should be true", i),
-                6 => assert!(*state, "mutation site {} should be true", i),
-                _ => assert!(!*state, "mutation site {} should be false", i),
-            });
-
         iterator.marginal_tree.viterbi_events[2]
             .iter()
-            .enumerate()
-            .for_each(|(i, state)| match i {
-                3 => assert!(*state, "recombination site {} should be true", i),
-                7 => assert!(*state, "recombination site {} should be true", i),
-                _ => assert!(!*state, "recombination site {} should be false", i),
+            .filter(|state| {
+                if let Mutation | Recombination = state.kind {
+                    true
+                } else {
+                    false
+                }
+            })
+            .for_each(|state| match state.site.0 {
+                2 => assert_eq!(
+                    state.kind, Mutation,
+                    "expected mutation at {}",
+                    state.site.0
+                ),
+                6 => assert_eq!(
+                    state.kind, Mutation,
+                    "expected mutation at {}",
+                    state.site.0
+                ),
+                3 => assert_eq!(
+                    state.kind, Recombination,
+                    "expected recombination at {}",
+                    state.site.0
+                ),
+                7 => assert_eq!(
+                    state.kind, Recombination,
+                    "expected recombination at {}",
+                    state.site.0
+                ),
+                _ => assert_ne!(
+                    state.kind, Recombination,
+                    "expected no event at site {}",
+                    state.site.0
+                ),
             });
     }
 
@@ -1689,9 +1717,9 @@ mod tests {
                     .for_each(|n| tree.likelihoods[n.0] = n.0 as f64 * 0.1),
 
                 // insert mutations and recombination for nodes 0 and 1, and later check if 2 inherited them
-                2 => *tree.mutation_site(Ancestor(0), 2) = true,
-                3 => *tree.recombination_site(Ancestor(0), 3) = true,
-                5 => *tree.mutation_site(Ancestor(1), 5) = true, // this should not be copied because the second ancestor is uncompressed at this site
+                2 => tree.insert_mutation_event(Ancestor(0), VariantIndex::from_usize(2)),
+                3 => tree.insert_recombination_event(Ancestor(0), VariantIndex::from_usize(3)),
+                5 => tree.insert_mutation_event(Ancestor(1), VariantIndex::from_usize(5)), // this should not be copied because the second ancestor is uncompressed at this site
 
                 _ => {}
             }
@@ -1699,20 +1727,31 @@ mod tests {
             counter += 1;
         });
 
-        iterator.marginal_tree.mutation_sites[2]
-            .iter()
-            .enumerate()
-            .for_each(|(i, state)| match i {
-                2 => assert!(*state, "mutation site {} should be true", i),
-                _ => assert!(!*state, "mutation site {} should be false", i),
-            });
-
         iterator.marginal_tree.viterbi_events[2]
             .iter()
-            .enumerate()
-            .for_each(|(i, state)| match i {
-                3 => assert!(*state, "recombination site {} should be true", i),
-                _ => assert!(!*state, "recombination site {} should be false", i),
+            .filter(|state| {
+                if let Mutation | Recombination = state.kind {
+                    true
+                } else {
+                    false
+                }
+            })
+            .for_each(|state| match state.site.0 {
+                2 => assert_eq!(
+                    state.kind, Mutation,
+                    "expected mutation at {}",
+                    state.site.0
+                ),
+                3 => assert_eq!(
+                    state.kind, Recombination,
+                    "expected recombination at {}",
+                    state.site.0
+                ),
+                _ => assert_ne!(
+                    state.kind, Recombination,
+                    "expected no events at site {}",
+                    state.site.0
+                ),
             });
     }
 
