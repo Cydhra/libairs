@@ -883,10 +883,12 @@ impl<'o> MarginalTree<'o> {
             let last_compressed_begin = self.last_compressed[node.0];
 
             // record event for traceback that starting from here we are compressed into the parent
-            self.viterbi_events[node.0].push(ViterbiEvent {
-                kind: ViterbiEventKind::Copy(uncompressed_parent),
-                site: self.start + site_index - 1,
-            });
+            if site_index > 0 {
+                self.viterbi_events[node.0].push(ViterbiEvent {
+                    kind: ViterbiEventKind::Copy(uncompressed_parent),
+                    site: self.start + site_index - 1,
+                });
+            }
         }
     }
 
@@ -1036,7 +1038,7 @@ impl<'o> MarginalTree<'o> {
             if self.uncompressed_parents[node.0] == old_parent {
                 self.uncompressed_parents[node.0] = new_parent;
 
-                if self.is_compressed(node) {
+                if self.is_compressed(node) && site_index > 0 {
                     // record event for traceback that starting from here we are compressed into the old parent
                     self.viterbi_events[node.0].push(ViterbiEvent {
                         kind: ViterbiEventKind::Copy(old_parent.unwrap()),
