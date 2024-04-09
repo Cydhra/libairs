@@ -187,7 +187,6 @@ impl ViterbiMatcher {
         let mut ancestor_iterators = vec![
             AncestorIndex::new(
                 self.ancestors.len(),
-                self.ancestors.get_num_variants(),
                 self.use_recompression_threshold,
                 self.inverse_recompression_threshold,
             );
@@ -274,7 +273,6 @@ impl ViterbiMatcher {
         let mut ancestor_iterators = vec![
             AncestorIndex::from_tree_sequence(
                 self.ancestors.len(),
-                self.ancestors.get_num_variants(),
                 self.use_recompression_threshold,
                 self.inverse_recompression_threshold,
                 &self.partial_tree_sequence,
@@ -324,7 +322,6 @@ impl ViterbiMatcher {
         let mut ancestor_iterators = vec![
             AncestorIndex::new(
                 self.ancestors.len(),
-                self.ancestors.get_num_variants(),
                 self.use_recompression_threshold,
                 self.inverse_recompression_threshold,
             );
