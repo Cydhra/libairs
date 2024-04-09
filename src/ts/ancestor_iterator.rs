@@ -544,9 +544,6 @@ impl<'o> TracebackSequenceIterator<'o, 'o> {
             .rev()
             .peekable();
 
-        // println!("Switching to ancestor {} at site {}", ancestor.0, self.current);
-        // println!("Next site is {:?}", self.iter.peek().map(|e| e.site));
-
         self.inner = None;
     }
 }
@@ -617,7 +614,6 @@ impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
                         Err(pos) => pos,
                     };
 
-                    // println!("Copying from {} to {} ({} to {}) from {}", start, end, start_site, event.site, ancestor.0);
                     self.inner = Some(Box::new(TracebackSequenceIterator {
                         marginal_tree: self.marginal_tree,
                         start: start_site,
@@ -723,8 +719,6 @@ impl<'o> MarginalTree<'o> {
         use_recompression_threshold: bool,
         inv_recompression_threshold: usize,
     ) -> Self {
-        // println!("========================================================");
-        // println!("Creating new marginal tree: {} nodes, {} limit, {} start", num_nodes, limit_nodes, start);
         debug_assert!(num_nodes > 0, "Tree must have at least one node");
 
         // re-initialize vectors into the default state where needed
