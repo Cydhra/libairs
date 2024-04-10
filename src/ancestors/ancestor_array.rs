@@ -9,7 +9,7 @@ use crate::variants::{SampleData, VariantIndex};
 use crate::variants::{SequencePosition, VariantData};
 
 /// This is a helper struct for the Viterbi algorithm that manages the ancestral sequences.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AncestorArray {
     ancestors: Vec<AncestralSequence>,
 
