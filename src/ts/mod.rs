@@ -1,4 +1,4 @@
-mod ancestor_iterator;
+mod ancestor_index;
 mod matcher;
 mod partial_sequence;
 mod tree_sequence;

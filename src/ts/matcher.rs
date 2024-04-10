@@ -5,7 +5,7 @@ use rayon::iter::{IndexedParallelIterator, ParallelBridge};
 use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
 
 use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence};
-use crate::ts::ancestor_iterator::{AncestorIndex, ViterbiEventKind};
+use crate::ts::ancestor_index::{AncestorIndex, ViterbiEventKind};
 use crate::ts::partial_sequence::{PartialSequenceEdge, PartialTreeSequence};
 use crate::ts::tree_sequence::TreeSequence;
 use crate::variants::VariantIndex;
