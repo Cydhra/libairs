@@ -1,6 +1,4 @@
-use crate::ancestors::Ancestor;
 use crate::ts::ancestor_index::*;
-use crate::variants::VariantIndex;
 use std::iter::Peekable;
 
 /// A DNA sequence site visited during the viterbi algorithm.
@@ -66,6 +64,22 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<
             }
             self.site = self.site.next();
         }
+
+        // insert a compression event into all compressed ancestors, so traceback can follow the
+        // compressed path
+        for (node, &is_compressed) in self.marginal_tree.is_compressed.iter().enumerate() {
+            if is_compressed
+                && self.marginal_tree.last_compressed[node]
+                    < self.end.get_variant_distance(self.start)
+            {
+                self.marginal_tree.viterbi_events[node].push(ViterbiEvent {
+                    kind: ViterbiEventKind::Compressed(
+                        self.start + self.marginal_tree.last_compressed[node],
+                    ),
+                    site: self.end,
+                });
+            }
+        }
     }
 
     /// Create a traceback iterator through the Viterbi table generated during a previous call to
@@ -74,6 +88,7 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<
     /// compressed.
     pub(crate) fn traceback<'s>(
         &'s self,
+        partial_tree_sequence: &'s PartialTreeSequence,
         current_ancestor: Ancestor,
     ) -> TracebackSequenceIterator<'s, 'o>
     where
@@ -81,6 +96,7 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<
     {
         TracebackSequenceIterator {
             marginal_tree: &self.marginal_tree,
+            partial_tree_sequence,
             start: self.start,
             end: self.end,
             current: self.end,
@@ -89,6 +105,8 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> PartialTreeSequenceIterator<
                 .iter()
                 .rev()
                 .peekable(),
+            compressed_until: None,
+            current_parent_edge_index: None,
             inner: None,
         }
     }
@@ -265,11 +283,6 @@ impl<'o> MarginalTree<'o> {
                 if self.likelihoods[node.0] == self.likelihoods[parent.0] {
                     self.last_compressed[node.0] = site_index + 1;
                     self.is_compressed[node.0] = true;
-                    // insert event that informs traceback that starting from here we are uncompressed
-                    self.viterbi_events[node.0].push(ViterbiEvent {
-                        kind: ViterbiEventKind::Decompress,
-                        site: self.start + site_index,
-                    });
 
                     let mut queue = self.children[node.0].clone();
                     while let Some(child) = queue.pop() {
@@ -277,12 +290,6 @@ impl<'o> MarginalTree<'o> {
                             self.uncompressed_parents[child.0] = Some(parent);
 
                             if self.is_compressed[child.0] {
-                                // insert event that informs traceback that starting from here we are compressed into node instead into the new parent
-                                self.viterbi_events[child.0].push(ViterbiEvent {
-                                    kind: ViterbiEventKind::Copy(node),
-                                    site: self.start + site_index,
-                                });
-
                                 queue.extend(self.children[child.0].iter().copied());
                             }
                         }
@@ -328,14 +335,13 @@ impl<'o> MarginalTree<'o> {
 
             self.likelihoods[node.0] = self.likelihoods[uncompressed_parent.0];
 
-            // TODO we dont need last_compressed anymore, since we record compression events anyway?
             // copy the recombination and mutation sites from the parent
             let last_compressed_begin = self.last_compressed[node.0];
 
             // record event for traceback that starting from here we are compressed into the parent
             if site_index > 0 {
                 self.viterbi_events[node.0].push(ViterbiEvent {
-                    kind: ViterbiEventKind::Copy(uncompressed_parent),
+                    kind: ViterbiEventKind::Compressed(self.start + last_compressed_begin),
                     site: self.start + site_index - 1,
                 });
             }
@@ -439,7 +445,7 @@ impl<'o> MarginalTree<'o> {
                 self.uncompressed_parents[node.0] = Some(new_parent);
             }
 
-            self.update_subtree(node, old_parent, Some(node), site_index)
+            self.update_subtree(node, old_parent, Some(node))
         }
     }
 
@@ -455,12 +461,7 @@ impl<'o> MarginalTree<'o> {
     fn update_node_mutation(&mut self, node: Ancestor, site_index: usize) {
         if self.is_compressed(node) {
             self.ensure_decompressed(node, site_index);
-            self.update_subtree(
-                node,
-                self.uncompressed_parents[node.0],
-                Some(node),
-                site_index,
-            );
+            self.update_subtree(node, self.uncompressed_parents[node.0], Some(node));
         }
     }
 
@@ -478,7 +479,6 @@ impl<'o> MarginalTree<'o> {
         subtree_root: Ancestor,
         old_parent: Option<Ancestor>,
         new_parent: Option<Ancestor>,
-        site_index: usize,
     ) {
         debug_assert!(old_parent.is_some());
         debug_assert!(new_parent.is_some());
@@ -489,14 +489,6 @@ impl<'o> MarginalTree<'o> {
                 self.uncompressed_parents[node.0] = new_parent;
 
                 if self.is_compressed(node) {
-                    if site_index > 0 {
-                        // record event for traceback that starting from here we are compressed into the old parent
-                        self.viterbi_events[node.0].push(ViterbiEvent {
-                            kind: ViterbiEventKind::Copy(old_parent.unwrap()),
-                            site: self.start + site_index - 1,
-                        });
-                    }
-
                     queue.extend(self.children[node.0].iter().copied());
                 }
             }
@@ -601,11 +593,284 @@ impl<'o> MarginalTree<'o> {
     }
 }
 
+/// Iterator to iterate back through the viterbi table generated by the Viterbi algorithm.
+/// It holds the marginal tree that was modified by the Viterbi algorithm and iterates back through
+/// some aspects of the tree sequence, but only on the most likely path.
+///
+/// TODO this needs way more description
+#[derive(Clone)]
+pub(in crate::ts) struct TracebackSequenceIterator<'a, 'o>
+where
+    'o: 'a,
+{
+    marginal_tree: &'a MarginalTree<'o>,
+    partial_tree_sequence: &'a PartialTreeSequence,
+
+    /// start of the interval that is being iterated over. Since we iterate backwards, this marks the end of iteration.
+    start: VariantIndex,
+
+    /// end of the interval that is being iterated over. Since we iterate backwards, this marks the start of iteration.
+    end: VariantIndex,
+    current: VariantIndex,
+
+    current_ancestor: Ancestor,
+    iter: Peekable<Rev<Iter<'o, ViterbiEvent>>>,
+
+    compressed_until: Option<VariantIndex>,
+    current_parent_edge_index: Option<usize>,
+    inner: Option<Box<TracebackSequenceIterator<'a, 'o>>>,
+}
+
+impl<'o> TracebackSequenceIterator<'o, 'o> {
+    /// Create a new `TracebackSequenceIterator` that iterates over the interval from `start` to `end` in the
+    /// `marginal_tree` and `partial_tree_sequence` of the parent iterator.
+    fn new_inner(
+        parent: &Self,
+        ancestor: Ancestor,
+        start: VariantIndex,
+        end: VariantIndex,
+    ) -> Self {
+        // find the exclusive end of the interval
+        let end_cursor = parent.marginal_tree.viterbi_events[ancestor.0]
+            .binary_search_by(|e| e.site.cmp(&end))
+            .map(|mut pos| {
+                // move behind the last event that is at the end site
+                while parent.marginal_tree.viterbi_events[ancestor.0][pos].site == end {
+                    pos += 1;
+                }
+                pos
+            })
+            // the Err contains the first site behind the end site, so we can just use it unchanged
+            .unwrap_or_else(|next_element_index| next_element_index);
+
+        // find the inclusive start of the interval
+        let start_cursor = parent.marginal_tree.viterbi_events[ancestor.0]
+            .binary_search_by(|e| e.site.cmp(&start))
+            .map(|mut pos| {
+                // move onto the first event that is at the start site
+                while pos > 0
+                    && parent.marginal_tree.viterbi_events[ancestor.0][pos - 1].site == start
+                {
+                    pos -= 1;
+                }
+                pos
+            })
+            // the Err contains the first site behind the start site, so we can just use it unchanged
+            .unwrap_or_else(|next_element_index| next_element_index);
+
+        let iter = parent.marginal_tree.viterbi_events[ancestor.0][start_cursor..end_cursor]
+            .iter()
+            .rev()
+            .peekable();
+
+        let mut new_iter = Self {
+            marginal_tree: parent.marginal_tree,
+            partial_tree_sequence: parent.partial_tree_sequence,
+            start,
+            end,
+            current: end,
+            current_ancestor: ancestor,
+            iter,
+            compressed_until: None,
+            current_parent_edge_index: None,
+            inner: None,
+        };
+
+        // check if the current ancestor is compressed at the end site. If it is, the event directly
+        // after the end site must be the compression event
+        if parent.marginal_tree.viterbi_events[ancestor.0].len() > end_cursor {
+            if let ViterbiEventKind::Compressed(compressed_until) =
+                parent.marginal_tree.viterbi_events[ancestor.0][end_cursor].kind
+            {
+                if compressed_until < end {
+                    let parent_index = new_iter.search_parent_index(end);
+                    let parent_edge =
+                        &new_iter.partial_tree_sequence.edges[ancestor.0][parent_index];
+
+                    // recursively create a new inner iterator that iterates over the compressed interval
+                    let inner = Self::new_inner(
+                        &new_iter,
+                        parent_edge.parent(),
+                        start.max(compressed_until),
+                        end,
+                    );
+
+                    debug_assert!(inner.current <= new_iter.current);
+                    new_iter.inner = Some(Box::new(inner));
+                    new_iter.compressed_until = Some(compressed_until);
+                    new_iter.current_parent_edge_index = Some(parent_index);
+                }
+            }
+        }
+
+        new_iter
+    }
+
+    pub fn switch_ancestor(&mut self, ancestor: Ancestor) {
+        self.current_ancestor = ancestor;
+
+        // find the position BEFORE the current site in the new ancestor,
+        // since we do not want to copy the current site
+        let new_cursor = self.marginal_tree.viterbi_events[ancestor.0]
+            .binary_search_by(|e| e.site.cmp(&self.current));
+        let pos = match new_cursor {
+            Ok(mut pos) => {
+                while pos > 0
+                    && self.marginal_tree.viterbi_events[ancestor.0][pos - 1].site == self.current
+                {
+                    pos -= 1;
+                }
+                pos
+            }
+            Err(pos) => pos,
+        };
+
+        self.iter = self.marginal_tree.viterbi_events[ancestor.0][..pos]
+            .iter()
+            .rev()
+            .peekable();
+
+        self.destroy_inner();
+    }
+
+    /// Searches the parent of the current ancestor for the given site
+    fn search_parent_index(&self, site: VariantIndex) -> usize {
+        self.partial_tree_sequence.edges[self.current_ancestor.0]
+            .binary_search_by(|edge| edge.start().cmp(&site))
+            .unwrap_or_else(|next_element_index| {
+                debug_assert!(next_element_index > 0);
+                next_element_index - 1
+            })
+    }
+
+    /// Used by next() to end the iterator
+    fn end_iteration(&mut self) {
+        self.current = self.end;
+        self.inner = None;
+        self.current_parent_edge_index = None;
+        self.compressed_until = None;
+    }
+
+    /// end iteration of inner iterator and continue to iterate the outer iterator
+    fn destroy_inner(&mut self) {
+        self.inner = None;
+        self.compressed_until = None;
+        self.current_parent_edge_index = None;
+    }
+}
+
+impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
+    type Item = &'o ViterbiEvent;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // if we have an inner iterator, we need to check if it has any elements left and return those
+        if let Some(ref mut inner) = self.inner {
+            let element = inner.next();
+            debug_assert!(element.is_none() || element.unwrap().site <= self.current);
+
+            if element.is_none() {
+                // if the inner iterator is empty, we arrived at the site it ends
+                self.current = self.inner.as_ref().unwrap().start;
+
+                // if we are at the start of the interval, we end the iteration
+                if self.current == self.start {
+                    self.end_iteration();
+                    return None;
+                }
+
+                debug_assert!(self.compressed_until.is_some());
+                // if we haven't reached an uncompressed interval, we need to switch to the next parent
+                if self.compressed_until.unwrap() < self.current {
+                    assert!(self.current_parent_edge_index.unwrap() > 0, "last inner iterator already reached the first parent, but self.current has not reached start yet");
+                    let next_parent_index = self.current_parent_edge_index.unwrap() - 1;
+
+                    let next_parent_edge = &self.partial_tree_sequence.edges
+                        [self.current_ancestor.0][next_parent_index];
+
+                    // we should not be in a position where the current site is already beyond the
+                    // end of the next edge, since that would mean the last inner iterator yielded
+                    // wrong elements
+                    debug_assert!(next_parent_edge.end() < self.current);
+
+                    // if we reached the end of interval, we end the iterator.
+                    // this happens if self.current has not reached self.start yet, but the last
+                    // inner iterator has no more elements between self.current and self.start,
+                    // yet the parent is defined until self.start
+                    if next_parent_edge.end() < self.start {
+                        self.end_iteration();
+                        return None;
+                    }
+
+                    // if the next parent reaches into the interval of interest, update the inner
+                    // iterator, otherwise destroy it
+                    if next_parent_edge.end() > self.compressed_until.unwrap() {
+                        let new_inner = Self::new_inner(
+                            self,
+                            next_parent_edge.parent(),
+                            next_parent_edge.start().max(self.compressed_until.unwrap()),
+                            self.current,
+                        );
+
+                        debug_assert!(new_inner.current <= self.current);
+                        self.inner = Some(Box::new(new_inner));
+                        self.current_parent_edge_index = Some(next_parent_index);
+
+                        return self.next();
+                    } else {
+                        self.destroy_inner();
+                    }
+                } else {
+                    self.destroy_inner();
+                }
+            } else {
+                self.current = element.unwrap().site;
+                return element;
+            }
+        }
+
+        // otherwise, we look at the current sequence and return the next element
+        let element = self.iter.next();
+        debug_assert!(element.is_none() || element.unwrap().site <= self.current);
+        if let Some(event) = element {
+            if event.site < self.start {
+                self.end_iteration();
+                return None;
+            } else {
+                self.current = event.site;
+            }
+
+            match event.kind {
+                ViterbiEventKind::Compressed(compressed_until) => {
+                    // search for the parent of the compressed node
+                    let current_parent_edge_index = self.search_parent_index(event.site);
+                    let parent = self.partial_tree_sequence.edges[self.current_ancestor.0]
+                        [current_parent_edge_index]
+                        .parent();
+
+                    let inner =
+                        Self::new_inner(self, parent, self.start.max(compressed_until), event.site);
+                    debug_assert!(inner.current <= self.current);
+
+                    self.inner = Some(Box::new(inner));
+                    self.compressed_until = Some(compressed_until);
+                    self.current_parent_edge_index = Some(current_parent_edge_index);
+                    self.next()
+                }
+                _ => element,
+            }
+        } else {
+            self.end_iteration();
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::hint::black_box;
 
     use super::*;
+    use crate::ts::ancestor_index::ViterbiEventKind::{Mutation, Recombination};
     use crate::ts::ancestor_index::*;
 
     fn find_uncompressed_parent(tree: &MarginalTree, node: Ancestor) -> Option<Ancestor> {
@@ -1019,21 +1284,19 @@ mod tests {
         let mut ix = AncestorIndex::new(3, false, 1);
         let mut counter = 0;
 
-        // insert a child node that serves as a second node
-        ix.insert_sequence_node(
-            Ancestor(1),
-            &vec![PartialSequenceEdge::new(
+        // prepare partial tree sequence for traceback
+        let mut partial_tree_sequence = PartialTreeSequence::with_capacity(3);
+        partial_tree_sequence.push(vec![], vec![]);
+        partial_tree_sequence.push(
+            vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(10),
                 Ancestor(0),
             )],
-            &vec![VariantIndex::from_usize(0)],
+            vec![VariantIndex::from_usize(0)],
         );
-
-        // insert another child node that copies from both the root and the child node
-        ix.insert_sequence_node(
-            Ancestor(2),
-            &vec![
+        partial_tree_sequence.push(
+            vec![
                 PartialSequenceEdge::new(
                     VariantIndex::from_usize(0),
                     VariantIndex::from_usize(5),
@@ -1045,7 +1308,21 @@ mod tests {
                     Ancestor(1),
                 ),
             ],
-            &vec![VariantIndex::from_usize(4), VariantIndex::from_usize(9)],
+            vec![VariantIndex::from_usize(4), VariantIndex::from_usize(9)],
+        );
+
+        // insert a child node that serves as a second node
+        ix.insert_sequence_node(
+            Ancestor(1),
+            &partial_tree_sequence.edges[1],
+            &partial_tree_sequence.mutations[1],
+        );
+
+        // insert another child node that copies from both the root and the child node
+        ix.insert_sequence_node(
+            Ancestor(2),
+            &partial_tree_sequence.edges[2],
+            &partial_tree_sequence.mutations[2],
         );
 
         // add mutations and recombinations with the root and first child node, and check whether the second child node
@@ -1074,47 +1351,41 @@ mod tests {
             counter += 1;
         });
 
-        iterator.marginal_tree.viterbi_events[2]
-            .iter()
-            .filter(|state| {
-                if let ViterbiEventKind::Mutation | ViterbiEventKind::Recombination = state.kind {
-                    true
-                } else {
-                    false
-                }
-            })
-            .for_each(|state| match state.site.0 {
-                2 => assert_eq!(
-                    state.kind,
-                    ViterbiEventKind::Mutation,
-                    "expected mutation at {}",
-                    state.site.0
-                ),
-                6 => assert_eq!(
-                    state.kind,
-                    ViterbiEventKind::Mutation,
-                    "expected mutation at {}",
-                    state.site.0
-                ),
-                3 => assert_eq!(
-                    state.kind,
-                    ViterbiEventKind::Recombination,
-                    "expected recombination at {}",
-                    state.site.0
-                ),
-                7 => assert_eq!(
-                    state.kind,
-                    ViterbiEventKind::Recombination,
-                    "expected recombination at {}",
-                    state.site.0
-                ),
-                _ => assert_ne!(
-                    state.kind,
-                    ViterbiEventKind::Recombination,
-                    "expected no event at site {}",
-                    state.site.0
-                ),
-            });
+        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(2));
+        assert_eq!(traceback_iterator.clone().count(), 4);
+
+        traceback_iterator.for_each(|state| match state.site.0 {
+            2 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            ),
+            6 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            ),
+            3 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Recombination,
+                "expected recombination at {}",
+                state.site.0
+            ),
+            7 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Recombination,
+                "expected recombination at {}",
+                state.site.0
+            ),
+            _ => assert_ne!(
+                state.kind,
+                ViterbiEventKind::Recombination,
+                "expected no event at site {}",
+                state.site.0
+            ),
+        });
     }
 
     #[test]
@@ -1125,21 +1396,19 @@ mod tests {
         let mut ix = AncestorIndex::new(3, false, 1);
         let mut counter = 0;
 
-        // insert a child node that serves as a second node
-        ix.insert_sequence_node(
-            Ancestor(1),
-            &vec![PartialSequenceEdge::new(
+        // prepare partial tree sequence for traceback
+        let mut partial_tree_sequence = PartialTreeSequence::with_capacity(3);
+        partial_tree_sequence.push(vec![], vec![]);
+        partial_tree_sequence.push(
+            vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
                 VariantIndex::from_usize(10),
                 Ancestor(0),
             )],
-            &vec![VariantIndex::from_usize(0)],
+            vec![VariantIndex::from_usize(0)],
         );
-
-        // insert another child node that copies from both the root and the child node, but has no mutations
-        ix.insert_sequence_node(
-            Ancestor(2),
-            &vec![
+        partial_tree_sequence.push(
+            vec![
                 PartialSequenceEdge::new(
                     VariantIndex::from_usize(0),
                     VariantIndex::from_usize(5),
@@ -1156,7 +1425,21 @@ mod tests {
                     Ancestor(0),
                 ),
             ],
-            &vec![],
+            vec![],
+        );
+
+        // insert a child node that serves as a second node
+        ix.insert_sequence_node(
+            Ancestor(1),
+            &partial_tree_sequence.edges[1],
+            &partial_tree_sequence.mutations[1],
+        );
+
+        // insert another child node that copies from both the root and the child node, but has no mutations
+        ix.insert_sequence_node(
+            Ancestor(2),
+            &partial_tree_sequence.edges[2],
+            &partial_tree_sequence.mutations[2],
         );
 
         // add mutations and recombinations with the root, and check whether the second child node copies them
@@ -1179,35 +1462,187 @@ mod tests {
             counter += 1;
         });
 
-        iterator.marginal_tree.viterbi_events[2]
-            .iter()
-            .filter(|state| {
-                if let ViterbiEventKind::Mutation | ViterbiEventKind::Recombination = state.kind {
-                    true
-                } else {
-                    false
-                }
-            })
-            .for_each(|state| match state.site.0 {
-                2 => assert_eq!(
-                    state.kind,
-                    ViterbiEventKind::Mutation,
-                    "expected mutation at {}",
-                    state.site.0
-                ),
-                3 => assert_eq!(
-                    state.kind,
-                    ViterbiEventKind::Recombination,
-                    "expected recombination at {}",
-                    state.site.0
-                ),
-                _ => assert_ne!(
-                    state.kind,
-                    ViterbiEventKind::Recombination,
-                    "expected no events at site {}",
-                    state.site.0
-                ),
+        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(2));
+        assert_eq!(traceback_iterator.clone().count(), 2);
+
+        traceback_iterator.for_each(|state| match state.site.0 {
+            2 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            ),
+            3 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Recombination,
+                "expected recombination at {}",
+                state.site.0
+            ),
+            _ => assert_ne!(
+                state.kind,
+                ViterbiEventKind::Recombination,
+                "expected no events at site {}",
+                state.site.0
+            ),
+        });
+    }
+
+    #[test]
+    fn test_traceback_compression() {
+        // test whether a traceback iterator correctly returns the events that must be copied from
+        // parents, as well as the events that are present in the child
+
+        let mut ix = AncestorIndex::new(3, false, 1);
+        let mut counter = 0;
+
+        // prepare partial tree sequence for traceback
+        let mut partial_tree_sequence = PartialTreeSequence::with_capacity(3);
+        partial_tree_sequence.push(vec![], vec![]);
+        partial_tree_sequence.push(
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(0), VariantIndex::from_usize(9)],
+        );
+
+        ix.insert_sequence_node(
+            Ancestor(1),
+            &partial_tree_sequence.edges[1],
+            &partial_tree_sequence.mutations[1],
+        );
+
+        let mut iterator = ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 2);
+        iterator.for_each(|(site, tree)| {
+            match counter {
+                // insert a mutation on first site and then immediately recompress
+                0 => tree.insert_mutation_event(Ancestor(1), site),
+
+                // insert mutations for parent for sites 2, 3 and check if they are inherited
+                2 => tree.insert_mutation_event(Ancestor(0), site),
+                3 => tree.insert_mutation_event(Ancestor(0), site),
+
+                // then one more for the child for site 9
+                9 => tree.insert_mutation_event(Ancestor(1), site),
+                _ => {}
+            }
+
+            counter += 1;
+        });
+
+        // check that we inherit all mutations from the parent and all from the child are also discovered
+        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(1));
+        assert_eq!(traceback_iterator.clone().count(), 4);
+
+        traceback_iterator.for_each(|state| match state.site.0 {
+            0 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            ),
+            2 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            ),
+            3 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            ),
+            9 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            ),
+            _ => assert_ne!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected no event at site {}",
+                state.site.0
+            ),
+        });
+    }
+
+    #[test]
+    fn test_transitive_compression() {
+        // test whether the traceback iterator works correctly when copying from a grandparent
+
+        let mut ix = AncestorIndex::new(3, false, 1);
+
+        // prepare partial tree sequence for traceback
+        let mut partial_tree_sequence = PartialTreeSequence::with_capacity(3);
+        partial_tree_sequence.push(vec![], vec![]);
+        partial_tree_sequence.push(
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(1)],
+        );
+        // the second child is uncompressed in first and last site
+        partial_tree_sequence.push(
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(1),
+            )],
+            vec![VariantIndex::from_usize(0), VariantIndex::from_usize(9)],
+        );
+
+        ix.insert_sequence_node(
+            Ancestor(1),
+            &partial_tree_sequence.edges[1],
+            &partial_tree_sequence.mutations[1],
+        );
+        ix.insert_sequence_node(
+            Ancestor(2),
+            &partial_tree_sequence.edges[2],
+            &partial_tree_sequence.mutations[2],
+        );
+
+        let mut iterator = ix.sites(VariantIndex::from_usize(0), VariantIndex::from_usize(10), 3);
+        iterator.for_each(|(site, tree)| {
+            // insert recombination on parent on site 0,
+            // to make sure we not only copy mutations from the grandparent, but also stop
+            // copying from it once the parent is decompressed
+            if site.0 == 1 {
+                tree.insert_recombination_event(Ancestor(1), site);
+            }
+
+            tree.nodes().for_each(|n| {
+                // make sure recompression happens instantly, meaning the third node is only present at first and last site
+                *tree.likelihood(n) = 1.0;
+
+                // insert mutations on every site
+                tree.insert_mutation_event(n, site);
             });
+        });
+
+        // check that we inherit all mutations from the parent
+        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(2));
+        assert_eq!(traceback_iterator.clone().count(), 11);
+
+        traceback_iterator.clone().take(9).for_each(|state| {
+            assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            )
+        });
+
+        assert_eq!(
+            traceback_iterator.clone().skip(9).next().unwrap().kind,
+            Recombination
+        );
+        assert_eq!(traceback_iterator.last().unwrap().kind, Mutation);
     }
 
     #[test]
@@ -1374,141 +1809,5 @@ mod tests {
                 }
                 counter += 1usize;
             });
-    }
-}
-
-/// Iterator to iterate back through the viterbi table generated by the Viterbi algorithm.
-/// It holds the marginal tree that was modified by the Viterbi algorithm and iterates back through
-/// some aspects of the tree sequence, but only on the most likely path.
-///
-/// TODO this needs way more description
-pub(in crate::ts) struct TracebackSequenceIterator<'a, 'o>
-where
-    'o: 'a,
-{
-    marginal_tree: &'a MarginalTree<'o>,
-    start: VariantIndex,
-    end: VariantIndex,
-    current: VariantIndex,
-    current_ancestor: Ancestor,
-    iter: Peekable<Rev<Iter<'o, ViterbiEvent>>>,
-    inner: Option<Box<TracebackSequenceIterator<'a, 'o>>>,
-}
-
-impl<'o> TracebackSequenceIterator<'o, 'o> {
-    pub fn switch_ancestor(&mut self, ancestor: Ancestor) {
-        self.current_ancestor = ancestor;
-
-        // find the position BEFORE the current site in the new ancestor,
-        // since we do not want to copy the current site
-        let new_cursor = self.marginal_tree.viterbi_events[ancestor.0]
-            .binary_search_by(|e| e.site.cmp(&self.current));
-        let pos = match new_cursor {
-            Ok(mut pos) => {
-                while pos > 0
-                    && self.marginal_tree.viterbi_events[ancestor.0][pos - 1].site == self.current
-                {
-                    pos -= 1;
-                }
-                pos
-            }
-            Err(pos) => pos,
-        };
-
-        self.iter = self.marginal_tree.viterbi_events[ancestor.0][..pos]
-            .iter()
-            .rev()
-            .peekable();
-
-        self.inner = None;
-    }
-}
-
-impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
-    type Item = &'o ViterbiEvent;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(ref mut inner) = self.inner {
-            let element = inner.next();
-            if element.is_none() {
-                self.inner = None;
-            } else {
-                self.current = element.unwrap().site;
-                return element;
-            }
-        }
-
-        let element = self.iter.next();
-        if let Some(event) = element {
-            if event.site < self.start {
-                return None;
-            } else {
-                self.current = event.site;
-            }
-
-            match event.kind {
-                ViterbiEventKind::Copy(ancestor) => {
-                    let start_site = if let Some(ViterbiEvent { site, kind: _ }) = self.iter.peek()
-                    {
-                        *site
-                    } else {
-                        self.start
-                    };
-
-                    let end_cursor = self.marginal_tree.viterbi_events[ancestor.0]
-                        .binary_search_by(|e| e.site.cmp(&event.site));
-                    let start_cursor = self.marginal_tree.viterbi_events[ancestor.0]
-                        .binary_search_by(|e| e.site.cmp(&start_site));
-
-                    // find the position AFTER the current site in the new ancestor
-                    // since we want to also copy the current site
-                    let end = match end_cursor {
-                        Ok(mut pos) => {
-                            while self.marginal_tree.viterbi_events[ancestor.0].len() > pos
-                                && self.marginal_tree.viterbi_events[ancestor.0][pos].site
-                                    == event.site
-                            {
-                                pos += 1;
-                            }
-                            pos
-                        }
-                        Err(pos) => pos,
-                    };
-
-                    // find the position AFTER the start_cursor,
-                    // since we do not want to copy that site
-                    let start = match start_cursor {
-                        Ok(mut pos) => {
-                            while self.marginal_tree.viterbi_events[ancestor.0].len() > pos
-                                && self.marginal_tree.viterbi_events[ancestor.0][pos].site
-                                    == start_site
-                            {
-                                pos += 1;
-                            }
-                            pos
-                        }
-                        Err(pos) => pos,
-                    };
-
-                    self.inner = Some(Box::new(TracebackSequenceIterator {
-                        marginal_tree: self.marginal_tree,
-                        start: start_site,
-                        end: event.site,
-                        current: event.site,
-                        current_ancestor: ancestor,
-                        iter: self.marginal_tree.viterbi_events[ancestor.0][start..end]
-                            .iter()
-                            .rev()
-                            .peekable(),
-                        inner: None,
-                    }));
-                    self.next()
-                }
-                ViterbiEventKind::Decompress => self.next(),
-                _ => element,
-            }
-        } else {
-            None
-        }
     }
 }

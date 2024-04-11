@@ -135,7 +135,7 @@ impl ViterbiMatcher {
 
         // iterate through the viterbi events of the current ancestor until we find a recombination
         // event that coincides with a new most likely ancestor and then switch.
-        let mut viterbi_event_iter = sites.traceback(current_ancestor);
+        let mut viterbi_event_iter = sites.traceback(&self.partial_tree_sequence, current_ancestor);
 
         while let Some(event) = viterbi_event_iter.next() {
             candidate_site_index -= last_site.get_variant_distance(event.site);

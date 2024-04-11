@@ -27,11 +27,8 @@ pub(super) enum ViterbiEventKind {
     /// Recombination event here
     Recombination,
 
-    /// Beginning from here, traceback is possible from the current ancestor
-    Decompress,
-
-    /// Beginning from here, traceback must be continued at the given `Ancestor`
-    Copy(Ancestor),
+    /// Beginning from here, traceback is impossible from the current ancestor
+    Compressed(VariantIndex),
 }
 
 /// A helper structure for the Viterbi algorithm that helps to iterate through the sites, updating
