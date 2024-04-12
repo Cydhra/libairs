@@ -1,8 +1,11 @@
+use std::cmp::min;
+use std::sync::mpsc::channel;
 use std::vec;
 
 use rayon::iter::ParallelIterator;
 use rayon::iter::{IndexedParallelIterator, ParallelBridge};
 use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
+use scoped_thread_pool::Pool;
 
 use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence};
 use crate::ts::ancestor_index::{AncestorIndex, ViterbiEventKind};
@@ -182,7 +185,7 @@ impl ViterbiMatcher {
     /// within the array.
     pub fn match_ancestors(&mut self) {
         // TODO make this configurable
-        let num_threads = 4usize;
+        let num_threads = 16usize;
 
         let mut ancestor_iterators = vec![
             AncestorIndex::new(
@@ -209,60 +212,135 @@ impl ViterbiMatcher {
         );
 
         let mut current_ancestor_index = 1;
-        for chunk in self.ancestors.as_slice()[current_ancestor_index..].chunks(num_threads) {
-            debug_assert!(chunk.len() <= num_threads);
+        let pool = Pool::new(num_threads);
 
-            let ancestor_range = current_ancestor_index..current_ancestor_index + chunk.len();
+        while current_ancestor_index < self.ancestors.len() {
+            let per_thread = 4;
+            let chunk_size = min(
+                num_threads * per_thread,
+                self.ancestors.len() - current_ancestor_index,
+            );
 
-            // prepare the iterators for the chunk by adding the start and end of unmatched ancestors
-            // to the iterator, so that the marginal trees are initialized correctly with free nodes
-            for ancestor_id in ancestor_range.clone() {
-                let ancestor_id = Ancestor(ancestor_id);
+            let (sender, receiver) = channel();
 
-                let (start, end) = (
-                    self.ancestors[ancestor_id].start(),
-                    self.ancestors[ancestor_id].end(),
+            pool.scoped(|scope| {
+                ancestor_iterators.iter_mut().enumerate().for_each(
+                    |(ancestor_offset, iterator)| {
+                        let ancestors = &self.ancestors;
+                        let matcher = &self;
+                        let sender = sender.clone();
+
+                        scope.execute(move || {
+                            for i in current_ancestor_index..current_ancestor_index + chunk_size {
+                                let free_node = Ancestor(i);
+                                iterator.insert_free_node(
+                                    free_node,
+                                    ancestors[free_node].start(),
+                                    ancestors[free_node].end(),
+                                );
+                            }
+
+                            for i in 0..per_thread {
+                                let ancestor_index =
+                                    Ancestor(current_ancestor_index + per_thread * ancestor_offset + i);
+
+                                if ancestor_index.0 >= ancestors.len() {
+                                    break;
+                                }
+
+                                let ancestor = &ancestors[ancestor_index];
+
+                                let mut num_ancestors = 0;
+                                // TODO precalculate this
+                                for (_, old_ancestor) in ancestors
+                                    .iter()
+                                    .take(ancestor_index.0)
+                                {
+                                    if old_ancestor.relative_age() > ancestor.relative_age() {
+                                        // TODO we can perform an overlap check here
+                                        num_ancestors += 1;
+                                    }
+                                }
+
+                                sender
+                                    .send((
+                                        ancestor_index,
+                                        matcher.find_copy_path(iterator, ancestor, num_ancestors),
+                                    ))
+                                    .expect("failed to send result");
+                            }
+                        });
+                    },
                 );
-                ancestor_iterators.iter_mut().for_each(|iterator| {
-                    iterator.insert_free_node(ancestor_id, start, end);
-                });
-            }
+            });
 
-            let mut results = chunk
-                .par_iter()
-                .zip(ancestor_range)
-                .zip(ancestor_iterators.par_iter_mut())
-                .map(|((ancestor, ancestor_index), ancestor_iterator)| {
-                    let mut num_ancestors = 0;
-
-                    // TODO precalculate this
-                    for (_, old_ancestor) in self.ancestors.iter().take(ancestor_index) {
-                        if old_ancestor.relative_age() > ancestor.relative_age() {
-                            // TODO we can perform an overlap check here
-                            num_ancestors += 1;
-                        }
-                    }
-
-                    (
-                        ancestor_index,
-                        self.find_copy_path(ancestor_iterator, ancestor, num_ancestors),
-                    )
-                })
-                .collect::<Vec<_>>();
-
-            // increase the index start for the next chunk
-            debug_assert!(results.len() == chunk.len());
-            current_ancestor_index += results.len();
-
-            // insert the results into the partial tree sequence and the iterators
+            let mut results = receiver.iter().take(chunk_size).collect::<Vec<_>>();
             results.sort_by(|(a, _), (b, _)| a.cmp(b));
+            current_ancestor_index += results.len();
+            println!("processed ancestors {}..{} of {}", current_ancestor_index - chunk_size, current_ancestor_index, self.ancestors.len());
+
             for (ancestor_index, (edges, mutations)) in results {
                 ancestor_iterators.iter_mut().for_each(|iterator| {
-                    iterator.insert_sequence_node(Ancestor(ancestor_index), &edges, &mutations);
+                    iterator.insert_sequence_node(ancestor_index, &edges, &mutations);
                 });
                 self.partial_tree_sequence.push(edges, mutations);
             }
         }
+
+        // for chunk in self.ancestors.as_slice()[current_ancestor_index..].chunks(num_threads) {
+        //     debug_assert!(chunk.len() <= num_threads);
+        //
+        //     let ancestor_range = current_ancestor_index..current_ancestor_index + chunk.len();
+        //
+        //     // prepare the iterators for the chunk by adding the start and end of unmatched ancestors
+        //     // to the iterator, so that the marginal trees are initialized correctly with free nodes
+        //     for ancestor_id in ancestor_range.clone() {
+        //         let ancestor_id = Ancestor(ancestor_id);
+        //
+        //         let (start, end) = (
+        //             self.ancestors[ancestor_id].start(),
+        //             self.ancestors[ancestor_id].end(),
+        //         );
+        //         ancestor_iterators.iter_mut().for_each(|iterator| {
+        //             iterator.insert_free_node(ancestor_id, start, end);
+        //         });
+        //     }
+        //
+        //     let mut results = chunk
+        //         .par_iter()
+        //         .zip(ancestor_range)
+        //         .zip(ancestor_iterators.par_iter_mut())
+        //         .map(|((ancestor, ancestor_index), ancestor_iterator)| {
+        //             let mut num_ancestors = 0;
+        //
+        //             // TODO precalculate this
+        //             for (_, old_ancestor) in self.ancestors.iter().take(ancestor_index) {
+        //                 if old_ancestor.relative_age() > ancestor.relative_age() {
+        //                     // TODO we can perform an overlap check here
+        //                     num_ancestors += 1;
+        //                 }
+        //             }
+        //
+        //             (
+        //                 ancestor_index,
+        //                 self.find_copy_path(ancestor_iterator, ancestor, num_ancestors),
+        //             )
+        //         })
+        //         .collect::<Vec<_>>();
+        //
+        //     // increase the index start for the next chunk
+        //     debug_assert!(results.len() == chunk.len());
+        //     current_ancestor_index += results.len();
+        //
+        //     // insert the results into the partial tree sequence and the iterators
+        //     results.sort_by(|(a, _), (b, _)| a.cmp(b));
+        //     for (ancestor_index, (edges, mutations)) in results {
+        //         ancestor_iterators.iter_mut().for_each(|iterator| {
+        //             iterator.insert_sequence_node(Ancestor(ancestor_index), &edges, &mutations);
+        //         });
+        //         self.partial_tree_sequence.push(edges, mutations);
+        //     }
+        // }
     }
 
     /// Insert a set of samples into an ancestral tree sequence. The samples will be matched

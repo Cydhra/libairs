@@ -9,6 +9,7 @@ edition = "2021"
 rayon = "1.8.0"
 twox-hash = "1.6"
 vcfire = { git = "https://github.com/Cydhra/vcfire", rev = "3db5fb7" } # probably should be optional because of native dependency
+scoped-thread-pool = "1.0.4"
 
 [profile.release]
 debug = true
