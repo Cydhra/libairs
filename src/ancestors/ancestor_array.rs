@@ -41,11 +41,6 @@ impl AncestorArray {
             .map(|(i, a)| (Ancestor(i), a))
     }
 
-    /// Get the ancestral sequences as a slice.
-    pub(crate) fn as_slice(&self) -> &[AncestralSequence] {
-        &self.ancestors
-    }
-
     /// Convert a variant index to a sequence position
     pub(crate) fn variant_index_to_sequence_pos(&self, index: VariantIndex) -> SequencePosition {
         self.variant_data.variant_index_to_sequence_pos(index)
