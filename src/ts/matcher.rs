@@ -233,8 +233,8 @@ impl ViterbiMatcher {
             );
 
             // insert the next chunk of ancestors into the edge sequence as free nodes
-            // TODO I think we can insert one less, which will result in none inserted when we use 1 thread with 1 ancestor per thread
-            for ancestor_index in current_ancestor_index..current_ancestor_index + chunk_size {
+            for ancestor_index in current_ancestor_index..(current_ancestor_index + chunk_size - 1)
+            {
                 let ancestor_index = Ancestor(ancestor_index);
                 self.edge_sequence.insert_free_node(
                     ancestor_index,
