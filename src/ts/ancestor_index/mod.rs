@@ -1,14 +1,20 @@
-use std::cmp::Ordering;
-use std::collections::BTreeSet;
-use std::iter::Rev;
-use std::slice::Iter;
+use std::iter::Peekable;
 
 use crate::ancestors::Ancestor;
-use crate::ts::ancestor_index::iter::*;
-use crate::ts::partial_sequence::{PartialSequenceEdge, PartialTreeSequence};
+use crate::ts::ancestor_index::tree::MarginalTree;
+use crate::ts::partial_sequence::PartialTreeSequence;
 use crate::variants::VariantIndex;
+mod tree;
 
-pub mod iter;
+mod sequence;
+mod traceback;
+
+pub(in crate::ts) use sequence::{EdgeSequence, SequenceEvent};
+pub(in crate::ts) use traceback::TracebackSequenceIterator;
+
+/// A DNA sequence site visited during the viterbi algorithm.
+/// Consists of a [`VariantIndex`] and a mutable reference to the marginal tree at that site.
+pub(super) type Site<'a, 'o> = (VariantIndex, &'a mut MarginalTree<'o>);
 
 /// Events that a single ancestor can experience during the Viterbi algorithm.
 /// These events are generated during the forward search and are used to reconstruct
@@ -39,31 +45,17 @@ pub(super) enum ViterbiEventKind {
 /// Whenever new tree edges are calculated, they can be inserted into the iterator so the tree
 /// compression improves for future iterations.
 ///
-/// To insert nodes that have no edges yet, call [`AncestorIndex::insert_free_node`]. This will
+/// To insert nodes that have no edges yet, call [`ViterbiIterator::insert_free_node`]. This will
 /// make the ancestor available during Viterbi without compressing it into the tree.
 ///
 /// To upgrade nodes with edges (enabling tree compression during the Viterbi algorithm), call
-/// [`AncestorIndex::insert_sequence_node`].
+/// [`ViterbiIterator::insert_sequence_node`].
 ///
 /// The iterator will start at the provided start point and iterate through all sites,
 /// updating the marginal tree for each site and then calling a consumer function
 /// with the [`VariantIndex`] and the [`MarginalTree`] (see: [`Site`])
 #[derive(Clone)]
-pub(crate) struct AncestorIndex {
-    /// A sorted set containing all tree-sequence events:
-    /// - Start of a new tree node
-    /// - Change of parent of a tree node
-    /// - End of a tree node
-    edge_index: BTreeSet<SequenceEvent>,
-
-    /// The number of nodes in the tree sequence.
-    /// This number is the maximum amount of nodes that have likelihoods during the Viterbi
-    /// algorithm.
-    /// The actual iterator can be limited to a smaller number of nodes.
-    /// Not all nodes included in this number necessarily have edges in the tree sequence.
-    num_nodes: usize,
-
-    // the following are pre-allocated arrays that are used to store the state of the marginal tree
+pub(super) struct ViterbiIterator {
     /// The actual parents of the tree nodes. `None` for free nodes and the root, parents might be
     /// compressed.
     parents: Vec<Option<Ancestor>>,
@@ -107,7 +99,7 @@ pub(crate) struct AncestorIndex {
     inv_recompression_threshold: usize,
 }
 
-impl AncestorIndex {
+impl ViterbiIterator {
     /// Create a new empty ancestor iterator.
     ///
     /// # Parameters
@@ -131,8 +123,6 @@ impl AncestorIndex {
             "Recompression interval must be greater than 0"
         );
         Self {
-            edge_index: BTreeSet::new(),
-            num_nodes: 1,
             parents: vec![None; max_nodes],
             children: vec![Vec::new(); max_nodes],
             uncompressed_parents: vec![None; max_nodes],
@@ -143,169 +133,6 @@ impl AncestorIndex {
             last_compressed: vec![0; max_nodes],
             use_recompression_threshold,
             inv_recompression_threshold,
-        }
-    }
-
-    /// Instantiate a new ancestor index and insert up to `max_nodes` nodes from the given tree
-    /// sequence.
-    ///
-    /// # Parameters
-    /// - `max_nodes`: The maximum number of nodes to insert into the iterator. Can be lower or higher
-    /// than the amount of nodes in the `tree_sequence`.
-    /// - `variant_count`: The number of variants in the genome sequence
-    /// - `use_recompression_threshold`: Whether to use the recompression threshold to avoid
-    /// recompressing when only a few nodes are active. If this is false, the algorithm will
-    /// recompress in every iteration, regardless of efficacy.
-    /// - `inv_recompression_threshold`: The inverse recompression threshold. The iterator will
-    /// attempt to recompress the marginal tree when more than `1/inv_recompression_threshold * num_nodes`
-    /// nodes of the marginal tree are active. If `use_recompression_threshold` is false, this
-    /// parameter is ignored.
-    /// - `tree_sequence`: The tree sequence to insert into the iterator
-    pub(crate) fn from_tree_sequence(
-        max_nodes: usize,
-        use_recompression_threshold: bool,
-        inv_recompression_threshold: usize,
-        tree_sequence: &PartialTreeSequence,
-    ) -> Self {
-        let mut ancestor_index = Self::new(
-            max_nodes,
-            use_recompression_threshold,
-            inv_recompression_threshold,
-        );
-
-        for (node, (edges, mutations)) in tree_sequence
-            .edges
-            .iter()
-            .zip(tree_sequence.mutations.iter())
-            .enumerate()
-            .skip(1)
-        {
-            ancestor_index.insert_sequence_node(Ancestor(node), edges, mutations);
-        }
-
-        ancestor_index
-    }
-
-    /// Insert a free node into the iterator. This node will be available during the Viterbi
-    /// algorithm, but it will not be compressed into the tree (since it hasn't been matched against
-    /// the tree sequence yet).
-    ///
-    /// The nodes must be inserted in order of increasing index.
-    ///
-    /// A free node can be upgraded to a sequence node by calling [`AncestorIndex::insert_sequence_node`].
-    /// Upgrading does not need to be done in order.
-    ///
-    /// # Parameters
-    /// - `node`: The tree node that will be inserted into the tree sequence
-    /// - `start`: The index of the first variant site of its ancestral sequence. The node will
-    /// not participate in the Viterbi algorithm before this site.
-    /// - `end`: The index of the last variant site of its ancestral sequence.
-    ///
-    /// # Panics
-    /// Panics if the given tree node index is not the next index in the sequence.
-    pub(crate) fn insert_free_node(
-        &mut self,
-        node: Ancestor,
-        start: VariantIndex,
-        end: VariantIndex,
-    ) {
-        assert_eq!(
-            node.0, self.num_nodes,
-            "Tree nodes must be inserted in order: {} != {}",
-            node.0, self.num_nodes
-        );
-        self.num_nodes += 1;
-
-        // insert start and end of the ancestor
-        self.edge_index.insert(SequenceEvent {
-            site: start,
-            node,
-            kind: SequenceEventKind::StartFree,
-        });
-
-        self.edge_index.insert(SequenceEvent {
-            site: end,
-            node,
-            kind: SequenceEventKind::End,
-        });
-    }
-
-    /// Insert a tree sequence node into the partial tree sequence, which will be exploited by the
-    /// iterator to compress trees.
-    /// Alternatively, if the node already exists and has no edges in the tree sequence
-    /// (i.e. is a free node), it will be upgraded into a tree node.
-    ///
-    /// The nodes must be inserted in order of increasing index. This does not apply to upgrading.
-    ///
-    /// # Parameters
-    /// - `tree_node`: The tree node handle that will be inserted into the tree sequence
-    /// - `edges`: The edges that are associated with the tree node
-    /// - `mutations`: The mutations that are associated with the tree node
-    ///
-    /// # Panics
-    /// Panics, if the given tree node index is not already a free node and is not the next index
-    /// in the sequence.
-    pub(crate) fn insert_sequence_node(
-        &mut self,
-        tree_node: Ancestor,
-        edges: &[PartialSequenceEdge],
-        mutations: &[VariantIndex],
-    ) {
-        if tree_node.0 >= self.num_nodes {
-            self.num_nodes += 1;
-            assert_eq!(
-                tree_node.0,
-                self.num_nodes - 1,
-                "Tree nodes must be inserted in order"
-            );
-
-            // insert the end only if this node has not been inserted before as a free node
-            self.edge_index.insert(SequenceEvent {
-                site: edges.last().unwrap().end(),
-                node: tree_node,
-                kind: SequenceEventKind::End,
-            });
-        } else {
-            // remove the start event of the inserted node, since we assume it has been inserted before
-            let success = self.edge_index.remove(&SequenceEvent {
-                site: edges.first().unwrap().start(),
-                node: tree_node,
-                kind: SequenceEventKind::StartFree,
-            });
-            assert!(
-                success,
-                "attempted to upgrade a node that had no free start event associated with it"
-            );
-        }
-
-        if !edges.is_empty() {
-            self.edge_index.insert(SequenceEvent {
-                site: edges.first().unwrap().start(),
-                node: tree_node,
-                kind: SequenceEventKind::Start {
-                    parent: edges.first().unwrap().parent(),
-                },
-            });
-
-            for edge in edges.iter().skip(1) {
-                self.edge_index.insert(SequenceEvent {
-                    site: edge.start(),
-                    node: tree_node,
-                    kind: SequenceEventKind::ChangeParent {
-                        new_parent: edge.parent(),
-                    },
-                });
-            }
-        } else {
-            assert_eq!(self.num_nodes, 1, "only the root node can have no edges");
-        }
-
-        for &mutation in mutations {
-            self.edge_index.insert(SequenceEvent {
-                site: mutation,
-                node: tree_node,
-                kind: SequenceEventKind::Mutation,
-            });
         }
     }
 
@@ -320,15 +147,16 @@ impl AncestorIndex {
     /// - `end`: The index of the last site to iterate through (exclusive)
     /// - `limit_nodes`: The number of nodes to consider for the marginal tree. All nodes with a
     /// index equal or greater than this value will be ignored.
-    pub(crate) fn sites(
-        &mut self,
+    pub(crate) fn iter_sites<'a>(
+        &'a mut self,
+        edge_sequence: &'a EdgeSequence,
         start: VariantIndex,
         end: VariantIndex,
         limit_nodes: usize,
-    ) -> PartialTreeSequenceIterator<impl Iterator<Item = &'_ SequenceEvent>> {
+    ) -> TreeSequenceState<impl Iterator<Item = &'a SequenceEvent>> {
         let mut marginal_tree = MarginalTree::new(
             start,
-            self.num_nodes,
+            edge_sequence.num_nodes,
             limit_nodes,
             &mut self.parents[0..limit_nodes],
             &mut self.children[0..limit_nodes],
@@ -343,74 +171,1152 @@ impl AncestorIndex {
         );
 
         let site = start;
-        let mut queue = self.edge_index.iter().peekable();
+        let mut queue = edge_sequence.edge_index.iter().peekable();
 
         marginal_tree.advance_to_site(&mut queue, site, true, false);
 
-        PartialTreeSequenceIterator::new(marginal_tree, start, site, end, queue)
+        TreeSequenceState::new(marginal_tree, start, site, end, queue)
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum SequenceEventKind {
-    Start { parent: Ancestor },
-    StartFree,
-    ChangeParent { new_parent: Ancestor },
-    Mutation,
-    End,
+/// Borrowed iterator through the partial tree sequence held by an [`ViterbiIterator`].
+/// Not an actual implementation of [`std::iter::IterMut`], because it borrows the same marginal tree for each site
+/// mutably, so we need to make sure the reference cannot escape the iterator.
+///
+/// This means this struct does not actually implement Iterator traits, but offers a single method
+/// [`TreeSequenceState::for_each`], which consumers have to call to process the tree sequence.
+pub(super) struct TreeSequenceState<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> {
+    pub(super) marginal_tree: MarginalTree<'o>,
+    pub(super) start: VariantIndex,
+    pub(super) site: VariantIndex,
+    pub(super) end: VariantIndex,
+    pub(super) queue: Peekable<I>,
 }
 
-impl PartialOrd<Self> for SequenceEventKind {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for SequenceEventKind {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
-            (Self::Start { parent: p1 }, Self::Start { parent: p2 }) => p1.cmp(p2),
-            (Self::Start { .. }, _) => Ordering::Less,
-            (_, Self::Start { .. }) => Ordering::Greater,
-            (Self::StartFree, Self::StartFree) => Ordering::Equal,
-            (Self::StartFree, _) => Ordering::Less,
-            (_, Self::StartFree) => Ordering::Greater,
-            (Self::ChangeParent { new_parent: p1 }, Self::ChangeParent { new_parent: p2 }) => {
-                p1.cmp(p2)
-            }
-            (Self::ChangeParent { .. }, _) => Ordering::Less,
-            (_, Self::ChangeParent { .. }) => Ordering::Greater,
-            (Self::Mutation, Self::Mutation) => Ordering::Equal,
-            (Self::Mutation, _) => Ordering::Less,
-            (_, Self::Mutation) => Ordering::Greater,
-            (Self::End, Self::End) => Ordering::Equal,
+impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I> {
+    pub(super) fn new(
+        marginal_tree: MarginalTree<'o>,
+        start: VariantIndex,
+        site: VariantIndex,
+        end: VariantIndex,
+        queue: Peekable<I>,
+    ) -> Self {
+        TreeSequenceState {
+            marginal_tree,
+            start,
+            site,
+            end,
+            queue,
         }
     }
-}
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct SequenceEvent {
-    site: VariantIndex,
-    node: Ancestor,
-    kind: SequenceEventKind,
-}
+    pub(crate) fn for_each<F: FnMut(Site)>(&mut self, mut consumer: F) {
+        if self.site == self.end {
+            return;
+        }
 
-impl PartialOrd<Self> for SequenceEvent {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
+        // first site has special treatment because we don't need to decompress edges that start here
+        self.marginal_tree
+            .advance_to_site(&mut self.queue, self.site.next(), false, true);
+        consumer((self.site, &mut self.marginal_tree));
+        self.marginal_tree
+            .recompress_tree(self.site.get_variant_distance(self.start));
+        self.site = self.site.next();
+
+        while self.site < self.end {
+            self.marginal_tree
+                .advance_to_site(&mut self.queue, self.site.next(), false, false);
+
+            consumer((self.site, &mut self.marginal_tree));
+            if !self.marginal_tree.use_recompression_threshold
+                || self.marginal_tree.active_nodes.len()
+                    > self.marginal_tree.limit_nodes
+                        / self.marginal_tree.inv_recompression_threshold
+            {
+                self.marginal_tree
+                    .recompress_tree(self.site.get_variant_distance(self.start));
+            }
+            self.site = self.site.next();
+        }
+
+        // insert a compression event into all compressed ancestors, so traceback can follow the
+        // compressed path
+        for (node, &is_compressed) in self.marginal_tree.is_compressed.iter().enumerate() {
+            if is_compressed
+                && self.marginal_tree.last_compressed[node]
+                    < self.end.get_variant_distance(self.start)
+            {
+                self.marginal_tree.viterbi_events[node].push(ViterbiEvent {
+                    kind: ViterbiEventKind::Compressed(
+                        self.start + self.marginal_tree.last_compressed[node],
+                    ),
+                    site: self.end,
+                });
+            }
+        }
+    }
+
+    /// Create a traceback iterator through the Viterbi table generated during a previous call to
+    /// `for_each`. The iterator will be initialized with `current_ancestor` for the traceback and
+    /// automatically retrieve events from its correct ancestor whenever the actual ancestor is
+    /// compressed.
+    pub(crate) fn traceback<'s>(
+        &'s self,
+        partial_tree_sequence: &'s PartialTreeSequence,
+        current_ancestor: Ancestor,
+    ) -> TracebackSequenceIterator<'s, 'o>
+    where
+        's: 'o,
+    {
+        TracebackSequenceIterator::new(
+            &self.marginal_tree,
+            partial_tree_sequence,
+            current_ancestor,
+            self.start,
+            self.end,
+            self.marginal_tree.viterbi_events[current_ancestor.0]
+                .iter()
+                .rev()
+                .peekable(),
+        )
     }
 }
 
-impl Ord for SequenceEvent {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.site
-            .cmp(&other.site)
-            .then(self.kind.cmp(&other.kind))
-            .then(match self.kind {
-                // we need to delete the tree from the bottom,
-                SequenceEventKind::End => self.node.cmp(&other.node).reverse(),
-                // but build it from the top
-                _ => self.node.cmp(&other.node),
-            })
+#[cfg(test)]
+mod tests {
+    use std::hint::black_box;
+
+    use super::*;
+    use crate::ts::ancestor_index::ViterbiEventKind::{Mutation, Recombination};
+    use crate::ts::partial_sequence::PartialSequenceEdge;
+
+    fn find_uncompressed_parent(tree: &MarginalTree, node: Ancestor) -> Option<Ancestor> {
+        let mut parent = tree.parents[node.0];
+
+        while let Some(p) = parent {
+            if !tree.is_compressed(p) {
+                break;
+            }
+            parent = tree.parents[p.0];
+        }
+
+        parent
+    }
+
+    #[test]
+    fn test_empty_range() {
+        // test whether iterating over an empty range doesn't crash and calls the closure zero times
+        let mut ix = ViterbiIterator::new(2, false, 1);
+        let mut edges = EdgeSequence::new();
+
+        edges.insert_free_node(
+            Ancestor(1),
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+        );
+
+        ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(10),
+            VariantIndex::from_usize(10),
+            2,
+        )
+        .for_each(|_| panic!("closure called for empty range"));
+    }
+
+    #[test]
+    fn test_ancestor_iteration() {
+        let mut ix = ViterbiIterator::new(2, false, 1);
+        let mut edges = EdgeSequence::new();
+        let mut counter = 0;
+
+        edges.insert_free_node(
+            Ancestor(1),
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+        );
+        edges.insert_free_node(
+            Ancestor(2),
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+        );
+
+        ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+            2,
+        )
+        .for_each(|(site, tree)| {
+            assert_eq!(site, VariantIndex::from_usize(counter));
+            assert_eq!(tree.num_nodes(), 2);
+            assert_eq!(tree.nodes().count(), 2);
+            assert_eq!(find_uncompressed_parent(tree, Ancestor(0)), None);
+            assert_eq!(find_uncompressed_parent(tree, Ancestor(1)), None);
+            counter += 1;
+        });
+    }
+
+    #[test]
+    fn test_simple_tree_compression() {
+        let mut ix = ViterbiIterator::new(2, false, 1);
+        let mut edges = EdgeSequence::new();
+        let mut counter = 0;
+
+        // insert edge from first to root node
+        edges.insert_sequence_node(
+            Ancestor(1),
+            &vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            &vec![VariantIndex::from_usize(5)],
+        );
+
+        ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+            2,
+        )
+        .for_each(|(site, tree)| {
+            // fake likelihoods to prevent recompression
+            for i in 0..tree.num_nodes() {
+                tree.likelihoods[i] = 0.1 * i as f64
+            }
+
+            assert_eq!(site, VariantIndex::from_usize(counter));
+            assert_eq!(tree.num_nodes(), 2);
+            assert_eq!(
+                tree.nodes().count(),
+                if counter < 5 { 1 } else { 2 },
+                "wrong number of nodes at site {}",
+                counter
+            );
+            counter += 1;
+        });
+    }
+
+    #[test]
+    fn test_simple_tree_recompression() {
+        let mut ix = ViterbiIterator::new(2, false, 1);
+        let mut edges = EdgeSequence::new();
+        let mut counter = 0;
+
+        // insert edge from first to root node
+        edges.insert_sequence_node(
+            Ancestor(1),
+            &vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            &vec![VariantIndex::from_usize(0)],
+        );
+
+        ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+            2,
+        )
+        .for_each(|(site, tree)| {
+            if site == VariantIndex::from_usize(0) {
+                // fake likelihoods to prevent early recompression
+                for i in 0..tree.num_nodes() {
+                    tree.likelihoods[i] = 0.1 * i as f64
+                }
+            } else if site == VariantIndex::from_usize(4) {
+                // trigger recompression exactly after site 4, meaning the node should be taken
+                // away beginning from site 5
+                for i in 0..tree.num_nodes() {
+                    tree.likelihoods[i] = 0.1;
+                }
+            }
+
+            assert_eq!(
+                tree.nodes().count(),
+                if counter < 5 { 2 } else { 1 },
+                "wrong number of nodes at site {}",
+                counter
+            );
+            counter += 1;
+        });
+    }
+
+    #[test]
+    fn test_simple_tree_divergence() {
+        // test whether a compressed node is decompressed when its parent changes to a different node
+        let mut ix = ViterbiIterator::new(3, false, 1);
+        let mut edges = EdgeSequence::new();
+        let mut counter = 0;
+
+        // insert edges for two nodes
+        edges.insert_sequence_node(
+            Ancestor(1),
+            &vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            &vec![VariantIndex::from_usize(9)],
+        );
+        edges.insert_sequence_node(
+            Ancestor(2),
+            &vec![
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(0),
+                    VariantIndex::from_usize(5),
+                    Ancestor(1),
+                ),
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(5),
+                    VariantIndex::from_usize(10),
+                    Ancestor(0),
+                ),
+            ],
+            &vec![VariantIndex::from_usize(10)],
+        );
+
+        ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(9),
+            3,
+        )
+        .for_each(|(site, tree)| {
+            // fake likelihoods to prevent recompression
+            for i in 0..tree.num_nodes() {
+                tree.likelihoods[i] = 0.1 * i as f64
+            }
+
+            assert_eq!(site, VariantIndex::from_usize(counter));
+            assert_eq!(tree.num_nodes(), 3);
+            assert_eq!(
+                tree.nodes().count(),
+                if counter < 5 { 1 } else { 2 },
+                "wrong number of nodes at site {}",
+                counter
+            );
+            counter += 1;
+        });
+    }
+
+    #[test]
+    fn test_recompression_divergence() {
+        // test whether divergence works after recompression
+        let mut ix = ViterbiIterator::new(2, false, 1);
+        let mut edges = EdgeSequence::new();
+        let mut counter = 0;
+
+        edges.insert_sequence_node(
+            Ancestor(1),
+            &vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            // diverge on site 1, then again on site 5, recompress in between
+            &vec![VariantIndex::from_usize(1), VariantIndex::from_usize(5)],
+        );
+
+        ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+            2,
+        )
+        .for_each(|(_, tree)| {
+            // likelihoods stay at 0, so recompression happens immediately
+            assert_eq!(
+                tree.nodes().count(),
+                match counter {
+                    1 => 2,
+                    5 => 2,
+                    _ => 1,
+                },
+                "wrong number of nodes at site {}",
+                counter
+            );
+            counter += 1;
+        });
+    }
+
+    #[test]
+    fn test_mutation_on_recombination() {
+        // test whether the correct nodes are decompressed when a mutation happens on a recombination
+        let mut ix = ViterbiIterator::new(3, false, 1);
+        let mut edges = EdgeSequence::new();
+        let mut counter = 0;
+
+        edges.insert_sequence_node(
+            Ancestor(1),
+            &vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            &vec![VariantIndex::from_usize(0)],
+        );
+        edges.insert_sequence_node(
+            Ancestor(2),
+            &vec![
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(0),
+                    VariantIndex::from_usize(5),
+                    Ancestor(1),
+                ),
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(5),
+                    VariantIndex::from_usize(10),
+                    Ancestor(0),
+                ),
+            ],
+            &vec![VariantIndex::from_usize(5)],
+        );
+
+        ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+            3,
+        )
+        .for_each(|(_, tree)| {
+            // fake likelihoods to prevent recompression
+            for i in 0..tree.num_nodes() {
+                tree.likelihoods[i] = 0.1 * i as f64
+            }
+
+            assert_eq!(
+                tree.nodes().count(),
+                match counter {
+                    0..=4 => 2,
+                    5.. => 3,
+                },
+                "wrong number of nodes at site {}",
+                counter
+            );
+            counter += 1usize;
+        });
+    }
+
+    #[test]
+    fn test_limit_nodes() {
+        // test whether the correct nodes are in the tree if we limit the number of nodes
+        let mut ix = ViterbiIterator::new(2, false, 1);
+        let mut edges = EdgeSequence::new();
+        let mut counter = 0;
+
+        // insert two nodes, one will be ignored
+        edges.insert_sequence_node(
+            Ancestor(1),
+            &vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            &vec![VariantIndex::from_usize(0)],
+        );
+        edges.insert_sequence_node(
+            Ancestor(2),
+            &vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            &vec![VariantIndex::from_usize(0)],
+        );
+
+        // check the tree size is always 2
+        ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+            2,
+        )
+        .for_each(|(_, tree)| {
+            // fake likelihoods to prevent recompression
+            for i in 0..tree.num_nodes() {
+                tree.likelihoods[i] = 0.1 * i as f64
+            }
+
+            assert_eq!(
+                tree.nodes().count(),
+                2,
+                "wrong number of nodes at site {}",
+                counter
+            );
+            counter += 1usize;
+        });
+    }
+
+    #[test]
+    fn test_subset_iterator() {
+        // test whether an incomplete range of sites iterated yields correct trees
+        let mut ix = ViterbiIterator::new(3, false, 1);
+        let mut edges = EdgeSequence::new();
+        let mut counter = 2;
+
+        // insert two nodes
+        edges.insert_sequence_node(
+            Ancestor(1),
+            &vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            &vec![VariantIndex::from_usize(5)],
+        );
+        edges.insert_sequence_node(
+            Ancestor(2),
+            &vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            &vec![VariantIndex::from_usize(1)],
+        );
+
+        // check the tree
+        ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(2),
+            VariantIndex::from_usize(10),
+            3,
+        )
+        .for_each(|(_, tree)| {
+            // fake likelihoods to prevent recompression
+            for i in 0..tree.num_nodes() {
+                tree.likelihoods[i] = 0.1 * i as f64
+            }
+
+            assert_eq!(
+                tree.nodes().count(),
+                match counter {
+                    2..=4 => 1,
+                    5.. => 2,
+                    _ => unreachable!(),
+                },
+                "wrong number of nodes at site {}",
+                counter
+            );
+            counter += 1usize;
+        });
+    }
+
+    #[test]
+    fn test_incomplete_ancestor() {
+        // test whether an ancestor that ends early gets removed from the marginal tree
+        let mut ix = ViterbiIterator::new(2, false, 1);
+        let mut edges = EdgeSequence::new();
+        let mut counter = 0;
+
+        // insert incomplete ancestor
+        edges.insert_sequence_node(
+            Ancestor(1),
+            &vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(5),
+                Ancestor(0),
+            )],
+            &vec![VariantIndex::from_usize(0)],
+        );
+
+        // check the tree
+        ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+            2,
+        )
+        .for_each(|(_, tree)| {
+            // fake likelihoods to prevent recompression
+            for i in 0..tree.num_nodes() {
+                tree.likelihoods[i] = 0.1 * i as f64
+            }
+
+            assert_eq!(
+                tree.nodes().count(),
+                match counter {
+                    0..=4 => 2,
+                    5.. => 1,
+                },
+                "wrong number of nodes at site {}",
+                counter
+            );
+            counter += 1usize;
+        });
+    }
+
+    #[test]
+    fn test_copying_from_parent_on_mutation() {
+        // test whether the iterator copies the recombination and mutation sites from the parent when a child is
+        // decompressed
+
+        let mut ix = ViterbiIterator::new(3, false, 1);
+        let mut edges = EdgeSequence::new();
+        let mut counter = 0;
+
+        // prepare partial tree sequence for traceback
+        let mut partial_tree_sequence = PartialTreeSequence::with_capacity(3);
+        partial_tree_sequence.push(vec![], vec![]);
+        partial_tree_sequence.push(
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(0)],
+        );
+        partial_tree_sequence.push(
+            vec![
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(0),
+                    VariantIndex::from_usize(5),
+                    Ancestor(0),
+                ),
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(5),
+                    VariantIndex::from_usize(10),
+                    Ancestor(1),
+                ),
+            ],
+            vec![VariantIndex::from_usize(4), VariantIndex::from_usize(9)],
+        );
+
+        // insert a child node that serves as a second node
+        edges.insert_sequence_node(
+            Ancestor(1),
+            &partial_tree_sequence.edges[1],
+            &partial_tree_sequence.mutations[1],
+        );
+
+        // insert another child node that copies from both the root and the child node
+        edges.insert_sequence_node(
+            Ancestor(2),
+            &partial_tree_sequence.edges[2],
+            &partial_tree_sequence.mutations[2],
+        );
+
+        // add mutations and recombinations with the root and first child node, and check whether the second child node
+        // copies them
+        let mut iterator = ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+            3,
+        );
+        iterator.for_each(|(_, tree)| {
+            match counter {
+                // don't recompress first two nodes
+                0 => tree
+                    .nodes()
+                    .for_each(|n| tree.likelihoods[n.0] = n.0 as f64 * 0.1),
+
+                // insert mutations and recombination for nodes 0 and 1, and later check if 2 inherited them
+                2 => tree.insert_mutation_event(Ancestor(0), VariantIndex::from_usize(2)),
+                3 => tree.insert_recombination_event(Ancestor(0), VariantIndex::from_usize(3)),
+                4 => {
+                    tree.likelihoods[2] = 0.1; // set likelihood of third node to that of second to trigger recompression
+                    tree.insert_mutation_event(Ancestor(0), VariantIndex::from_usize(4))
+                    // this shouldnt be copied, because the second node is uncompressed at this site
+                }
+                6 => tree.insert_mutation_event(Ancestor(1), VariantIndex::from_usize(6)),
+                7 => tree.insert_recombination_event(Ancestor(1), VariantIndex::from_usize(7)),
+                _ => {}
+            }
+
+            counter += 1;
+        });
+
+        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(2));
+        assert_eq!(traceback_iterator.clone().count(), 4);
+
+        traceback_iterator.for_each(|state| match state.site.0 {
+            2 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            ),
+            6 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            ),
+            3 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Recombination,
+                "expected recombination at {}",
+                state.site.0
+            ),
+            7 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Recombination,
+                "expected recombination at {}",
+                state.site.0
+            ),
+            _ => assert_ne!(
+                state.kind,
+                ViterbiEventKind::Recombination,
+                "expected no event at site {}",
+                state.site.0
+            ),
+        });
+    }
+
+    #[test]
+    fn test_copying_from_parent_on_change_parent() {
+        // test whether the iterator copies the recombination and mutation sites from the parent when a child is
+        // decompressed
+
+        let mut ix = ViterbiIterator::new(3, false, 1);
+        let mut edges = EdgeSequence::new();
+        let mut counter = 0;
+
+        // prepare partial tree sequence for traceback
+        let mut partial_tree_sequence = PartialTreeSequence::with_capacity(3);
+        partial_tree_sequence.push(vec![], vec![]);
+        partial_tree_sequence.push(
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(0)],
+        );
+        partial_tree_sequence.push(
+            vec![
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(0),
+                    VariantIndex::from_usize(5),
+                    Ancestor(0),
+                ),
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(5),
+                    VariantIndex::from_usize(7),
+                    Ancestor(1),
+                ),
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(7),
+                    VariantIndex::from_usize(10),
+                    Ancestor(0),
+                ),
+            ],
+            vec![],
+        );
+
+        // insert a child node that serves as a second node
+        edges.insert_sequence_node(
+            Ancestor(1),
+            &partial_tree_sequence.edges[1],
+            &partial_tree_sequence.mutations[1],
+        );
+
+        // insert another child node that copies from both the root and the child node, but has no mutations
+        edges.insert_sequence_node(
+            Ancestor(2),
+            &partial_tree_sequence.edges[2],
+            &partial_tree_sequence.mutations[2],
+        );
+
+        // add mutations and recombinations with the root, and check whether the second child node copies them
+        let mut iterator = ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+            3,
+        );
+        iterator.for_each(|(_, tree)| {
+            match counter {
+                // don't recompress first two nodes
+                0 => tree
+                    .nodes()
+                    .for_each(|n| tree.likelihoods[n.0] = n.0 as f64 * 0.1),
+
+                // insert mutations and recombination for nodes 0 and 1, and later check if 2 inherited them
+                2 => tree.insert_mutation_event(Ancestor(0), VariantIndex::from_usize(2)),
+                3 => tree.insert_recombination_event(Ancestor(0), VariantIndex::from_usize(3)),
+                5 => tree.insert_mutation_event(Ancestor(1), VariantIndex::from_usize(5)), // this should not be copied because the second ancestor is uncompressed at this site
+
+                _ => {}
+            }
+
+            counter += 1;
+        });
+
+        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(2));
+        assert_eq!(traceback_iterator.clone().count(), 2);
+
+        traceback_iterator.for_each(|state| match state.site.0 {
+            2 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            ),
+            3 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Recombination,
+                "expected recombination at {}",
+                state.site.0
+            ),
+            _ => assert_ne!(
+                state.kind,
+                ViterbiEventKind::Recombination,
+                "expected no events at site {}",
+                state.site.0
+            ),
+        });
+    }
+
+    #[test]
+    fn test_traceback_compression() {
+        // test whether a traceback iterator correctly returns the events that must be copied from
+        // parents, as well as the events that are present in the child
+
+        let mut ix = ViterbiIterator::new(3, false, 1);
+        let mut edges = EdgeSequence::new();
+        let mut counter = 0;
+
+        // prepare partial tree sequence for traceback
+        let mut partial_tree_sequence = PartialTreeSequence::with_capacity(3);
+        partial_tree_sequence.push(vec![], vec![]);
+        partial_tree_sequence.push(
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(0), VariantIndex::from_usize(9)],
+        );
+
+        edges.insert_sequence_node(
+            Ancestor(1),
+            &partial_tree_sequence.edges[1],
+            &partial_tree_sequence.mutations[1],
+        );
+
+        let mut iterator = ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+            2,
+        );
+        iterator.for_each(|(site, tree)| {
+            match counter {
+                // insert a mutation on first site and then immediately recompress
+                0 => tree.insert_mutation_event(Ancestor(1), site),
+
+                // insert mutations for parent for sites 2, 3 and check if they are inherited
+                2 => tree.insert_mutation_event(Ancestor(0), site),
+                3 => tree.insert_mutation_event(Ancestor(0), site),
+
+                // then one more for the child for site 9
+                9 => tree.insert_mutation_event(Ancestor(1), site),
+                _ => {}
+            }
+
+            counter += 1;
+        });
+
+        // check that we inherit all mutations from the parent and all from the child are also discovered
+        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(1));
+        assert_eq!(traceback_iterator.clone().count(), 4);
+
+        traceback_iterator.for_each(|state| match state.site.0 {
+            0 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            ),
+            2 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            ),
+            3 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            ),
+            9 => assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            ),
+            _ => assert_ne!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected no event at site {}",
+                state.site.0
+            ),
+        });
+    }
+
+    #[test]
+    fn test_transitive_compression() {
+        // test whether the traceback iterator works correctly when copying from a grandparent
+
+        let mut ix = ViterbiIterator::new(3, false, 1);
+        let mut edges = EdgeSequence::new();
+
+        // prepare partial tree sequence for traceback
+        let mut partial_tree_sequence = PartialTreeSequence::with_capacity(3);
+        partial_tree_sequence.push(vec![], vec![]);
+        partial_tree_sequence.push(
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![VariantIndex::from_usize(1)],
+        );
+        // the second child is uncompressed in first and last site
+        partial_tree_sequence.push(
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(1),
+            )],
+            vec![VariantIndex::from_usize(0), VariantIndex::from_usize(9)],
+        );
+
+        edges.insert_sequence_node(
+            Ancestor(1),
+            &partial_tree_sequence.edges[1],
+            &partial_tree_sequence.mutations[1],
+        );
+        edges.insert_sequence_node(
+            Ancestor(2),
+            &partial_tree_sequence.edges[2],
+            &partial_tree_sequence.mutations[2],
+        );
+
+        let mut iterator = ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+            3,
+        );
+        iterator.for_each(|(site, tree)| {
+            // insert recombination on parent on site 0,
+            // to make sure we not only copy mutations from the grandparent, but also stop
+            // copying from it once the parent is decompressed
+            if site.0 == 1 {
+                tree.insert_recombination_event(Ancestor(1), site);
+            }
+
+            tree.nodes().for_each(|n| {
+                // make sure recompression happens instantly, meaning the third node is only present at first and last site
+                *tree.likelihood(n) = 1.0;
+
+                // insert mutations on every site
+                tree.insert_mutation_event(n, site);
+            });
+        });
+
+        // check that we inherit all mutations from the parent
+        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(2));
+        assert_eq!(traceback_iterator.clone().count(), 11);
+
+        traceback_iterator.clone().take(9).for_each(|state| {
+            assert_eq!(
+                state.kind,
+                ViterbiEventKind::Mutation,
+                "expected mutation at {}",
+                state.site.0
+            )
+        });
+
+        assert_eq!(
+            traceback_iterator.clone().skip(9).next().unwrap().kind,
+            Recombination
+        );
+        assert_eq!(traceback_iterator.last().unwrap().kind, Mutation);
+    }
+
+    #[test]
+    fn test_queue_order() {
+        // test whether the queue order is sensible in upholding invariants.
+        // specifically it shouldn't remove nodes before their children have changed parents or have been removed,
+        // and shouldnt insert nodes before their parents have been inserted
+
+        let mut ix = ViterbiIterator::new(4, false, 1);
+        let mut edges = EdgeSequence::new();
+
+        edges.insert_sequence_node(
+            Ancestor(1),
+            &vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(5),
+                Ancestor(0),
+            )],
+            &vec![VariantIndex::from_usize(0)],
+        );
+        // this must change its parent before the above node is removed from the tree
+        // furthermore, this must be inserted after the Ancestor(1) node, otherwise it has no parent
+        edges.insert_sequence_node(
+            Ancestor(2),
+            &vec![
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(0),
+                    VariantIndex::from_usize(5),
+                    Ancestor(1),
+                ),
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(5),
+                    VariantIndex::from_usize(10),
+                    Ancestor(0),
+                ),
+            ],
+            &vec![VariantIndex::from_usize(0)],
+        );
+        // this must be removed before Ancestor(1) is removed, otherwise the queue will crash when it searches the parent
+        edges.insert_sequence_node(
+            Ancestor(3),
+            &vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(5),
+                Ancestor(1),
+            )],
+            &vec![VariantIndex::from_usize(0)],
+        );
+
+        // if one of the above restrictions is violated, the queue will panic, so we don't need to explicitely test this
+        // behavior (and we also can't because the closure is only called after all events for a site have been processed)
+        ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+            4,
+        )
+        .for_each(|tuple| {
+            black_box(tuple);
+        });
+    }
+
+    #[test]
+    fn test_uncompressed_tree_integrity() {
+        // test whether the uncompressed tree array always points to the correct parent
+        let mut ix = ViterbiIterator::new(3, false, 1);
+        let mut edges = EdgeSequence::new();
+        let mut counter = 0;
+
+        edges.insert_sequence_node(
+            Ancestor(1),
+            &vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            &vec![
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(2),
+                VariantIndex::from_usize(4),
+            ],
+        );
+        edges.insert_sequence_node(
+            Ancestor(2),
+            &vec![
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(0),
+                    VariantIndex::from_usize(5),
+                    Ancestor(1),
+                ),
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(5),
+                    VariantIndex::from_usize(10),
+                    Ancestor(0),
+                ),
+            ],
+            &vec![
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(1),
+                VariantIndex::from_usize(2),
+                VariantIndex::from_usize(4),
+            ],
+        );
+
+        // check tree
+        ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+            3,
+        )
+        .for_each(|(_, tree)| {
+            // always trigger recompression
+            match counter {
+                0 => {
+                    assert_eq!(find_uncompressed_parent(tree, Ancestor(0)), None);
+                    assert_eq!(
+                        find_uncompressed_parent(tree, Ancestor(1)),
+                        Some(Ancestor(0))
+                    );
+                    assert_eq!(
+                        find_uncompressed_parent(tree, Ancestor(2)),
+                        Some(Ancestor(1))
+                    );
+                }
+                1 => {
+                    assert_eq!(find_uncompressed_parent(tree, Ancestor(0)), None);
+                    // ancestor 1 is compressed
+                    assert_eq!(
+                        find_uncompressed_parent(tree, Ancestor(2)),
+                        Some(Ancestor(0))
+                    );
+                }
+                2 => {
+                    assert_eq!(find_uncompressed_parent(tree, Ancestor(0)), None);
+                    assert_eq!(
+                        find_uncompressed_parent(tree, Ancestor(1)),
+                        Some(Ancestor(0))
+                    );
+                    assert_eq!(
+                        find_uncompressed_parent(tree, Ancestor(2)),
+                        Some(Ancestor(1))
+                    );
+                }
+                4 => {
+                    assert_eq!(find_uncompressed_parent(tree, Ancestor(0)), None);
+                    assert_eq!(
+                        find_uncompressed_parent(tree, Ancestor(1)),
+                        Some(Ancestor(0))
+                    );
+                    assert_eq!(
+                        find_uncompressed_parent(tree, Ancestor(2)),
+                        Some(Ancestor(1))
+                    );
+
+                    // prevent recompression, to test if Ancestor(2) still recombines to Ancestor(0)
+                    *tree.likelihood(Ancestor(1)) = 0.1;
+                }
+                5 => {
+                    assert_eq!(find_uncompressed_parent(tree, Ancestor(0)), None);
+                    assert_eq!(
+                        find_uncompressed_parent(tree, Ancestor(1)),
+                        Some(Ancestor(0))
+                    );
+                    assert_eq!(
+                        find_uncompressed_parent(tree, Ancestor(2)),
+                        Some(Ancestor(0))
+                    );
+
+                    // recompress everything
+                    *tree.likelihood(Ancestor(1)) = 0.0;
+                }
+                _ => {
+                    assert_eq!(find_uncompressed_parent(tree, Ancestor(0)), None);
+                }
+            }
+            counter += 1usize;
+        });
     }
 }
