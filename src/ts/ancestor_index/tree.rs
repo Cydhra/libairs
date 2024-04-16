@@ -66,7 +66,7 @@ pub(crate) struct MarginalTree<'o> {
     /// a threshold of 50 means that recompression is attempted when more than 2% of the nodes are active.
     /// A threshold of 1 means that recompression is attempted when more than 100% of the nodes are active,
     /// i.e. never.
-    pub(super) inv_recompression_threshold: usize,
+    pub(super) inv_recompression_threshold: u16,
 }
 
 impl<'o> MarginalTree<'o> {
@@ -83,7 +83,7 @@ impl<'o> MarginalTree<'o> {
         viterbi_events: &'o mut [Vec<ViterbiEvent>],
         last_compressed: &'o mut [VariantIndex],
         use_recompression_threshold: bool,
-        inv_recompression_threshold: usize,
+        inv_recompression_threshold: u16,
     ) -> Self {
         debug_assert!(num_nodes > 0, "Tree must have at least one node");
 

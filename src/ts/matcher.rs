@@ -27,7 +27,9 @@ pub struct ViterbiMatcher {
     recombination_prob: f64,
     mutation_prob: f64,
     use_recompression_threshold: bool,
-    inverse_recompression_threshold: usize,
+    inverse_recompression_threshold: u16,
+    num_threads: u16,
+    per_thread: u16,
 }
 
 impl ViterbiMatcher {
@@ -37,7 +39,7 @@ impl ViterbiMatcher {
         recombination_prob: f64,
         mutation_prob: f64,
         use_recompression_threshold: bool,
-        inverse_recompression_threshold: usize,
+        inverse_recompression_threshold: u16,
     ) -> Self {
         let ancestor_count = ancestors.len();
         Self {
@@ -48,6 +50,8 @@ impl ViterbiMatcher {
             mutation_prob,
             use_recompression_threshold,
             inverse_recompression_threshold,
+            num_threads: 4, // fixme
+            per_thread: 4,
         }
     }
 
@@ -191,26 +195,19 @@ impl ViterbiMatcher {
     /// This will modify the internal state to represent the tree sequence for all ancestors
     /// within the array.
     pub fn match_ancestors(&mut self) {
-        // TODO make this configurable
-        let num_threads = 4usize;
-
         let mut ancestor_iterators = vec![
             ViterbiIterator::new(
                 self.ancestors.len(),
                 self.use_recompression_threshold,
                 self.inverse_recompression_threshold,
             );
-            num_threads.into()
+            self.num_threads.into()
         ];
 
-        self.do_match_ancestors(&mut ancestor_iterators, num_threads.into())
+        self.do_match_ancestors(&mut ancestor_iterators)
     }
 
-    fn do_match_ancestors(
-        &mut self,
-        ancestor_iterators: &mut [ViterbiIterator],
-        num_threads: usize,
-    ) {
+    fn do_match_ancestors(&mut self, ancestor_iterators: &mut [ViterbiIterator]) {
         // edges for root node
         let root = Ancestor(0);
         self.partial_tree_sequence.push(
@@ -223,12 +220,11 @@ impl ViterbiMatcher {
         );
 
         let mut current_ancestor_index = 1;
-        let pool = Pool::new(num_threads);
+        let pool = Pool::new(self.num_threads.into());
 
         while current_ancestor_index < self.ancestors.len() {
-            let per_thread = 4;
             let chunk_size = min(
-                num_threads * per_thread,
+                self.num_threads as usize * self.per_thread as usize,
                 self.ancestors.len() - current_ancestor_index,
             );
 
@@ -251,6 +247,7 @@ impl ViterbiMatcher {
                         let ancestors = &self.ancestors;
                         let matcher = &self;
                         let sender = sender.clone();
+                        let per_thread = self.per_thread as usize;
 
                         scope.execute(move || {
                             for i in 0..per_thread {
@@ -300,15 +297,13 @@ impl ViterbiMatcher {
     /// Insert a set of samples into an ancestral tree sequence. The samples will be matched
     /// against the existing sequence, but not against each other.
     pub fn match_samples(&mut self) {
-        let num_threads = 4usize;
-
         let mut ancestor_iterators = vec![
             ViterbiIterator::new(
                 self.ancestors.len(),
                 self.use_recompression_threshold,
                 self.inverse_recompression_threshold,
             );
-            num_threads.into()
+            self.num_threads as usize
         ];
 
         self.do_match_samples(&mut ancestor_iterators)
@@ -359,7 +354,7 @@ impl ViterbiMatcher {
             num_threads.into()
         ];
 
-        self.do_match_ancestors(&mut ancestor_iterators, num_threads.into());
+        self.do_match_ancestors(&mut ancestor_iterators);
         self.do_match_samples(&mut ancestor_iterators);
     }
 

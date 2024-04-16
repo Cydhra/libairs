@@ -96,7 +96,7 @@ pub(super) struct ViterbiIterator {
     /// a threshold of 50 means that recompression is attempted when more than 2% of the nodes are active.
     /// A threshold of 1 means that recompression is attempted when more than 100% of the nodes are active,
     /// i.e. never.
-    inv_recompression_threshold: usize,
+    inv_recompression_threshold: u16,
 }
 
 impl ViterbiIterator {
@@ -116,7 +116,7 @@ impl ViterbiIterator {
     pub(crate) fn new(
         max_nodes: usize,
         use_recompression_threshold: bool,
-        inv_recompression_threshold: usize,
+        inv_recompression_threshold: u16,
     ) -> Self {
         assert!(
             inv_recompression_threshold > 0,
@@ -230,7 +230,7 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I>
             if !self.marginal_tree.use_recompression_threshold
                 || self.marginal_tree.active_nodes.len()
                     > self.marginal_tree.limit_nodes
-                        / self.marginal_tree.inv_recompression_threshold
+                        / self.marginal_tree.inv_recompression_threshold as usize
             {
                 self.marginal_tree.recompress_tree(self.site);
             }
