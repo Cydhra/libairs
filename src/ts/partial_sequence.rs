@@ -80,7 +80,7 @@ impl PartialTreeSequence {
                         self.mutations[idx]
                             .iter()
                             .map(|v| Mutation {
-                                site: ancestors.variant_index_to_sequence_pos(*v).unwrap(),
+                                variant_index: v.unwrap(),
                                 derived_state: ancestors.get_derived_state(*v),
                             })
                             .collect::<Vec<_>>(),

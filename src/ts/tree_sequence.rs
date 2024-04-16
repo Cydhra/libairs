@@ -8,7 +8,7 @@ use std::path::Path;
 /// and the derived state in FASTA notation.
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Mutation {
-    pub site: usize,
+    pub variant_index: usize,
     pub derived_state: char,
 }
 
@@ -103,7 +103,7 @@ impl TreeSequenceNode {
         for mutation in &self.mutations {
             writer.write_fmt(format_args!(
                 "{site}\t{node}\t{derived_state}\n",
-                site = mutation.site, // add one to the node index because tskit uses the virtual root node, so we encode the root twice
+                site = mutation.variant_index, // add one to the node index because tskit uses the virtual root node, so we encode the root twice
                 node = self.ancestor_index + 1,
                 derived_state = mutation.derived_state,
             ))?;
