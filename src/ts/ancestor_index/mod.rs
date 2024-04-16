@@ -83,7 +83,7 @@ pub(super) struct ViterbiIterator {
 
     /// The last site index (relative to current ancestor, not a variant index) where the node was compressed.
     /// Starting from that index, the mutation and recombination sites of that node are invalid
-    last_compressed: Vec<usize>,
+    last_compressed: Vec<VariantIndex>,
 
     /// Whether to use the recompression threshold to avoid recompressing when only a few nodes are
     /// active. If this is false, the algorithm will recompress in every iteration, regardless of
@@ -130,7 +130,7 @@ impl ViterbiIterator {
             active_nodes: Vec::new(),
             likelihoods: vec![-1.0f64; max_nodes],
             viterbi_events: vec![Vec::new(); max_nodes],
-            last_compressed: vec![0; max_nodes],
+            last_compressed: vec![VariantIndex(0); max_nodes],
             use_recompression_threshold,
             inv_recompression_threshold,
         }
@@ -219,8 +219,7 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I>
         self.marginal_tree
             .advance_to_site(&mut self.queue, self.site.next(), false, true);
         consumer((self.site, &mut self.marginal_tree));
-        self.marginal_tree
-            .recompress_tree(self.site.get_variant_distance(self.start));
+        self.marginal_tree.recompress_tree(self.site);
         self.site = self.site.next();
 
         while self.site < self.end {
@@ -233,8 +232,7 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I>
                     > self.marginal_tree.limit_nodes
                         / self.marginal_tree.inv_recompression_threshold
             {
-                self.marginal_tree
-                    .recompress_tree(self.site.get_variant_distance(self.start));
+                self.marginal_tree.recompress_tree(self.site);
             }
             self.site = self.site.next();
         }
@@ -242,14 +240,9 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I>
         // insert a compression event into all compressed ancestors, so traceback can follow the
         // compressed path
         for (node, &is_compressed) in self.marginal_tree.is_compressed.iter().enumerate() {
-            if is_compressed
-                && self.marginal_tree.last_compressed[node]
-                    < self.end.get_variant_distance(self.start)
-            {
+            if is_compressed && self.marginal_tree.last_compressed[node] < self.end {
                 self.marginal_tree.viterbi_events[node].push(ViterbiEvent {
-                    kind: ViterbiEventKind::Compressed(
-                        self.start + self.marginal_tree.last_compressed[node],
-                    ),
+                    kind: ViterbiEventKind::Compressed(self.marginal_tree.last_compressed[node]),
                     site: self.end,
                 });
             }

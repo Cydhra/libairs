@@ -47,7 +47,7 @@ pub(crate) struct MarginalTree<'o> {
 
     /// The last site index (relative to current ancestor, not a variant index) where the node was compressed.
     /// Starting from that index, the mutation and recombination sites of that node are invalid
-    pub(super) last_compressed: &'o mut [usize],
+    pub(super) last_compressed: &'o mut [VariantIndex],
 
     /// The number of nodes in the tree. Nodes with a higher index are ignored in the tree.
     pub(super) limit_nodes: usize,
@@ -81,7 +81,7 @@ impl<'o> MarginalTree<'o> {
         active_nodes: &'o mut Vec<Ancestor>,
         likelihoods: &'o mut [f64],
         viterbi_events: &'o mut [Vec<ViterbiEvent>],
-        last_compressed: &'o mut [usize],
+        last_compressed: &'o mut [VariantIndex],
         use_recompression_threshold: bool,
         inv_recompression_threshold: usize,
     ) -> Self {
@@ -90,7 +90,7 @@ impl<'o> MarginalTree<'o> {
         // re-initialize vectors into the default state where needed
         active_nodes.clear();
         viterbi_events.iter_mut().for_each(|i| i.clear());
-        last_compressed.fill(0);
+        last_compressed.fill(VariantIndex(0));
 
         // the other states are updated whenever nodes are added to the marginal tree
 
@@ -167,7 +167,7 @@ impl<'o> MarginalTree<'o> {
     ///
     /// # Parameters
     /// - `site_index`: The index of the current site relative to the beginning of the candidate.
-    pub fn recompress_tree(&mut self, site_index: usize) {
+    pub fn recompress_tree(&mut self, site_index: VariantIndex) {
         self.active_nodes.retain(|&node| {
             debug_assert!(self.is_compressed[node.0] == false);
 
@@ -218,7 +218,7 @@ impl<'o> MarginalTree<'o> {
     /// - `site_index`: The index of the current site relative to the beginning of the candidate.
     ///
     /// [`set_uncompressed`]: MarginalTree::set_uncompressed
-    fn ensure_decompressed(&mut self, node: Ancestor, site_index: usize) {
+    fn ensure_decompressed(&mut self, node: Ancestor, site_index: VariantIndex) {
         if self.is_compressed(node) {
             debug_assert!(!self.active_nodes.contains(&node));
 
@@ -231,10 +231,10 @@ impl<'o> MarginalTree<'o> {
             let last_compressed_begin = self.last_compressed[node.0];
 
             // record event for traceback that starting from here we are compressed into the parent
-            if site_index > 0 {
+            if site_index > self.start {
                 self.viterbi_events[node.0].push(ViterbiEvent {
-                    kind: ViterbiEventKind::Compressed(self.start + last_compressed_begin),
-                    site: self.start + site_index - 1,
+                    kind: ViterbiEventKind::Compressed(last_compressed_begin),
+                    site: site_index - 1,
                 });
             }
         }
@@ -314,7 +314,7 @@ impl<'o> MarginalTree<'o> {
         node: Ancestor,
         new_parent: Ancestor,
         keep_compressed: bool,
-        site_index: usize,
+        site_index: VariantIndex,
     ) {
         let mut old_parent = None;
         if !keep_compressed {
@@ -350,7 +350,7 @@ impl<'o> MarginalTree<'o> {
     /// # Parameters
     /// - `node`: The node that has a mutation
     /// - `site_index`: The index of the current site relative to the beginning of the candidate.
-    fn update_node_mutation(&mut self, node: Ancestor, site_index: usize) {
+    fn update_node_mutation(&mut self, node: Ancestor, site_index: VariantIndex) {
         if self.is_compressed(node) {
             self.ensure_decompressed(node, site_index);
             self.update_subtree(node, self.uncompressed_parents[node.0], Some(node));
@@ -429,9 +429,7 @@ impl<'o> MarginalTree<'o> {
         while event_queue.peek().is_some() && event_queue.peek().unwrap().site < site {
             let event = event_queue.next().unwrap();
 
-            // TODO this should be changed into the absolute index, since we no longer need the
-            //  relative index for anything
-            let site_index = self.start.get_variant_distance(event.site);
+            let site_index = event.site;
 
             if event.node.0 >= self.limit_nodes {
                 continue;
