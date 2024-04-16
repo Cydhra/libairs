@@ -12,7 +12,8 @@ pub struct VariantSite {
     pub(crate) is_biallelic: bool,
     // whether the site is a singleton
     pub(crate) is_singleton: bool,
-    // the derived state in FASTA notation
+    // the genomic states in FASTA notation
+    pub(crate) ancestral_state: char,
     pub(crate) derived_state: char,
 }
 
@@ -26,7 +27,12 @@ impl VariantSite {
     /// 0 is the reference allele, 1 is the derived allele. Any value greater than 1 will be
     /// treated as 1.
     /// - `position` the [`SequencePosition`] of the site in the genome.
-    pub fn new(genotypes: Vec<u8>, position: SequencePosition, derived_state: char) -> Self {
+    pub fn new(
+        genotypes: Vec<u8>,
+        position: SequencePosition,
+        ancestral_state: char,
+        derived_state: char,
+    ) -> Self {
         let mut derived_sites = 0;
         let mut highest_state = 0;
         genotypes.iter().for_each(|&state| {
@@ -49,6 +55,7 @@ impl VariantSite {
             relative_age: age,
             is_biallelic,
             is_singleton,
+            ancestral_state,
             derived_state,
         }
     }

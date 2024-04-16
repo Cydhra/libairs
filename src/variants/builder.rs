@@ -31,11 +31,11 @@ impl VariantDataBuilder {
     /// increasing order of sequence position, as well as the derived state in FASTA notation
     pub fn from_iter<I>(sequence_length: usize, iter: I) -> Self
     where
-        I: IntoIterator<Item = (Vec<MutationState>, usize, char)>,
+        I: IntoIterator<Item = (Vec<MutationState>, usize, char, char)>,
     {
         let mut builder = Self::new(sequence_length);
-        for (site, position, derived_state) in iter {
-            builder.add_variant_site(site, position, derived_state);
+        for (site, position, ancestral_state, derived_state) in iter {
+            builder.add_variant_site(site, position, ancestral_state, derived_state);
         }
         builder
     }
@@ -61,6 +61,7 @@ impl VariantDataBuilder {
         &mut self,
         state: Vec<MutationState>,
         sequence_position: usize,
+        ancestral_state: char,
         derived_state: char,
     ) {
         // TODO store invalid variant sites somewhere for encoding in final tree sequence
@@ -79,7 +80,8 @@ impl VariantDataBuilder {
             panic!("Variant sites must be added in increasing order of sequence position");
         }
 
-        let variant_site = VariantSite::new(state, sequence_position, derived_state);
+        let variant_site =
+            VariantSite::new(state, sequence_position, ancestral_state, derived_state);
         if Self::is_valid_site(&variant_site) {
             self.positions.push(sequence_position);
             self.sites.push(variant_site)

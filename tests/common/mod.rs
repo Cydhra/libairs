@@ -12,7 +12,7 @@ pub fn create_ancestor_generator<const S: usize>(
         variant_sites
             .iter()
             .enumerate()
-            .map(|(i, site)| (site.to_vec(), i + 1, /* non-sense datas */ 'A')),
+            .map(|(i, site)| (site.to_vec(), i + 1, /* non-sense data */ 'T', 'A')),
     )
     .finalize();
 

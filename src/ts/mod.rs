@@ -24,11 +24,11 @@ mod tests {
         let variant_data = VariantDataBuilder::from_iter(
             6,
             vec![
-                (site1, 1, 'A'),
-                (site2, 2, 'T'),
-                (site3, 3, 'T'),
-                (site4, 4, 'A'),
-                (site5, 5, 'G'),
+                (site1, 1, 'C', 'A'),
+                (site2, 2, 'C', 'T'),
+                (site3, 3, 'C', 'T'),
+                (site4, 4, 'C', 'A'),
+                (site5, 5, 'C', 'G'),
             ],
         )
         .finalize();
@@ -79,12 +79,12 @@ mod tests {
         let variant_data = VariantDataBuilder::from_iter(
             7,
             vec![
-                (site1, 1, 'A'),
-                (site2, 2, 'A'),
-                (site4, 4, 'A'),
-                (site5, 5, 'A'),
-                (site6, 6, 'A'),
-                (site7, 7, 'A'),
+                (site1, 1, 'T', 'A'),
+                (site2, 2, 'T', 'A'),
+                (site4, 4, 'T', 'A'),
+                (site5, 5, 'T', 'A'),
+                (site6, 6, 'T', 'A'),
+                (site7, 7, 'T', 'A'),
             ]
             .into_iter(),
         )

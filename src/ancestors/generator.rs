@@ -384,7 +384,7 @@ impl AncestorGenerator {
                 "{id}\t{position}\t{ancestral_state}\n",
                 id = i,
                 position = site.position,
-                ancestral_state = 'C', // TODO encode actual ancestral state
+                ancestral_state = site.ancestral_state,
             ))?;
         }
         Ok(())
@@ -408,10 +408,10 @@ mod tests {
         let variant_data = VariantDataBuilder::from_iter(
             5,
             vec![
-                (site1, 1, 'A'),
-                (site2, 2, 'A'),
-                (site3, 3, 'C'),
-                (site4, 4, 'T'),
+                (site1, 1, 'G', 'A'),
+                (site2, 2, 'G', 'A'),
+                (site3, 3, 'G', 'C'),
+                (site4, 4, 'G', 'T'),
             ],
         )
         .finalize();
@@ -440,10 +440,10 @@ mod tests {
         let variant_data = VariantDataBuilder::from_iter(
             5,
             vec![
-                (site1, 1, 'A'),
-                (site2, 2, 'C'),
-                (site3, 3, 'T'),
-                (site4, 4, 'T'),
+                (site1, 1, 'G', 'A'),
+                (site2, 2, 'G', 'C'),
+                (site3, 3, 'G', 'T'),
+                (site4, 4, 'G', 'T'),
             ],
         )
         .finalize();
