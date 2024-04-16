@@ -4,6 +4,14 @@ use std::io;
 use std::io::Write;
 use std::path::Path;
 
+/// A mutation in an ancestor sequence. The mutation is defined by the sequence position
+/// and the derived state in FASTA notation.
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct Mutation {
+    pub site: usize,
+    pub derived_state: char,
+}
+
 /// An interval in an ancestor that is covered by a parent node in the tree sequence.
 /// The interval is defined by the start and (exclusive) end position of the interval and the index of the
 /// parent node.
@@ -30,19 +38,19 @@ impl TreeSequenceEdge {
 pub struct TreeSequenceNode {
     ancestor_index: usize,
     edges: Vec<TreeSequenceEdge>,
-    mutations: Vec<usize>,
+    mutations: Vec<Mutation>,
 }
 
 impl TreeSequenceNode {
     pub(crate) fn new(
         ancestor_index: usize,
         edges: Vec<TreeSequenceEdge>,
-        mutations: &[usize],
+        mutations: Vec<Mutation>,
     ) -> Self {
         TreeSequenceNode {
             ancestor_index,
             edges,
-            mutations: mutations.to_vec(),
+            mutations,
         }
     }
 
@@ -60,7 +68,7 @@ impl TreeSequenceNode {
 
     /// Get a collection of mutation sites. The collection is a list of indices into the variant
     /// site vector.
-    pub fn mutations(&self) -> &[usize] {
+    pub fn mutations(&self) -> &[Mutation] {
         &self.mutations
     }
 
@@ -95,9 +103,9 @@ impl TreeSequenceNode {
         for mutation in &self.mutations {
             writer.write_fmt(format_args!(
                 "{site}\t{node}\t{derived_state}\n",
-                site = mutation, // add one to the node index because tskit uses the virtual root node, so we encode the root twice
+                site = mutation.site, // add one to the node index because tskit uses the virtual root node, so we encode the root twice
                 node = self.ancestor_index + 1,
-                derived_state = 'A', // todo get the actual derived state
+                derived_state = mutation.derived_state,
             ))?;
         }
         Ok(())

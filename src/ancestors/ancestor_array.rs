@@ -46,6 +46,10 @@ impl AncestorArray {
         self.variant_data.variant_index_to_sequence_pos(index)
     }
 
+    pub(crate) fn get_derived_state(&self, index: VariantIndex) -> char {
+        self.variant_data[index].derived_state
+    }
+
     /// Obtain the DNA sample data that makes up the variant data
     pub fn generate_sample_data(&self) -> SampleData {
         self.variant_data.into_samples()

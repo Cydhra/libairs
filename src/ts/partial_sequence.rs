@@ -1,5 +1,6 @@
 use crate::ancestors::{Ancestor, AncestorArray};
 use crate::ts::tree_sequence::{TreeSequence, TreeSequenceEdge, TreeSequenceNode};
+use crate::ts::Mutation;
 use crate::variants::VariantIndex;
 
 /// Internal tree sequence edge used during the Viterbi algorithm.
@@ -76,9 +77,12 @@ impl PartialTreeSequence {
                                 TreeSequenceEdge::new(parent.0, start, end)
                             })
                             .collect(),
-                        &self.mutations[idx]
+                        self.mutations[idx]
                             .iter()
-                            .map(|v| ancestors.variant_index_to_sequence_pos(*v).unwrap())
+                            .map(|v| Mutation {
+                                site: ancestors.variant_index_to_sequence_pos(*v).unwrap(),
+                                derived_state: ancestors.get_derived_state(*v),
+                            })
                             .collect::<Vec<_>>(),
                     )
                 })
