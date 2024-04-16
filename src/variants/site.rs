@@ -3,16 +3,17 @@ use crate::variants::SequencePosition;
 /// A single variant site defined by the genotype state.
 #[derive(Clone, Debug)]
 pub struct VariantSite {
-    // todo hide most fields
     pub(crate) genotypes: Vec<u8>,
-    // ancestral states per sample
-    pub(crate) position: SequencePosition,
     // position in the genome
+    pub(crate) position: SequencePosition,
+    // putative age of this site
     pub(crate) relative_age: f64,
-    // whether the site is bi-allelic or not
+    // whether the site is bi-allelic
     pub(crate) is_biallelic: bool,
-    // whether the site is a singleton or not
+    // whether the site is a singleton
     pub(crate) is_singleton: bool,
+    // the derived state in FASTA notation
+    pub(crate) derived_state: char,
 }
 
 impl VariantSite {
@@ -25,7 +26,7 @@ impl VariantSite {
     /// 0 is the reference allele, 1 is the derived allele. Any value greater than 1 will be
     /// treated as 1.
     /// - `position` the [`SequencePosition`] of the site in the genome.
-    pub fn new(genotypes: Vec<u8>, position: SequencePosition) -> Self {
+    pub fn new(genotypes: Vec<u8>, position: SequencePosition, derived_state: char) -> Self {
         let mut derived_sites = 0;
         let mut highest_state = 0;
         genotypes.iter().for_each(|&state| {
@@ -48,6 +49,7 @@ impl VariantSite {
             relative_age: age,
             is_biallelic,
             is_singleton,
+            derived_state,
         }
     }
 }

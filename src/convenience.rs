@@ -28,6 +28,12 @@ pub fn from_vcf(
                     })
                     .collect(),
                 record.position as usize,
+                record.alternate_bases[0]
+                    .as_ref()
+                    .unwrap()
+                    .chars()
+                    .next()
+                    .unwrap(),
             )
         }),
     )

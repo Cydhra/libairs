@@ -405,9 +405,16 @@ mod tests {
         let site3 = vec![0, 1, 0, 0, 1];
         let site4 = vec![0, 0, 0, 1, 1];
 
-        let variant_data =
-            VariantDataBuilder::from_iter(5, vec![(site1, 1), (site2, 2), (site3, 3), (site4, 4)])
-                .finalize();
+        let variant_data = VariantDataBuilder::from_iter(
+            5,
+            vec![
+                (site1, 1, 'A'),
+                (site2, 2, 'A'),
+                (site3, 3, 'C'),
+                (site4, 4, 'T'),
+            ],
+        )
+        .finalize();
 
         let ag = AncestorGenerator::from_variant_data(variant_data);
         let ancestors = ag.generate_ancestors();
@@ -430,9 +437,16 @@ mod tests {
         let site3 = vec![0, 1, 1, 0, 0];
         let site4 = vec![0, 0, 0, 1, 1];
 
-        let variant_data =
-            VariantDataBuilder::from_iter(5, vec![(site1, 1), (site2, 2), (site3, 3), (site4, 4)])
-                .finalize();
+        let variant_data = VariantDataBuilder::from_iter(
+            5,
+            vec![
+                (site1, 1, 'A'),
+                (site2, 2, 'C'),
+                (site3, 3, 'T'),
+                (site4, 4, 'T'),
+            ],
+        )
+        .finalize();
 
         let ag = AncestorGenerator::from_variant_data(variant_data);
         let ancestors = ag.generate_ancestors();

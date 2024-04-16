@@ -27,15 +27,15 @@ impl VariantDataBuilder {
     ///
     /// # Parameters
     /// - `sequence_length` the length of the reference genome
-    /// - `iter` an iterator over pairs of variant sites and their sequence positions in
-    /// increasing order of sequence position
+    /// - `iter` an iterator over triples of variant sites and their sequence positions in
+    /// increasing order of sequence position, as well as the derived state in FASTA notation
     pub fn from_iter<I>(sequence_length: usize, iter: I) -> Self
     where
-        I: IntoIterator<Item = (Vec<MutationState>, usize)>,
+        I: IntoIterator<Item = (Vec<MutationState>, usize, char)>,
     {
         let mut builder = Self::new(sequence_length);
-        for (site, position) in iter {
-            builder.add_variant_site(site, position);
+        for (site, position, derived_state) in iter {
+            builder.add_variant_site(site, position, derived_state);
         }
         builder
     }
@@ -51,12 +51,18 @@ impl VariantDataBuilder {
     /// sample. The number of samples is inferred from the first state vector added to the builder.
     /// The state vector must not be empty.
     /// - `sequence_position` the position of the mutation site in the reference genome
+    /// - `derived_state` the derived state of the mutation site in FASTA notation
     ///
     /// # Panics
     /// - if the state vector is empty
     /// - if the state vector has a different number of entries than previously added state vectors
     /// - if a position is added that is not greater than the last position added
-    pub fn add_variant_site(&mut self, state: Vec<MutationState>, sequence_position: usize) {
+    pub fn add_variant_site(
+        &mut self,
+        state: Vec<MutationState>,
+        sequence_position: usize,
+        derived_state: char,
+    ) {
         // TODO store invalid variant sites somewhere for encoding in final tree sequence
         assert!(!state.is_empty());
         assert!(self.num_samples == 0 || state.len() == self.num_samples);
@@ -73,7 +79,7 @@ impl VariantDataBuilder {
             panic!("Variant sites must be added in increasing order of sequence position");
         }
 
-        let variant_site = VariantSite::new(state, sequence_position);
+        let variant_site = VariantSite::new(state, sequence_position, derived_state);
         if Self::is_valid_site(&variant_site) {
             self.positions.push(sequence_position);
             self.sites.push(variant_site)

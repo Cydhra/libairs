@@ -1,5 +1,5 @@
 use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence};
-use crate::variants::{SequencePosition, VariantIndex};
+use crate::variants::SequencePosition;
 use std::io;
 use std::io::Write;
 use std::path::Path;
@@ -37,12 +37,12 @@ impl TreeSequenceNode {
     pub(crate) fn new(
         ancestor_index: usize,
         edges: Vec<TreeSequenceEdge>,
-        mutations: &[VariantIndex],
+        mutations: &[usize],
     ) -> Self {
         TreeSequenceNode {
             ancestor_index,
             edges,
-            mutations: mutations.iter().map(|v| v.unwrap()).collect(),
+            mutations: mutations.to_vec(),
         }
     }
 

@@ -76,7 +76,10 @@ impl PartialTreeSequence {
                                 TreeSequenceEdge::new(parent.0, start, end)
                             })
                             .collect(),
-                        &self.mutations[idx],
+                        &self.mutations[idx]
+                            .iter()
+                            .map(|v| ancestors.variant_index_to_sequence_pos(*v).unwrap())
+                            .collect::<Vec<_>>(),
                     )
                 })
                 .collect(),
