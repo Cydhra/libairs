@@ -1,5 +1,6 @@
 use std::cmp::min;
 use std::sync::mpsc::channel;
+use std::thread::available_parallelism;
 use std::vec;
 
 use rayon::iter::ParallelBridge;
@@ -50,9 +51,32 @@ impl ViterbiMatcher {
             mutation_prob,
             use_recompression_threshold,
             inverse_recompression_threshold,
-            num_threads: 4, // fixme
-            per_thread: 4,
+            num_threads: available_parallelism().unwrap().get() as u16,
+            per_thread: 4, // TODO sensible default
         }
+    }
+
+    /// Create a new matcher with custom parallelism settings.
+    pub fn with_parallelism(
+        ancestors: AncestorArray,
+        recombination_prob: f64,
+        mutation_prob: f64,
+        use_recompression_threshold: bool,
+        inverse_recompression_threshold: u16,
+        num_threads: u16,
+        per_thread: u16,
+    ) -> Self {
+        let mut matcher = Self::new(
+            ancestors,
+            recombination_prob,
+            mutation_prob,
+            use_recompression_threshold,
+            inverse_recompression_threshold,
+        );
+
+        matcher.num_threads = num_threads;
+        matcher.per_thread = per_thread;
+        matcher
     }
 
     /// Find a copying path for the given sequence given the ancestor iterator as a partial
@@ -342,16 +366,13 @@ impl ViterbiMatcher {
     /// additional allocations in between.
     /// This is more efficient than calling both individually.
     pub fn infer_tree_sequence(&mut self) {
-        // TODO make this configurable
-        let num_threads = 4usize;
-
         let mut ancestor_iterators = vec![
             ViterbiIterator::new(
                 self.ancestors.len(),
                 self.use_recompression_threshold,
                 self.inverse_recompression_threshold,
             );
-            num_threads.into()
+            self.num_threads.into()
         ];
 
         self.do_match_ancestors(&mut ancestor_iterators);
