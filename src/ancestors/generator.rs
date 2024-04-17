@@ -235,7 +235,8 @@ impl AncestorGenerator {
 
     /// Generate a set of ancestral sequences with the variant sites added to the generator.
     pub fn generate_ancestors(self) -> AncestorArray {
-        // fixme this entire process is inefficient, we should sort the original sites
+        // we need to clone and sort the sites by age, which we cannot do for the original sites,
+        // because they are sorted by sequence position, which we need to preserve
         let mut sites = self.variant_data.iter_with_index().collect::<Vec<_>>();
         sites.sort_unstable_by(|(_, a), (_, b)| {
             a.relative_age.partial_cmp(&b.relative_age).unwrap()
