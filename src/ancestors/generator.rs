@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::io::Write;
+use std::num::NonZeroUsize;
 use std::path::Path;
+use std::thread::available_parallelism;
 use std::{io, mem};
 
 use rayon::iter::IntoParallelRefIterator;
@@ -18,12 +20,32 @@ use crate::variants::{VariantData, VariantIndex, VariantSequence, VariantSite};
 /// sequence is generated.
 pub struct AncestorGenerator {
     variant_data: VariantData,
+    num_threads: u16,
 }
 
 impl AncestorGenerator {
-    /// Create a new ancestor generator from an iterator over variant sites.
+    /// Create a new ancestor generator with given variant data. It will use the number of threads
+    /// available on the system.
     pub fn from_variant_data(variant_data: VariantData) -> Self {
-        Self { variant_data }
+        let num_threads = available_parallelism()
+            .unwrap_or_else(|err| {
+                eprintln!(
+                    "Error getting number of threads: {}. Defaulting to 1 thread.",
+                    err
+                );
+                NonZeroUsize::new(1).unwrap()
+            })
+            .get() as u16;
+
+        Self::with_parallelism(variant_data, num_threads)
+    }
+
+    /// Create a new ancestor generator with given variant data and number of threads to use.
+    pub fn with_parallelism(variant_data: VariantData, num_threads: u16) -> Self {
+        Self {
+            variant_data,
+            num_threads,
+        }
     }
 
     /// For a given set of focal sites, compute an ancestor that uses those focal sites. The focal
@@ -238,14 +260,23 @@ impl AncestorGenerator {
         // we need to clone and sort the sites by age, which we cannot do for the original sites,
         // because they are sorted by sequence position, which we need to preserve
         let mut sites = self.variant_data.iter_with_index().collect::<Vec<_>>();
-        sites.sort_unstable_by(|(_, a), (_, b)| {
-            a.relative_age.partial_cmp(&b.relative_age).unwrap()
-        });
+
+        if self.num_threads == 1 {
+            sites.sort_unstable_by(|(_, a), (_, b)| {
+                a.relative_age.partial_cmp(&b.relative_age).unwrap()
+            });
+        } else {
+            // we assume the global threadpool is already initialized with the correct thread count
+            sites.par_sort_unstable_by(|(_, a), (_, b)| {
+                a.relative_age.partial_cmp(&b.relative_age).unwrap()
+            });
+        }
 
         let mut focal_sites: Vec<Vec<VariantIndex>> = Vec::new();
         let mut current_age: f64 = -1f64;
 
         // Todo we are reconstructing the hashmap a lot, this seems unnecessary
+        // Todo parallelize this
         let mut current_focal_sites: HashMap<
             Vec<u8>,
             Vec<VariantIndex>,
@@ -326,14 +357,22 @@ impl AncestorGenerator {
 
         let focal_sites = broken_focal_sites;
 
-        // TODO make the parallelization optional (par_iter)
-        let mut ancestors: Vec<_> = focal_sites
-            .par_iter()
-            .map_with(
-                VariantSequence::from_ancestral_state(self.variant_data.len()),
-                |buffer, focal_sites| self.generate_ancestor(buffer, focal_sites),
-            )
-            .collect();
+        let mut ancestors: Vec<_> = if self.num_threads == 1 {
+            let mut buffer = VariantSequence::from_ancestral_state(self.variant_data.len());
+            focal_sites
+                .iter()
+                .map(|focal_sites| self.generate_ancestor(&mut buffer, focal_sites))
+                .collect()
+        } else {
+            // we assume the global threadpool is already initialized with the correct thread count
+            focal_sites
+                .par_iter()
+                .map_with(
+                    VariantSequence::from_ancestral_state(self.variant_data.len()),
+                    |buffer, focal_sites| self.generate_ancestor(buffer, focal_sites),
+                )
+                .collect()
+        };
 
         // artificially add the root ancestor
         let mut ancestral_state =
@@ -341,13 +380,21 @@ impl AncestorGenerator {
         ancestral_state.end = VariantIndex(self.variant_data.len());
         ancestors.push(ancestral_state);
 
-        // TODO parallel sort ancestors by age (par_sort_unstable_by)
-        ancestors.par_sort_unstable_by(|a, b| {
-            a.relative_age()
-                .partial_cmp(&b.relative_age())
-                .unwrap()
-                .reverse()
-        });
+        if self.num_threads == 1 {
+            ancestors.sort_unstable_by(|a, b| {
+                a.relative_age()
+                    .partial_cmp(&b.relative_age())
+                    .unwrap()
+                    .reverse()
+            });
+        } else {
+            ancestors.par_sort_unstable_by(|a, b| {
+                a.relative_age()
+                    .partial_cmp(&b.relative_age())
+                    .unwrap()
+                    .reverse()
+            });
+        }
 
         AncestorArray::new(ancestors, self.variant_data)
     }
