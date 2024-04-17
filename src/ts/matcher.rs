@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::num::NonZeroUsize;
 use std::sync::mpsc::channel;
 use std::thread::available_parallelism;
 use std::vec;
@@ -42,18 +43,26 @@ impl ViterbiMatcher {
         use_recompression_threshold: bool,
         inverse_recompression_threshold: u16,
     ) -> Self {
-        let ancestor_count = ancestors.len();
-        Self {
+        let num_threads = available_parallelism()
+            .unwrap_or_else(|err| {
+                eprintln!(
+                    "Error getting number of threads: {}. Defaulting to 1 thread.",
+                    err
+                );
+                NonZeroUsize::new(1).unwrap()
+            })
+            .get() as u16;
+        let per_thread = 4; // TODO sensible default
+
+        Self::with_parallelism(
             ancestors,
-            partial_tree_sequence: PartialTreeSequence::with_capacity(ancestor_count),
-            edge_sequence: EdgeSequence::new(),
             recombination_prob,
             mutation_prob,
             use_recompression_threshold,
             inverse_recompression_threshold,
-            num_threads: available_parallelism().unwrap().get() as u16,
-            per_thread: 4, // TODO sensible default
-        }
+            num_threads,
+            per_thread,
+        )
     }
 
     /// Create a new matcher with custom parallelism settings.
@@ -66,17 +75,18 @@ impl ViterbiMatcher {
         num_threads: u16,
         per_thread: u16,
     ) -> Self {
-        let mut matcher = Self::new(
+        let ancestor_count = ancestors.len();
+        Self {
             ancestors,
+            partial_tree_sequence: PartialTreeSequence::with_capacity(ancestor_count),
+            edge_sequence: EdgeSequence::new(),
             recombination_prob,
             mutation_prob,
             use_recompression_threshold,
             inverse_recompression_threshold,
-        );
-
-        matcher.num_threads = num_threads;
-        matcher.per_thread = per_thread;
-        matcher
+            num_threads,
+            per_thread,
+        }
     }
 
     /// Find a copying path for the given sequence given the ancestor iterator as a partial
