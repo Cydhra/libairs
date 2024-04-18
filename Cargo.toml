@@ -11,5 +11,8 @@ twox-hash = "1.6"
 vcfire = { git = "https://github.com/Cydhra/vcfire", rev = "3db5fb7" } # probably should be optional because of native dependency
 scoped-thread-pool = "1.0.4"
 
+[dev-dependencies]
+clap = { version = "4.5", features = ["cargo", "derive"] }
+
 [profile.release]
 debug = true
