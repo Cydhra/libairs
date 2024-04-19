@@ -38,7 +38,8 @@ impl PartialSequenceEdge {
 
 /// Newtype over a collection of tree sequence edges with variant index intervals.
 /// Can be converted into a tree sequence.
-pub(crate) struct PartialTreeSequence {
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct PartialTreeSequence {
     pub(super) edges: Vec<Vec<PartialSequenceEdge>>,
     pub(super) mutations: Vec<Vec<VariantIndex>>,
     inner_nodes: usize,
