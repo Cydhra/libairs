@@ -753,7 +753,7 @@ mod tests {
 
         // prepare partial tree sequence for traceback
         let mut partial_tree_sequence = PartialTreeSequence::with_capacity(3);
-        partial_tree_sequence.push(vec![], vec![]);
+        partial_tree_sequence.push(vec![], vec![], true);
         partial_tree_sequence.push(
             vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
@@ -761,6 +761,7 @@ mod tests {
                 Ancestor(0),
             )],
             vec![VariantIndex::from_usize(0)],
+            false,
         );
         partial_tree_sequence.push(
             vec![
@@ -776,6 +777,7 @@ mod tests {
                 ),
             ],
             vec![VariantIndex::from_usize(4), VariantIndex::from_usize(9)],
+            false,
         );
 
         // insert a child node that serves as a second node
@@ -871,7 +873,7 @@ mod tests {
 
         // prepare partial tree sequence for traceback
         let mut partial_tree_sequence = PartialTreeSequence::with_capacity(3);
-        partial_tree_sequence.push(vec![], vec![]);
+        partial_tree_sequence.push(vec![], vec![], true);
         partial_tree_sequence.push(
             vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
@@ -879,6 +881,7 @@ mod tests {
                 Ancestor(0),
             )],
             vec![VariantIndex::from_usize(0)],
+            false,
         );
         partial_tree_sequence.push(
             vec![
@@ -899,6 +902,7 @@ mod tests {
                 ),
             ],
             vec![],
+            false,
         );
 
         // insert a child node that serves as a second node
@@ -976,7 +980,7 @@ mod tests {
 
         // prepare partial tree sequence for traceback
         let mut partial_tree_sequence = PartialTreeSequence::with_capacity(3);
-        partial_tree_sequence.push(vec![], vec![]);
+        partial_tree_sequence.push(vec![], vec![], true);
         partial_tree_sequence.push(
             vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
@@ -984,6 +988,7 @@ mod tests {
                 Ancestor(0),
             )],
             vec![VariantIndex::from_usize(0), VariantIndex::from_usize(9)],
+            true,
         );
 
         edges.insert_sequence_node(
@@ -1062,7 +1067,7 @@ mod tests {
 
         // prepare partial tree sequence for traceback
         let mut partial_tree_sequence = PartialTreeSequence::with_capacity(3);
-        partial_tree_sequence.push(vec![], vec![]);
+        partial_tree_sequence.push(vec![], vec![], true);
         partial_tree_sequence.push(
             vec![PartialSequenceEdge::new(
                 VariantIndex::from_usize(0),
@@ -1070,6 +1075,7 @@ mod tests {
                 Ancestor(0),
             )],
             vec![VariantIndex::from_usize(1)],
+            true,
         );
         // the second child is uncompressed in first and last site
         partial_tree_sequence.push(
@@ -1079,6 +1085,7 @@ mod tests {
                 Ancestor(1),
             )],
             vec![VariantIndex::from_usize(0), VariantIndex::from_usize(9)],
+            true,
         );
 
         edges.insert_sequence_node(

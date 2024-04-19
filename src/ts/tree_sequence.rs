@@ -39,6 +39,7 @@ pub struct TreeSequenceNode {
     ancestor_index: usize,
     edges: Vec<TreeSequenceEdge>,
     mutations: Vec<Mutation>,
+    is_sample: bool,
 }
 
 impl TreeSequenceNode {
@@ -46,11 +47,13 @@ impl TreeSequenceNode {
         ancestor_index: usize,
         edges: Vec<TreeSequenceEdge>,
         mutations: Vec<Mutation>,
+        is_sample: bool,
     ) -> Self {
         TreeSequenceNode {
             ancestor_index,
             edges,
             mutations,
+            is_sample,
         }
     }
 
@@ -80,7 +83,7 @@ impl TreeSequenceNode {
         writer.write_fmt(format_args!(
             "{id}\t{is_sample}\t{time}\n",
             id = self.ancestor_index + 1, // add one to the node index because tskit uses the virtual root node, so we encode the root twice
-            is_sample = 1,                // todo samples are not supported yet
+            is_sample = self.is_sample,
             time = ancestor.relative_age(),
         ))
     }

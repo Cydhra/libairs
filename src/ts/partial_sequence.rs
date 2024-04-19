@@ -41,6 +41,7 @@ impl PartialSequenceEdge {
 pub(crate) struct PartialTreeSequence {
     pub(super) edges: Vec<Vec<PartialSequenceEdge>>,
     pub(super) mutations: Vec<Vec<VariantIndex>>,
+    inner_nodes: usize,
 }
 
 impl PartialTreeSequence {
@@ -49,12 +50,25 @@ impl PartialTreeSequence {
         Self {
             edges: Vec::with_capacity(capacity),
             mutations: Vec::with_capacity(capacity),
+            inner_nodes: 0,
         }
     }
 
     /// Push a new set of edges to the partial tree sequence. The edges are associated with the ancestor that shares
     /// its index with this set of edges.
-    pub(crate) fn push(&mut self, edges: Vec<PartialSequenceEdge>, mutations: Vec<VariantIndex>) {
+    pub(crate) fn push(
+        &mut self,
+        edges: Vec<PartialSequenceEdge>,
+        mutations: Vec<VariantIndex>,
+        inner_node: bool,
+    ) {
+        debug_assert!(
+            !inner_node || self.edges.len() == self.inner_nodes,
+            "cannot append inner nodes after samples have already been appended"
+        );
+        if inner_node {
+            self.inner_nodes += 1;
+        }
         self.edges.push(edges);
         self.mutations.push(mutations);
     }
@@ -84,6 +98,7 @@ impl PartialTreeSequence {
                                 derived_state: ancestors.get_derived_state(*v),
                             })
                             .collect::<Vec<_>>(),
+                        self.inner_nodes > idx,
                     )
                 })
                 .collect(),

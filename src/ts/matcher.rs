@@ -251,6 +251,7 @@ impl ViterbiMatcher {
                 root,
             )],
             vec![],
+            true,
         );
 
         let mut current_ancestor_index = 1;
@@ -323,7 +324,7 @@ impl ViterbiMatcher {
             for (ancestor_index, (edges, mutations)) in results {
                 self.edge_sequence
                     .insert_sequence_node(ancestor_index, &edges, &mutations);
-                self.partial_tree_sequence.push(edges, mutations);
+                self.partial_tree_sequence.push(edges, mutations, true);
             }
         }
     }
@@ -367,7 +368,7 @@ impl ViterbiMatcher {
         // insert results into the partial tree sequence and the iterators
         for results in results {
             for (edges, mutations) in results {
-                self.partial_tree_sequence.push(edges, mutations);
+                self.partial_tree_sequence.push(edges, mutations, false);
             }
         }
     }
