@@ -11,8 +11,9 @@ use scoped_thread_pool::Pool;
 use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence};
 use crate::ts::ancestor_index::EdgeSequence;
 use crate::ts::ancestor_index::{ViterbiEventKind, ViterbiIterator};
-use crate::ts::partial_sequence::{PartialSequenceEdge, PartialTreeSequence};
+use crate::ts::partial_sequence::PartialSequenceEdge;
 use crate::ts::tree_sequence::TreeSequence;
+use crate::ts::PartialTreeSequence;
 use crate::variants::VariantIndex;
 
 /// A matcher runs the viterbi algorithm for a set of sequences.
@@ -87,6 +88,13 @@ impl ViterbiMatcher {
             num_threads,
             per_thread,
         }
+    }
+
+    /// Update the matcher's internal state with the provided partial tree sequence.
+    /// Any data currently in the matcher will be overridden.
+    pub fn read_partial_tree_sequence(&mut self, partial_tree_sequence: PartialTreeSequence) {
+        self.partial_tree_sequence = partial_tree_sequence;
+        self.edge_sequence = EdgeSequence::from_tree_sequence(&self.partial_tree_sequence);
     }
 
     /// Find a copying path for the given sequence given the ancestor iterator as a partial

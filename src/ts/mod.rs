@@ -4,6 +4,7 @@ mod partial_sequence;
 mod tree_sequence;
 
 pub use matcher::ViterbiMatcher;
+pub use partial_sequence::PartialTreeSequence;
 pub use tree_sequence::*;
 
 #[cfg(test)]
