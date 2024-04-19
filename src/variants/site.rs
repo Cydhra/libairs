@@ -1,7 +1,7 @@
 use crate::variants::SequencePosition;
 
 /// A single variant site defined by the genotype state.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct VariantSite {
     pub(crate) genotypes: Vec<u8>,
     // position in the genome

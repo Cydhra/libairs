@@ -17,7 +17,7 @@ const DERIVED_STATE: u8 = 1;
 /// A DNA sequence expressed through a bit vector where each bit defines whether the DNA sequence at
 /// the given site has the ancestral state, or the derived state. This only works if we do not accept
 /// more than two variants (ancestral and one derived state) per site.
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct AncestralSequence {
     state: VariantSequence,
     focal_sites: Vec<VariantIndex>,
@@ -179,7 +179,9 @@ impl IndexMut<VariantIndex> for AncestralSequence {
 }
 
 /// An index into the ancestor array which uniquely identifies an ancestor
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub(crate) struct Ancestor(pub(crate) usize);
 
 impl Display for Ancestor {

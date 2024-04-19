@@ -13,7 +13,9 @@ pub use site::VariantSite;
 
 /// A position in a DNA sequence. This newtype ensures that sequence positions and variant indices (indices into the
 /// variant site vector) aren't mixed up.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct SequencePosition(usize);
 
 impl SequencePosition {
@@ -41,7 +43,9 @@ impl Display for SequencePosition {
 
 /// An index into the [`VariantData`]. The new-type guarantees that variant indices aren't mixed up
 /// with [`SequencePosition`].
-#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(
+    Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub(crate) struct VariantIndex(pub(crate) usize);
 
 impl VariantIndex {

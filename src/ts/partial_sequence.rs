@@ -7,7 +7,7 @@ use crate::variants::VariantIndex;
 /// Its interval has not been converted into sequence positions yet, conveniently allowing use
 /// during the algorithm for the tree compression.
 /// The edge is associated with the child node, hence only the parent is stored.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub(crate) struct PartialSequenceEdge {
     start: VariantIndex,
     end: VariantIndex,

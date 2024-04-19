@@ -7,7 +7,7 @@ pub type MutationState = u8;
 /// The data only makes sense with respect to a reference genome which defines the ancestral state,
 /// and a [`super::VariantData`] instance that defines which index in the sequence corresponds to
 /// which genomic site.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct VariantSequence(Vec<MutationState>);
 
 impl VariantSequence {
