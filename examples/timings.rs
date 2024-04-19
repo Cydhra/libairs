@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use libairs::ancestors::AncestorGenerator;
+use libairs::variants::{VariantData, VariantDataBuilder};
 
 #[derive(Parser)]
 #[command(version, arg_required_else_help = true)]
@@ -60,6 +61,9 @@ struct Input {
 enum InputType {
     /// Import from a VCF file (proprietary vcf subset)
     Vcf,
+
+    /// Import from a file containing sample data directly printed by a python script
+    Python,
 }
 
 fn main() {
@@ -151,5 +155,31 @@ fn parse_input(data_source: Input, sequence_length: usize) -> io::Result<Ancesto
             data_source.compressed,
             sequence_length,
         ),
+        InputType::Python => import_python_data(&data_source.path, sequence_length),
     }
+}
+
+/// Import a custom file with the following layout:
+/// ```
+/// num_samples
+/// 0 1 0 1 repeat #num_samples... 0 position ancestral_state derived_state
+/// repeat #num_variants often...
+/// ```
+fn import_python_data(path: &String, sequence_length: usize) -> io::Result<AncestorGenerator> {
+    let data = std::fs::read_to_string(path)?;
+    let mut lines = data.lines();
+    let num_samples = lines.next()?.parse::<usize>().unwrap();
+    let mut builder = VariantDataBuilder::new(sequence_length);
+    for line in lines {
+        let mut parts = line.split_whitespace();
+        let mut states = Vec::with_capacity(num_samples);
+        for _ in 0..num_samples {
+            states.push(parts.next()?.parse::<u8>().unwrap());
+        }
+        let position = parts.next()?.parse::<usize>().unwrap();
+        let ancestral_state = parts.next()?.chars().next().unwrap();
+        let derived_state = parts.next()?.chars().next().unwrap();
+        builder.add_variant_site(states, position, ancestral_state, derived_state);
+    }
+    Ok(AncestorGenerator::new(builder.finalize()))
 }
