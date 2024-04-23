@@ -1,5 +1,7 @@
 //! This example is used by a python module for benchmarking airs. It offers a CLI to control its
 //! behavior and measures time itself to make it easier to exclude parsing times for data.
+//! Time is saved to a file in nanoseconds. If multiple times are measured, they are written
+//! sequentially with a newline in between.
 
 use std::fs::File;
 use std::io;
@@ -18,8 +20,13 @@ use libairs::variants::VariantDataBuilder;
 #[derive(Parser)]
 #[command(version, arg_required_else_help = true)]
 struct CliArgs {
+    /// The number of threads to use for parallel processing. Defaults to 1.
     #[arg(short = 't', long = "threads", default_value_t = 1)]
     num_threads: u16,
+
+    /// Where to save the calculated timings to
+    #[arg(long)]
+    timings: Option<String>,
 
     #[command(subcommand)]
     command: Action,
@@ -109,6 +116,13 @@ fn main() {
             .unwrap();
     }
 
+    let mut timings_file = args.timings.map(|path| {
+        File::create_new(&path).unwrap_or_else(|error| {
+            eprintln!("could not create timings file at {}: {}", path, error);
+            exit(-1);
+        })
+    });
+
     match args.command {
         Action::GenerateAncestors {
             data_source,
@@ -125,6 +139,7 @@ fn main() {
             let start = Instant::now();
             let ancestors = ag.generate_ancestors();
             let end = start.elapsed();
+            write_time(&mut timings_file, end);
             println!("generated {} ancestors in {:?}", ancestors.len(), end);
 
             write_output(&input_path, "aa", output, &ancestors);
@@ -144,6 +159,7 @@ fn main() {
             let start = Instant::now();
             ancestor_matcher.match_ancestors();
             let end = start.elapsed();
+            write_time(&mut timings_file, end);
             println!("matched ancestors in {:?}", end);
 
             write_output(
@@ -183,6 +199,7 @@ fn main() {
             let start = Instant::now();
             ancestor_matcher.match_samples();
             let end = start.elapsed();
+            write_time(&mut timings_file, end);
             println!("matched samples in {:?}", end);
 
             write_output(
@@ -207,6 +224,7 @@ fn main() {
             let ancestors = ag.generate_ancestors();
             let end = start.elapsed();
             total += end;
+            write_time(&mut timings_file, end);
             println!("generated {} ancestors in {:?}", ancestors.len(), end);
 
             let start = Instant::now();
@@ -215,16 +233,28 @@ fn main() {
             ancestor_matcher.match_ancestors();
             let end = start.elapsed();
             total += end;
+            write_time(&mut timings_file, end);
             println!("matched ancestors in {:?}", end);
 
             let start = Instant::now();
             ancestor_matcher.match_samples();
             let end = start.elapsed();
             total += end;
+            write_time(&mut timings_file, end);
             println!("matched samples in {:?}", end);
 
             println!("total time: {:?}", total);
         }
+    }
+}
+
+/// Write a time to a file if the file exists
+fn write_time(file: &mut Option<File>, time: Duration) {
+    if let Some(f) = file.as_mut() {
+        writeln!(f, "{}", time.as_nanos()).unwrap_or_else(|error| {
+            eprintln!("could not write to timings file: {}", error);
+            exit(-1);
+        });
     }
 }
 
