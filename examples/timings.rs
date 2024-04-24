@@ -150,7 +150,7 @@ fn main() {
                 exit(-1);
             });
             let ancestor_array: AncestorArray =
-                rmp_serde::from_read(&data).unwrap_or_else(|error| {
+                bincode::deserialize_from(&data).unwrap_or_else(|error| {
                     eprintln!("could not deserialize ancestors: {}", error);
                     exit(-1);
                 });
@@ -178,7 +178,7 @@ fn main() {
                 eprintln!("could not read ancestors file: {}", error);
                 exit(-1);
             });
-            let ancestor_array: AncestorArray = rmp_serde::from_read(&ancestors_data)
+            let ancestor_array: AncestorArray = bincode::deserialize_from(&ancestors_data)
                 .unwrap_or_else(|error| {
                     eprintln!("could not deserialize ancestors: {}", error);
                     exit(-1);
@@ -188,7 +188,7 @@ fn main() {
                 eprintln!("could not read trees file: {}", error);
                 exit(-1);
             });
-            let partial_tree_sequence: PartialTreeSequence = rmp_serde::from_read(&trees_data)
+            let partial_tree_sequence: PartialTreeSequence = bincode::deserialize_from(&trees_data)
                 .unwrap_or_else(|error| {
                     eprintln!("could not deserialize partial tree sequence: {}", error);
                     exit(-1);
@@ -285,7 +285,7 @@ fn write_output(
         String::from(buf.to_str().unwrap())
     };
 
-    let serialized = rmp_serde::to_vec(&data).unwrap();
+    let serialized = bincode::serialize(&data).unwrap();
     File::create(output_path)
         .unwrap_or_else(|error| {
             eprintln!("could not create output file: {}", error);
