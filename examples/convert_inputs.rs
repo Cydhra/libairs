@@ -124,7 +124,6 @@ pub fn generate_variants(
                 && record.alternate_bases.len() == 1
                 && record.alternate_bases[0].is_some()
                 && record.alternate_bases[0].as_ref().unwrap().len() == 1
-                && variant_data[&record.chromosome].last_position() < Some(record.position as usize)
         })
         .for_each(|record| {
             let genotypes = record
@@ -148,14 +147,17 @@ pub fn generate_variants(
                 .next()
                 .unwrap();
 
-            variant_data
-                .get_mut(&record.chromosome)
-                .expect("filtered sample not present")
-                .add_variant_site(genotypes, position, reference, alternate);
+            // check here because of mutable reference to variant_data
+            if variant_data[&record.chromosome].last_position() < Some(position) {
+                variant_data
+                    .get_mut(&record.chromosome)
+                    .expect("filtered sample not present")
+                    .add_variant_site(genotypes, position, reference, alternate);
 
-            counter += 1;
-            if counter % 10000 == 0 {
-                println!("processed {} records...", counter);
+                counter += 1;
+                if counter % 10000 == 0 {
+                    println!("processed {} records...", counter);
+                }
             }
         });
 
