@@ -124,6 +124,7 @@ pub fn generate_variants(
                 && record.alternate_bases.len() == 1
                 && record.alternate_bases[0].is_some()
                 && record.alternate_bases[0].as_ref().unwrap().len() == 1
+                && variant_data[&record.chromosome].last_position() < Some(record.position as usize)
         })
         .for_each(|record| {
             let genotypes = record

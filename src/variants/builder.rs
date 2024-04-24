@@ -77,7 +77,11 @@ impl VariantDataBuilder {
         if self.last_position < Some(sequence_position) {
             self.last_position = Some(sequence_position);
         } else {
-            panic!("Variant sites must be added in increasing order of sequence position");
+            panic!(
+                "Variant sites must be added in increasing order of sequence position: {} >= {}",
+                self.last_position.unwrap(),
+                sequence_position
+            );
         }
 
         let variant_site =
@@ -86,6 +90,11 @@ impl VariantDataBuilder {
             self.positions.push(sequence_position);
             self.sites.push(variant_site)
         }
+    }
+
+    /// Get the sequence position of the last variant site added to the builder.
+    pub fn last_position(&self) -> Option<usize> {
+        self.last_position.map(|p| p.0)
     }
 
     /// Generate [`VariantData`] from the current builder state.
