@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::exit;
 
@@ -51,7 +52,11 @@ fn main() {
             eprintln!("failed to create output file for {}: {}", id, error);
             exit(-1);
         });
-        bincode::serialize_into(&mut output, &data).expect("failed to serialize variant data");
+        let data = serde_pickle::to_vec(&data, Default::default())
+            .expect("failed to serialize variant data");
+        output
+            .write_all(&data)
+            .expect("failed to write variant data");
     }
 }
 

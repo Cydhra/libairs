@@ -112,7 +112,7 @@ fn main() {
                 exit(-1);
             });
             let ancestor_array: AncestorArray =
-                bincode::deserialize_from(&data).unwrap_or_else(|error| {
+                serde_pickle::from_reader(&data, Default::default()).unwrap_or_else(|error| {
                     eprintln!("could not deserialize ancestors: {}", error);
                     exit(-1);
                 });
@@ -140,21 +140,25 @@ fn main() {
                 eprintln!("could not read ancestors file: {}", error);
                 exit(-1);
             });
-            let ancestor_array: AncestorArray = bincode::deserialize_from(&ancestors_data)
-                .unwrap_or_else(|error| {
-                    eprintln!("could not deserialize ancestors: {}", error);
-                    exit(-1);
-                });
+            let ancestor_array: AncestorArray =
+                serde_pickle::from_reader(&ancestors_data, Default::default()).unwrap_or_else(
+                    |error| {
+                        eprintln!("could not deserialize ancestors: {}", error);
+                        exit(-1);
+                    },
+                );
 
             let trees_data = File::open(&trees).unwrap_or_else(|error| {
                 eprintln!("could not read trees file: {}", error);
                 exit(-1);
             });
-            let partial_tree_sequence: PartialTreeSequence = bincode::deserialize_from(&trees_data)
-                .unwrap_or_else(|error| {
-                    eprintln!("could not deserialize partial tree sequence: {}", error);
-                    exit(-1);
-                });
+            let partial_tree_sequence: PartialTreeSequence =
+                serde_pickle::from_reader(&trees_data, Default::default()).unwrap_or_else(
+                    |error| {
+                        eprintln!("could not deserialize partial tree sequence: {}", error);
+                        exit(-1);
+                    },
+                );
 
             let mut ancestor_matcher = ViterbiMatcher::new(ancestor_array, 1e-2, 1e-20, true, 40);
             ancestor_matcher.read_partial_tree_sequence(partial_tree_sequence);
@@ -219,7 +223,10 @@ fn write_time(file: &mut Option<File>, time: Duration) {
 }
 
 fn parse_input(variant_data: &str) -> anyhow::Result<VariantData> {
-    Ok(bincode::deserialize_from(File::open(variant_data)?)?)
+    Ok(serde_pickle::from_reader(
+        File::open(variant_data)?,
+        Default::default(),
+    )?)
 }
 
 /// Write a serializable data structure to the optional output path or to the input path with the
@@ -238,7 +245,8 @@ fn write_output(
         String::from(buf.to_str().unwrap())
     };
 
-    let serialized = bincode::serialize(&data).unwrap();
+    let serialized =
+        serde_pickle::to_vec(&data, Default::default()).expect("failed to serialize data");
     File::create(output_path)
         .unwrap_or_else(|error| {
             eprintln!("could not create output file: {}", error);
