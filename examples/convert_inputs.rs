@@ -39,6 +39,7 @@ fn main() {
         |name| PathBuf::from(name),
     );
 
+    println!("reading VCF file {}", args.input);
     let variant_data = generate_variants(&args.input, args.compressed, &args.filter)
         .expect("failed to convert VCF to variant data");
 
@@ -92,6 +93,15 @@ pub fn generate_variants(
         })
         .collect::<Vec<_>>();
 
+    println!(
+        "found {} contigs, {} of which match/es the filter.",
+        contigs.len(),
+        contigs
+            .iter()
+            .filter(|(id, _)| filter.is_empty() || filter.contains(id))
+            .count()
+    );
+
     let mut variant_data = contigs
         .iter()
         .filter_map(|(id, len)| {
@@ -102,6 +112,8 @@ pub fn generate_variants(
             }
         })
         .collect::<HashMap<_, _>>();
+
+    let mut counter = 0usize;
 
     input
         .records()?
@@ -138,7 +150,12 @@ pub fn generate_variants(
             variant_data
                 .get_mut(&record.chromosome)
                 .expect("filtered sample not present")
-                .add_variant_site(genotypes, position, reference, alternate)
+                .add_variant_site(genotypes, position, reference, alternate);
+
+            counter += 1;
+            if counter % 10000 == 0 {
+                println!("processed {} records...", counter);
+            }
         });
 
     Ok(variant_data
