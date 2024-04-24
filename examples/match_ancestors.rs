@@ -3,9 +3,11 @@
 //! The tree sequence is exported to a file matching the VCF file but with the extension `.trees`.
 //! It can be imported into tskit using [`tskit.load_text()`](https://tskit.dev/tskit/docs/stable/python-api.html#tskit.load_text).
 
+use libairs::ancestors::AncestorGenerator;
 use libairs::ts::ViterbiMatcher;
-use std::env;
+use libairs::variants::VariantDataBuilder;
 use std::path::PathBuf;
+use std::{env, io};
 use vcfire::VcfFile;
 
 fn main() {
@@ -48,8 +50,7 @@ fn main() {
 
     let mut target_file = PathBuf::from(&vcf);
 
-    let ancestor_generator =
-        libairs::convenience::from_vcf(&vcf, compressed, sequence_length).unwrap();
+    let ancestor_generator = from_vcf(&vcf, compressed, sequence_length).unwrap();
 
     target_file.pop();
     ancestor_generator
@@ -69,4 +70,49 @@ fn main() {
     tree_sequence
         .tskit_export(&target_file)
         .expect("failed to export tree sequence");
+}
+
+/// Convert a synthetically generated VCF file from msprime that contains a single contig into a
+/// [`AncestorGenerator`] instance
+pub fn from_vcf(
+    file: &str,
+    compressed: bool,
+    sequence_length: usize,
+) -> io::Result<AncestorGenerator> {
+    let input = VcfFile::parse(file, compressed)?;
+    let variant_data = VariantDataBuilder::from_iter(
+        sequence_length,
+        input
+            .records()?
+            .map(|record| record.ok().unwrap())
+            .filter(|record| record.reference_bases.len() == 1 && record.alternate_bases.len() == 1)
+            .map(|record| {
+                (
+                    record
+                        .sample_info
+                        .iter()
+                        .flat_map(|sample_info| {
+                            sample_info.samples().flat_map(|s| {
+                                s.get_genotype()
+                                    .unwrap()
+                                    .split('|')
+                                    .map(|s| s.parse::<u8>().unwrap())
+                                    .collect::<Vec<_>>()
+                            })
+                        })
+                        .collect(),
+                    record.position as usize,
+                    record.reference_bases.chars().next().unwrap(),
+                    record.alternate_bases[0]
+                        .as_ref()
+                        .unwrap()
+                        .chars()
+                        .next()
+                        .unwrap(),
+                )
+            }),
+    )
+    .finalize();
+
+    Ok(AncestorGenerator::from_variant_data(variant_data))
 }
