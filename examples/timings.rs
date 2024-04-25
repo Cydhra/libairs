@@ -99,7 +99,7 @@ fn main() {
 
     let mut timings_file = args.timings.map(|path| {
         println!("exporting timings to {}", path);
-        File::create_new(&path).unwrap_or_else(|error| {
+        File::create(&path).unwrap_or_else(|error| {
             eprintln!("could not create timings file at {}: {}", path, error);
             exit(-1);
         })
