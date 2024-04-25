@@ -74,7 +74,9 @@ impl<'o> TracebackSequenceIterator<'o, 'o> {
             .binary_search_by(|e| e.site.cmp(&end))
             .map(|mut pos| {
                 // move behind the last event that is at the end site
-                while parent.marginal_tree.viterbi_events[ancestor.0][pos].site == end {
+                while parent.marginal_tree.viterbi_events[ancestor.0].len() > pos
+                    && parent.marginal_tree.viterbi_events[ancestor.0][pos].site == end
+                {
                     pos += 1;
                 }
                 pos
