@@ -26,6 +26,10 @@ struct CliArgs {
     #[arg(short, long, default_value_t = false)]
     compressed: bool,
 
+    /// If this flag is set, the program will print all contigs in the VCF file and then terminate.
+    #[arg(long, default_value_t = false)]
+    print_contigs: bool,
+
     /// List of names of contigs to include in the output. Optional. Defaults to all contigs.
     filter: Vec<String>,
 }
@@ -33,8 +37,13 @@ struct CliArgs {
 fn main() {
     let args = CliArgs::parse();
 
-    let input_file = PathBuf::from(&args.input);
+    // print contigs
+    if args.print_contigs {
+        print_contigs(&args.input, args.compressed);
+        exit(0);
+    }
 
+    let input_file = PathBuf::from(&args.input);
     let output = args.output.map_or_else(
         || PathBuf::from(input_file.parent().unwrap()),
         |name| PathBuf::from(name),
@@ -170,4 +179,28 @@ pub fn generate_variants(
         .into_iter()
         .map(|(id, v)| (id, v.finalize()))
         .collect())
+}
+
+/// Print all contigs within the VCF file with their respective sequence length.
+fn print_contigs(input_file: &str, compressed: bool) {
+    let input = VcfFile::parse(input_file, compressed).unwrap();
+    input.header.values.iter().for_each(|(name, value)| {
+        if name == "contig" {
+            let mut config = value[1..value.len() - 1].split(',');
+
+            let id = config
+                .find(|s| s.starts_with("ID="))
+                .unwrap()
+                .split('=')
+                .nth(1)
+                .unwrap();
+            let sequence_length = config
+                .find(|s| s.starts_with("length="))
+                .unwrap()
+                .split('=')
+                .nth(1)
+                .unwrap();
+            println!("{}: {} mutations", id, sequence_length);
+        }
+    });
 }
