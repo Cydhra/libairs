@@ -123,7 +123,8 @@ impl<'o> TracebackSequenceIterator<'o, 'o> {
             if let ViterbiEventKind::Compressed(compressed_until) =
                 parent.marginal_tree.viterbi_events[ancestor.0][end_cursor].kind
             {
-                if compressed_until < end {
+                // if the compressed interval reaches into our interval
+                if compressed_until <= end {
                     let parent_index = new_iter.search_parent_index(end);
                     let parent_edge =
                         &new_iter.partial_tree_sequence.edges[ancestor.0][parent_index];

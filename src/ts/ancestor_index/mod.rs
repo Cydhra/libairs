@@ -34,6 +34,7 @@ pub(super) enum ViterbiEventKind {
     Recombination,
 
     /// Beginning from here, traceback is impossible from the current ancestor
+    /// The compressed_until argument is inclusive
     Compressed(VariantIndex),
 }
 
@@ -1140,6 +1141,97 @@ mod tests {
             Recombination
         );
         assert_eq!(traceback_iterator.last().unwrap().kind, Mutation);
+    }
+
+    #[test]
+    fn test_compression_interval_boundaries() {
+        // we test if compressed intervals are accounted for, if their boundary is at the end of the range.
+        // specifically, we test a regression where a compressed ancestor was not decompressed at the end of the range,
+        // because the interval we tried to decompress only overlapped in that one site.
+
+        let mut ix = ViterbiIterator::new(3, false, 1);
+        let mut edges = EdgeSequence::new();
+
+        // prepare partial tree sequence for traceback
+        let mut partial_tree_sequence = PartialTreeSequence::with_capacity(3);
+        partial_tree_sequence.push(vec![], vec![], true);
+        // this node will be compressed into the previous node
+        partial_tree_sequence.push(
+            vec![PartialSequenceEdge::new(
+                VariantIndex::from_usize(0),
+                VariantIndex::from_usize(10),
+                Ancestor(0),
+            )],
+            vec![],
+            true,
+        );
+        // this will be the ancestor we traceback, and it will compress into the parent at the last site.
+        partial_tree_sequence.push(
+            vec![
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(0),
+                    VariantIndex::from_usize(1),
+                    Ancestor(1),
+                ),
+                PartialSequenceEdge::new(
+                    VariantIndex::from_usize(1),
+                    VariantIndex::from_usize(10),
+                    Ancestor(0),
+                ),
+            ],
+            // we want it to be uncompressed at the last site, so we can traceback it without weird issues
+            vec![VariantIndex::from_usize(9)],
+            true,
+        );
+
+        edges.insert_sequence_node(
+            Ancestor(1),
+            &partial_tree_sequence.edges[1],
+            &partial_tree_sequence.mutations[1],
+        );
+        edges.insert_sequence_node(
+            Ancestor(2),
+            &partial_tree_sequence.edges[2],
+            &partial_tree_sequence.mutations[2],
+        );
+
+        // simulate the compression events
+        let mut iterator = ix.iter_sites(
+            &edges,
+            VariantIndex::from_usize(0),
+            VariantIndex::from_usize(10),
+            3,
+        );
+
+        iterator.for_each(|(site, tree)| {
+            // insert a mutation on the first site for the root node. This is what we want to see
+            // in the traceback despite the direct parent being Ancestor(1) and its interval
+            // only stretching to site 0 (so if site 0 is not included in the iterator, we have a
+            // off-by-1 error
+            if site.0 == 0 {
+                // only root should be active
+                assert_eq!(tree.nodes().collect::<Vec<_>>(), vec![Ancestor(0)]);
+
+                *tree.likelihood(Ancestor(0)) = 0.5;
+                tree.insert_mutation_event(Ancestor(0), site);
+            }
+
+            if site.0 == 1 {
+                // Ancestor(0) and Ancestor(2) should be decompressed here
+                assert_eq!(
+                    tree.nodes().collect::<Vec<_>>(),
+                    vec![Ancestor(0), Ancestor(2)]
+                );
+
+                // make sure we recompress the ancestor
+                *tree.likelihood(Ancestor(2)) = *tree.likelihood(Ancestor(0));
+            }
+        });
+
+        // check that we see all expected events
+        let mut traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(2));
+        assert_eq!(traceback_iterator.clone().count(), 1);
+        assert_eq!(traceback_iterator.next().unwrap().kind, Mutation);
     }
 
     #[test]
