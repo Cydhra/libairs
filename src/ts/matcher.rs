@@ -237,16 +237,19 @@ impl ViterbiMatcher {
     /// This will modify the internal state to represent the tree sequence for all ancestors
     /// within the array.
     pub fn match_ancestors(&mut self) {
-        let mut ancestor_iterators = vec![
-            ViterbiIterator::new(
-                self.ancestors.len(),
-                self.use_recompression_threshold,
-                self.inverse_recompression_threshold,
-            );
-            self.num_threads.into()
-        ];
+        let mut iterator = ViterbiIterator::new(
+            self.ancestors.len(),
+            self.use_recompression_threshold,
+            self.inverse_recompression_threshold,
+        );
 
-        self.do_match_ancestors(&mut ancestor_iterators)
+        if self.num_threads > 1 {
+            let mut ancestor_iterators = vec![iterator; self.num_threads.into()];
+
+            self.do_match_ancestors(&mut ancestor_iterators)
+        } else {
+            self.do_match_ancestors_sequentially(&mut iterator)
+        }
     }
 
     fn do_match_ancestors(&mut self, ancestor_iterators: &mut [ViterbiIterator]) {
@@ -337,19 +340,53 @@ impl ViterbiMatcher {
         }
     }
 
+    fn do_match_ancestors_sequentially(&mut self, iterator: &mut ViterbiIterator) {
+        // edges for root node
+        let root = Ancestor(0);
+        self.partial_tree_sequence.push(
+            vec![PartialSequenceEdge::new(
+                self.ancestors[root].start(),
+                self.ancestors[root].end(),
+                root,
+            )],
+            vec![],
+            true,
+        );
+
+        for (ancestor_index, ancestor) in self.ancestors.iter().skip(1) {
+            let mut num_ancestors = 0;
+
+            // TODO precalculate this
+            for (_, old_ancestor) in self.ancestors.iter().take(ancestor_index.0) {
+                if old_ancestor.relative_age() > ancestor.relative_age() {
+                    // TODO we can perform an overlap check here
+                    num_ancestors += 1;
+                }
+            }
+
+            let (edges, mutations) = self.find_copy_path(iterator, ancestor, num_ancestors);
+            self.edge_sequence
+                .insert_sequence_node(ancestor_index, &edges, &mutations);
+            self.partial_tree_sequence.push(edges, mutations, true);
+        }
+    }
+
     /// Insert a set of samples into an ancestral tree sequence. The samples will be matched
     /// against the existing sequence, but not against each other.
     pub fn match_samples(&mut self) {
-        let mut ancestor_iterators = vec![
-            ViterbiIterator::new(
-                self.ancestors.len(),
-                self.use_recompression_threshold,
-                self.inverse_recompression_threshold,
-            );
-            self.num_threads as usize
-        ];
+        let mut iterator = ViterbiIterator::new(
+            self.ancestors.len(),
+            self.use_recompression_threshold,
+            self.inverse_recompression_threshold,
+        );
 
-        self.do_match_samples(&mut ancestor_iterators)
+        if self.num_threads > 1 {
+            let mut ancestor_iterators = vec![iterator; self.num_threads as usize];
+
+            self.do_match_samples(&mut ancestor_iterators)
+        } else {
+            self.do_match_sample_sequentially(&mut iterator)
+        }
     }
 
     fn do_match_samples(&mut self, ancestor_iterators: &mut [ViterbiIterator]) {
@@ -373,11 +410,19 @@ impl ViterbiMatcher {
             })
             .collect::<Vec<_>>();
 
-        // insert results into the partial tree sequence and the iterators
+        // insert results into the partial tree sequence
         for results in results {
             for (edges, mutations) in results {
                 self.partial_tree_sequence.push(edges, mutations, false);
             }
+        }
+    }
+
+    fn do_match_sample_sequentially(&mut self, iterator: &mut ViterbiIterator) {
+        let samples = self.ancestors.generate_sample_data();
+        for sample in samples {
+            let (edges, mutations) = self.find_copy_path(iterator, &sample, self.ancestors.len());
+            self.partial_tree_sequence.push(edges, mutations, false);
         }
     }
 
