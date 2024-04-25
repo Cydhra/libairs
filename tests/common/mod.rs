@@ -26,7 +26,15 @@ pub fn generate_ancestors(ag: AncestorGenerator) -> AncestorArray {
 
 #[allow(dead_code)]
 pub fn match_ancestors(ancestors: AncestorArray) -> Vec<TreeSequenceNode> {
+    let mut ancestor_matcher =
+        ViterbiMatcher::with_parallelism(ancestors.clone(), 1e-2, 1e-20, false, 1, 1, 1);
+    ancestor_matcher.match_ancestors();
+    let sequential_sequence = ancestor_matcher.get_tree_sequence();
+
     let mut ancestor_matcher = ViterbiMatcher::new(ancestors, 1e-2, 1e-20, false, 1);
     ancestor_matcher.match_ancestors();
-    ancestor_matcher.get_tree_sequence().nodes
+    let parallel_sequence = ancestor_matcher.get_tree_sequence();
+
+    assert_eq!(sequential_sequence.nodes, parallel_sequence.nodes);
+    sequential_sequence.nodes
 }

@@ -15,7 +15,7 @@ pub struct Mutation {
 /// An interval in an ancestor that is covered by a parent node in the tree sequence.
 /// The interval is defined by the start and (exclusive) end position of the interval and the index of the
 /// parent node.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TreeSequenceEdge {
     pub parent: usize,
     pub start: usize,
@@ -34,7 +34,7 @@ impl TreeSequenceEdge {
 
 /// A node in the tree sequence. The node is defined by the index of the ancestor sequence it
 /// represents and a list of intervals that define what parent nodes cover the ancestor sequence.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TreeSequenceNode {
     ancestor_index: usize,
     edges: Vec<TreeSequenceEdge>,
