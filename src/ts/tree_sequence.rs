@@ -83,7 +83,7 @@ impl TreeSequenceNode {
         writer.write_fmt(format_args!(
             "{id}\t{is_sample}\t{time}\n",
             id = self.ancestor_index + 1, // add one to the node index because tskit uses the virtual root node, so we encode the root twice
-            is_sample = self.is_sample,
+            is_sample = self.is_sample as u8,
             time = ancestor.relative_age(),
         ))
     }
