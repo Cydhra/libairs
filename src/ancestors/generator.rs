@@ -376,7 +376,7 @@ impl AncestorGenerator {
 
         // artificially add the root ancestor
         let mut ancestral_state =
-            AncestralSequence::from_ancestral_state(self.variant_data.len(), 1.0);
+            AncestralSequence::from_ancestral_state(self.variant_data.len(), 2.0);
         ancestral_state.end = VariantIndex(self.variant_data.len());
         ancestors.push(ancestral_state);
 
