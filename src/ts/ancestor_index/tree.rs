@@ -89,7 +89,17 @@ impl<'o> MarginalTree<'o> {
 
         // re-initialize vectors into the default state where needed
         active_nodes.clear();
-        viterbi_events.iter_mut().for_each(|i| i.clear());
+
+        // This is a very crude memory optimization, because we assume that ancestors have much smaller
+        // event sequences once they can be compressed, but very long sequences while they are free nodes,
+        // so trying to shrink them to a small size before clearing them will shrink them as soon as
+        // they don't have long queues anymore.
+        // TODO this could be further optimized if we only shrink if the size is also below 16,
+        //  so it wont shrink long sequences on short candidates.
+        viterbi_events.iter_mut().for_each(|i| {
+            i.shrink_to(16);
+            i.clear();
+        });
         last_compressed.fill(VariantIndex(0));
 
         // the other states are updated whenever nodes are added to the marginal tree
