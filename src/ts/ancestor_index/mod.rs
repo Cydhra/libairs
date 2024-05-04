@@ -1,4 +1,5 @@
 use std::iter::Peekable;
+use std::num::NonZeroUsize;
 
 use crate::ancestors::Ancestor;
 use crate::ts::ancestor_index::tree::MarginalTree;
@@ -25,8 +26,20 @@ pub(super) struct ViterbiEvent {
     pub(super) site: VariantIndex,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct LinkedViterbiEvent {
+    pub(super) kind: ViterbiEventKind,
+    pub(super) site: VariantIndex,
+
+    // preceding viterbi event for the same ancestor. Cannot be zero, because this index is reserved
+    // for ancestors that are never decompressed
+    pub(super) prev: Option<NonZeroUsize>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ViterbiEventKind {
+    Sentinel,
+
     /// Mutation event here
     Mutation,
 
@@ -79,8 +92,11 @@ pub(super) struct ViterbiIterator {
     /// they are ignored during the Viterbi algorithm.
     likelihoods: Vec<f64>,
 
-    /// Mutations, Recombinations and indirections
-    viterbi_events: Vec<Vec<ViterbiEvent>>,
+    /// A super-array containing several interleaved linked lists with viterbi events for all ancestors
+    linked_viterbi_events: Vec<LinkedViterbiEvent>,
+
+    /// A mapping of ancestors to their last event index in viterbi_event_lists
+    last_event: Vec<usize>,
 
     /// The last site index (relative to current ancestor, not a variant index) where the node was compressed.
     /// Starting from that index, the mutation and recombination sites of that node are invalid
@@ -130,7 +146,8 @@ impl ViterbiIterator {
             is_compressed: vec![true; max_nodes],
             active_nodes: Vec::new(),
             likelihoods: vec![-1.0f64; max_nodes],
-            viterbi_events: vec![Vec::new(); max_nodes],
+            linked_viterbi_events: Vec::with_capacity(max_nodes), // TODO this will grow strongly, so we should reserve much more
+            last_event: vec![0; max_nodes],
             last_compressed: vec![VariantIndex(0); max_nodes],
             use_recompression_threshold,
             inv_recompression_threshold,
@@ -157,6 +174,7 @@ impl ViterbiIterator {
     ) -> TreeSequenceState<impl Iterator<Item = &'a SequenceEvent>> {
         let mut marginal_tree = MarginalTree::new(
             start,
+            end,
             edge_sequence.num_nodes,
             limit_nodes,
             &mut self.parents[0..limit_nodes],
@@ -165,7 +183,8 @@ impl ViterbiIterator {
             &mut self.is_compressed[0..limit_nodes],
             &mut self.active_nodes,
             &mut self.likelihoods[0..limit_nodes],
-            &mut self.viterbi_events[0..limit_nodes],
+            &mut self.linked_viterbi_events,
+            &mut self.last_event[0..limit_nodes],
             &mut self.last_compressed[0..limit_nodes],
             self.use_recompression_threshold,
             self.inv_recompression_threshold,
@@ -242,10 +261,16 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I>
         // compressed path
         for (node, &is_compressed) in self.marginal_tree.is_compressed.iter().enumerate() {
             if is_compressed && self.marginal_tree.last_compressed[node] < self.end {
-                self.marginal_tree.viterbi_events[node].push(ViterbiEvent {
-                    kind: ViterbiEventKind::Compressed(self.marginal_tree.last_compressed[node]),
+                // inlined version of `self.marginal_tree.insert_compression_event(Ancestor(node), self.end);`
+                let last_compressed_begin = self.marginal_tree.last_compressed[node];
+
+                self.marginal_tree.linked_viterbi_events.push(LinkedViterbiEvent {
+                    kind: ViterbiEventKind::Compressed(last_compressed_begin),
                     site: self.end,
+                    prev: NonZeroUsize::new(self.marginal_tree.last_event_index[node]),
                 });
+
+                self.marginal_tree.last_event_index[node] = self.marginal_tree.linked_viterbi_events.len() - 1;
             }
         }
     }
@@ -268,10 +293,7 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I>
             current_ancestor,
             self.start,
             self.end,
-            self.marginal_tree.viterbi_events[current_ancestor.0]
-                .iter()
-                .rev()
-                .peekable(),
+            self.marginal_tree.last_event_index[current_ancestor.0],
         )
     }
 }

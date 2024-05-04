@@ -1,8 +1,9 @@
 use crate::ancestors::Ancestor;
 use crate::ts::ancestor_index::sequence::{SequenceEvent, SequenceEventKind};
-use crate::ts::ancestor_index::{ViterbiEvent, ViterbiEventKind};
+use crate::ts::ancestor_index::{LinkedViterbiEvent, ViterbiEventKind};
 use crate::variants::VariantIndex;
 use std::iter::Peekable;
+use std::num::NonZeroUsize;
 
 /// An access structure into the tree sequence at a specific site.
 /// This structure is generated and by the [`AncestorIterator`] during iteration.
@@ -42,8 +43,11 @@ pub(crate) struct MarginalTree<'o> {
     /// they are ignored during the Viterbi algorithm.
     pub(super) likelihoods: &'o mut [f64],
 
-    /// Mutations, Recombinations and indirections
-    pub(super) viterbi_events: &'o mut [Vec<ViterbiEvent>],
+    /// /// A super-array containing several interleaved linked lists with viterbi events for all ancestors.
+    pub(super) linked_viterbi_events: &'o mut Vec<LinkedViterbiEvent>,
+
+    /// A mapping of ancestors to their last event index in viterbi_event_lists
+    pub(super) last_event_index: &'o mut [usize],
 
     /// The last site index (relative to current ancestor, not a variant index) where the node was compressed.
     /// Starting from that index, the mutation and recombination sites of that node are invalid
@@ -72,6 +76,7 @@ pub(crate) struct MarginalTree<'o> {
 impl<'o> MarginalTree<'o> {
     pub(super) fn new(
         start: VariantIndex,
+        end: VariantIndex,
         num_nodes: usize,
         limit_nodes: usize,
         parents: &'o mut [Option<Ancestor>],
@@ -80,7 +85,8 @@ impl<'o> MarginalTree<'o> {
         is_compressed: &'o mut [bool],
         active_nodes: &'o mut Vec<Ancestor>,
         likelihoods: &'o mut [f64],
-        viterbi_events: &'o mut [Vec<ViterbiEvent>],
+        linked_viterbi_events: &'o mut Vec<LinkedViterbiEvent>,
+        last_event_index: &'o mut [usize],
         last_compressed: &'o mut [VariantIndex],
         use_recompression_threshold: bool,
         inv_recompression_threshold: u16,
@@ -90,17 +96,15 @@ impl<'o> MarginalTree<'o> {
         // re-initialize vectors into the default state where needed
         active_nodes.clear();
 
-        // This is a very crude memory optimization, because we assume that ancestors have much smaller
-        // event sequences once they can be compressed, but very long sequences while they are free nodes,
-        // so trying to shrink them to a small size before clearing them will shrink them as soon as
-        // they don't have long queues anymore.
-        // TODO this could be further optimized if we only shrink if the size is also below 16,
-        //  so it wont shrink long sequences on short candidates.
-        viterbi_events.iter_mut().for_each(|i| {
-            i.shrink_to(16);
-            i.clear();
+        // Initially all nodes are compressed into the root node, which is expressed by a sentinel
+        // value in the linked_viterbi_events array.
+        linked_viterbi_events.clear();
+        linked_viterbi_events.push(LinkedViterbiEvent {
+            kind: ViterbiEventKind::Sentinel,
+            site: start,
+            prev: None,
         });
-        last_compressed.fill(VariantIndex(0));
+        last_event_index.fill(0);
 
         // the other states are updated whenever nodes are added to the marginal tree
 
@@ -111,7 +115,8 @@ impl<'o> MarginalTree<'o> {
             is_compressed,
             active_nodes,
             likelihoods,
-            viterbi_events,
+            linked_viterbi_events,
+            last_event_index,
             last_compressed,
             limit_nodes,
             start,
@@ -152,19 +157,40 @@ impl<'o> MarginalTree<'o> {
     /// Insert a recombination for the given ancestor at the given site (absolute site, not relative
     /// to the candidate)
     pub fn insert_recombination_event(&mut self, node: Ancestor, site: VariantIndex) {
-        self.viterbi_events[node.0].push(ViterbiEvent {
+        self.linked_viterbi_events.push(LinkedViterbiEvent {
             kind: ViterbiEventKind::Recombination,
             site,
+            prev: NonZeroUsize::new(self.last_event_index[node.0]),
         });
+
+        self.last_event_index[node.0] = self.linked_viterbi_events.len() - 1;
     }
 
     /// Insert a mutation for the given ancestor at the given site (absolute site, not relative to the
     /// candidate)
     pub fn insert_mutation_event(&mut self, node: Ancestor, site: VariantIndex) {
-        self.viterbi_events[node.0].push(ViterbiEvent {
+        self.linked_viterbi_events.push(LinkedViterbiEvent {
             kind: ViterbiEventKind::Mutation,
             site,
+            prev: NonZeroUsize::new(self.last_event_index[node.0]),
         });
+
+        self.last_event_index[node.0] = self.linked_viterbi_events.len() - 1;
+    }
+
+    /// Insert a compression event for the given ancestor at the given site (absolute site, not
+    /// relative to the candidate)
+    pub fn insert_compression_event(&mut self, node: Ancestor, site: VariantIndex) {
+        // copy the recombination and mutation sites from the parent
+        let last_compressed_begin = self.last_compressed[node.0];
+
+        self.linked_viterbi_events.push(LinkedViterbiEvent {
+            kind: ViterbiEventKind::Compressed(last_compressed_begin),
+            site,
+            prev: NonZeroUsize::new(self.last_event_index[node.0]),
+        });
+
+        self.last_event_index[node.0] = self.linked_viterbi_events.len() - 1;
     }
 
     /// Return whether the node is currently compressed.
@@ -237,15 +263,9 @@ impl<'o> MarginalTree<'o> {
 
             self.likelihoods[node.0] = self.likelihoods[uncompressed_parent.0];
 
-            // copy the recombination and mutation sites from the parent
-            let last_compressed_begin = self.last_compressed[node.0];
-
             // record event for traceback that starting from here we are compressed into the parent
             if site_index > self.start {
-                self.viterbi_events[node.0].push(ViterbiEvent {
-                    kind: ViterbiEventKind::Compressed(last_compressed_begin),
-                    site: site_index - 1,
-                });
+                self.insert_compression_event(node, site_index - 1);
             }
         }
     }
