@@ -96,6 +96,9 @@ impl<'o> MarginalTree<'o> {
         // re-initialize vectors into the default state where needed
         active_nodes.clear();
 
+        // reset the compression sites
+        last_compressed.fill(VariantIndex(0));
+
         // Initially all nodes are compressed into the root node, which is expressed by a sentinel
         // value in the linked_viterbi_events array.
         linked_viterbi_events.clear();
