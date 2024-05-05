@@ -6,7 +6,7 @@ use std::vec;
 
 use rayon::iter::ParallelBridge;
 use rayon::iter::ParallelIterator;
-use scoped_thread_pool::Pool;
+use rayon::scope;
 
 use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence};
 use crate::ts::ancestor_index::EdgeSequence;
@@ -269,7 +269,7 @@ impl ViterbiMatcher {
             flume::bounded(self.num_threads as usize * self.per_thread as usize);
 
         let mut current_ancestor_index = 1;
-        let pool = Pool::new(self.num_threads.into());
+        // let pool = Pool::new(self.num_threads.into());
 
         while current_ancestor_index < self.ancestors.len() {
             let chunk_size = min(
@@ -294,14 +294,15 @@ impl ViterbiMatcher {
 
             let (sender, receiver) = channel();
 
-            pool.scoped(|scope| {
+
+            scope(|scope| {
                 ancestor_iterators.iter_mut().for_each(|iterator| {
                     let ancestors = &self.ancestors;
                     let matcher = &self;
                     let sender = sender.clone();
                     let queue = &queue_receiver;
 
-                    scope.execute(move || {
+                    scope.spawn(move |_| {
                         let mut res = queue.try_recv();
                         while let Ok(next_ancestor_index) = res {
                             let ancestor_index = Ancestor(next_ancestor_index);
