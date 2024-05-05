@@ -265,6 +265,9 @@ impl ViterbiMatcher {
             true,
         );
 
+        let (queue_sender, queue_receiver) =
+            flume::bounded(self.num_threads as usize * self.per_thread as usize);
+
         let mut current_ancestor_index = 1;
         let pool = Pool::new(self.num_threads.into());
 
@@ -273,6 +276,10 @@ impl ViterbiMatcher {
                 self.num_threads as usize * self.per_thread as usize,
                 self.ancestors.len() - current_ancestor_index,
             );
+
+            for i in current_ancestor_index..current_ancestor_index + chunk_size {
+                queue_sender.send(i).expect("queue size insufficient");
+            }
 
             // insert the next chunk of ancestors into the edge sequence as free nodes
             for ancestor_index in current_ancestor_index..(current_ancestor_index + chunk_size - 1)
@@ -288,49 +295,53 @@ impl ViterbiMatcher {
             let (sender, receiver) = channel();
 
             pool.scoped(|scope| {
-                ancestor_iterators.iter_mut().enumerate().for_each(
-                    |(ancestor_offset, iterator)| {
-                        let ancestors = &self.ancestors;
-                        let matcher = &self;
-                        let sender = sender.clone();
-                        let per_thread = self.per_thread as usize;
+                ancestor_iterators.iter_mut().for_each(|iterator| {
+                    let ancestors = &self.ancestors;
+                    let matcher = &self;
+                    let sender = sender.clone();
+                    let queue = &queue_receiver;
 
-                        scope.execute(move || {
-                            for i in 0..per_thread {
-                                let ancestor_index = Ancestor(
-                                    current_ancestor_index + per_thread * ancestor_offset + i,
-                                );
+                    scope.execute(move || {
+                        let mut res = queue.try_recv();
+                        while let Ok(next_ancestor_index) = res {
+                            let ancestor_index = Ancestor(next_ancestor_index);
 
-                                if ancestor_index.0 >= ancestors.len() {
-                                    break;
-                                }
-
-                                let ancestor = &ancestors[ancestor_index];
-
-                                let mut num_ancestors = 0;
-                                // TODO precalculate this
-                                for (_, old_ancestor) in ancestors.iter().take(ancestor_index.0) {
-                                    if old_ancestor.relative_age() > ancestor.relative_age() {
-                                        // TODO we can perform an overlap check here
-                                        num_ancestors += 1;
-                                    }
-                                }
-
-                                sender
-                                    .send((
-                                        ancestor_index,
-                                        matcher.find_copy_path(iterator, ancestor, num_ancestors),
-                                    ))
-                                    .expect("failed to send result");
+                            if ancestor_index.0 >= ancestors.len() {
+                                break;
                             }
-                        });
-                    },
-                );
+
+                            let ancestor = &ancestors[ancestor_index];
+
+                            let mut num_ancestors = 0;
+                            // TODO precalculate this
+                            for (_, old_ancestor) in ancestors.iter().take(ancestor_index.0) {
+                                if old_ancestor.relative_age() > ancestor.relative_age() {
+                                    // TODO we can perform an overlap check here
+                                    num_ancestors += 1;
+                                }
+                            }
+
+                            sender
+                                .send((
+                                    ancestor_index,
+                                    matcher.find_copy_path(iterator, ancestor, num_ancestors),
+                                ))
+                                .expect("failed to send result");
+
+                            res = queue.try_recv();
+                        }
+                    });
+                });
             });
 
             let mut results = receiver.iter().take(chunk_size).collect::<Vec<_>>();
             results.sort_by(|(a, _), (b, _)| a.cmp(b));
             current_ancestor_index += results.len();
+            println!(
+                "Progress: {}/{}",
+                current_ancestor_index,
+                self.ancestors.len()
+            );
 
             for (ancestor_index, (edges, mutations)) in results {
                 self.edge_sequence
