@@ -24,20 +24,18 @@ pub(super) type Site<'a, 'o> = (VariantIndex, &'a mut MarginalTree<'o>);
 pub(super) struct ViterbiEvent {
     pub(super) kind: ViterbiEventKind,
     pub(super) site: VariantIndex,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct LinkedViterbiEvent {
-    pub(super) kind: ViterbiEventKind,
-    pub(super) site: VariantIndex,
 
     // preceding viterbi event for the same ancestor. Cannot be zero, because this index is reserved
     // for ancestors that are never decompressed
     pub(super) prev: Option<NonZeroUsize>,
 }
 
+/// The kind of event that a single ancestor can experience during the Viterbi algorithm.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ViterbiEventKind {
+    /// Sentinel event, that is only allowed as the first event in the linked list, and should never
+    /// turn up during traceback. This allows several optimizations in the memory layout, since
+    /// the value 0 is now an invalid index into the linked lists.
     Sentinel,
 
     /// Mutation event here
@@ -92,10 +90,13 @@ pub(super) struct ViterbiIterator {
     /// they are ignored during the Viterbi algorithm.
     likelihoods: Vec<f64>,
 
-    /// A super-array containing several interleaved linked lists with viterbi events for all ancestors
-    linked_viterbi_events: Vec<LinkedViterbiEvent>,
+    /// A super-array containing several interleaved linked lists with viterbi events for all
+    /// ancestors. Every event is pushed to the back of this list, and connected to the last event
+    /// inserted for the same ancestor. That event is retrieved from the `last_event` array.
+    linked_viterbi_events: Vec<ViterbiEvent>,
 
-    /// A mapping of ancestors to their last event index in viterbi_event_lists
+    /// A mapping of ancestors to their last event index in viterbi_event_lists. Used as starting
+    /// points for traceback.
     last_event: Vec<usize>,
 
     /// The last site index (relative to current ancestor, not a variant index) where the node was compressed.
@@ -174,7 +175,6 @@ impl ViterbiIterator {
     ) -> TreeSequenceState<impl Iterator<Item = &'a SequenceEvent>> {
         let mut marginal_tree = MarginalTree::new(
             start,
-            end,
             edge_sequence.num_nodes,
             limit_nodes,
             &mut self.parents[0..limit_nodes],
@@ -264,7 +264,7 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I>
                 // inlined version of `self.marginal_tree.insert_compression_event(Ancestor(node), self.end);`
                 let last_compressed_begin = self.marginal_tree.last_compressed[node];
 
-                self.marginal_tree.linked_viterbi_events.push(LinkedViterbiEvent {
+                self.marginal_tree.linked_viterbi_events.push(ViterbiEvent {
                     kind: ViterbiEventKind::Compressed(last_compressed_begin),
                     site: self.end,
                     prev: NonZeroUsize::new(self.marginal_tree.last_event_index[node]),

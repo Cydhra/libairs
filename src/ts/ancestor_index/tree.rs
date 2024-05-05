@@ -1,6 +1,6 @@
 use crate::ancestors::Ancestor;
 use crate::ts::ancestor_index::sequence::{SequenceEvent, SequenceEventKind};
-use crate::ts::ancestor_index::{LinkedViterbiEvent, ViterbiEventKind};
+use crate::ts::ancestor_index::{ViterbiEvent, ViterbiEventKind};
 use crate::variants::VariantIndex;
 use std::iter::Peekable;
 use std::num::NonZeroUsize;
@@ -44,7 +44,7 @@ pub(crate) struct MarginalTree<'o> {
     pub(super) likelihoods: &'o mut [f64],
 
     /// /// A super-array containing several interleaved linked lists with viterbi events for all ancestors.
-    pub(super) linked_viterbi_events: &'o mut Vec<LinkedViterbiEvent>,
+    pub(super) linked_viterbi_events: &'o mut Vec<ViterbiEvent>,
 
     /// A mapping of ancestors to their last event index in viterbi_event_lists
     pub(super) last_event_index: &'o mut [usize],
@@ -76,7 +76,6 @@ pub(crate) struct MarginalTree<'o> {
 impl<'o> MarginalTree<'o> {
     pub(super) fn new(
         start: VariantIndex,
-        end: VariantIndex,
         num_nodes: usize,
         limit_nodes: usize,
         parents: &'o mut [Option<Ancestor>],
@@ -85,7 +84,7 @@ impl<'o> MarginalTree<'o> {
         is_compressed: &'o mut [bool],
         active_nodes: &'o mut Vec<Ancestor>,
         likelihoods: &'o mut [f64],
-        linked_viterbi_events: &'o mut Vec<LinkedViterbiEvent>,
+        linked_viterbi_events: &'o mut Vec<ViterbiEvent>,
         last_event_index: &'o mut [usize],
         last_compressed: &'o mut [VariantIndex],
         use_recompression_threshold: bool,
@@ -95,19 +94,19 @@ impl<'o> MarginalTree<'o> {
 
         // re-initialize vectors into the default state where needed
         active_nodes.clear();
-
-        // reset the compression sites
         last_compressed.fill(VariantIndex(0));
+        last_event_index.fill(0); // 0 is the sentinel value for no events
 
         // Initially all nodes are compressed into the root node, which is expressed by a sentinel
-        // value in the linked_viterbi_events array.
+        // value in the linked_viterbi_events array (this also allows us to use Option<NonZeroUsize>
+        // for the prev field in ViterbiEvent, which reduces the space overhead)
         linked_viterbi_events.clear();
-        linked_viterbi_events.push(LinkedViterbiEvent {
+        linked_viterbi_events.push(ViterbiEvent {
             kind: ViterbiEventKind::Sentinel,
             site: start,
             prev: None,
         });
-        last_event_index.fill(0);
+
 
         // the other states are updated whenever nodes are added to the marginal tree
 
@@ -160,7 +159,7 @@ impl<'o> MarginalTree<'o> {
     /// Insert a recombination for the given ancestor at the given site (absolute site, not relative
     /// to the candidate)
     pub fn insert_recombination_event(&mut self, node: Ancestor, site: VariantIndex) {
-        self.linked_viterbi_events.push(LinkedViterbiEvent {
+        self.linked_viterbi_events.push(ViterbiEvent {
             kind: ViterbiEventKind::Recombination,
             site,
             prev: NonZeroUsize::new(self.last_event_index[node.0]),
@@ -172,7 +171,7 @@ impl<'o> MarginalTree<'o> {
     /// Insert a mutation for the given ancestor at the given site (absolute site, not relative to the
     /// candidate)
     pub fn insert_mutation_event(&mut self, node: Ancestor, site: VariantIndex) {
-        self.linked_viterbi_events.push(LinkedViterbiEvent {
+        self.linked_viterbi_events.push(ViterbiEvent {
             kind: ViterbiEventKind::Mutation,
             site,
             prev: NonZeroUsize::new(self.last_event_index[node.0]),
@@ -187,7 +186,7 @@ impl<'o> MarginalTree<'o> {
         // copy the recombination and mutation sites from the parent
         let last_compressed_begin = self.last_compressed[node.0];
 
-        self.linked_viterbi_events.push(LinkedViterbiEvent {
+        self.linked_viterbi_events.push(ViterbiEvent {
             kind: ViterbiEventKind::Compressed(last_compressed_begin),
             site,
             prev: NonZeroUsize::new(self.last_event_index[node.0]),

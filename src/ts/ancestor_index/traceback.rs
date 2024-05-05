@@ -1,7 +1,7 @@
 use std::num::NonZeroUsize;
 use crate::ancestors::Ancestor;
 use crate::ts::ancestor_index::tree::MarginalTree;
-use crate::ts::ancestor_index::{LinkedViterbiEvent, ViterbiEventKind};
+use crate::ts::ancestor_index::{ViterbiEvent, ViterbiEventKind};
 use crate::ts::partial_sequence::PartialTreeSequence;
 use crate::variants::VariantIndex;
 
@@ -136,7 +136,7 @@ impl<'o> TracebackSequenceIterator<'o, 'o> {
     }
 
     /// Return the next event from the current ancestor and decrease the cursor
-    fn next_event<'mutable>(&'mutable mut self) -> Option<&'o LinkedViterbiEvent> {
+    fn next_event<'mutable>(&'mutable mut self) -> Option<&'o ViterbiEvent> {
         if self.next_event > 0 {
             let e = &self.marginal_tree.linked_viterbi_events[self.next_event];
             self.next_event = e.prev.map(|p| p.get()).unwrap_or(0);
@@ -209,7 +209,7 @@ impl<'o> TracebackSequenceIterator<'o, 'o> {
 }
 
 impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
-    type Item = &'o LinkedViterbiEvent;
+    type Item = &'o ViterbiEvent;
 
     fn next(&mut self) -> Option<Self::Item> {
         // if we have an inner iterator, we need to check if it has any elements left and return those

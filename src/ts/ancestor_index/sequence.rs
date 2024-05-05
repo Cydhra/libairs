@@ -4,6 +4,14 @@ use crate::variants::VariantIndex;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
+/// The kind of event that occurs while iterating a partial tree sequence.
+/// The events are ordered by the site they occur at, the kind of event, and the node they are
+/// associated with.
+/// The events are used by the [`iterator`] to update a [`MarginalTree`] during the Viterbi
+/// algorithm.
+///
+/// [`iterator`]: super::TreeSequenceState
+/// [`MarginalTree`]: super::tree::MarginalTree
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum SequenceEventKind {
     Start { parent: Ancestor },
