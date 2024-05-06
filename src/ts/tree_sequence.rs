@@ -134,7 +134,7 @@ impl TreeSequence {
             "{id}\t{is_sample}\t{time}\n",
             id = 0,
             is_sample = 1,
-            time = 2.0,
+            time = 3.0,
         ))?;
 
         for node in &self.nodes {
