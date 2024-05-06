@@ -6,8 +6,7 @@ use std::sync::Arc;
 use std::thread::available_parallelism;
 use std::vec;
 
-use rayon::iter::ParallelBridge;
-use rayon::iter::ParallelIterator;
+use rayon::prelude::ParallelSliceMut;
 use rayon::scope;
 use thread_local::ThreadLocal;
 
@@ -400,40 +399,64 @@ impl ViterbiMatcher {
         );
 
         if self.num_threads > 1 {
-            let mut ancestor_iterators = vec![iterator; self.num_threads as usize];
-
-            self.do_match_samples(&mut ancestor_iterators)
+            self.do_match_samples(&iterator)
         } else {
             self.do_match_sample_sequentially(&mut iterator)
         }
     }
 
-    fn do_match_samples(&mut self, ancestor_iterators: &mut [ViterbiIterator]) {
+    fn do_match_samples(&mut self, iterator: &ViterbiIterator) {
         let samples = self.ancestors.generate_sample_data();
         // assign samples to chunk in a way that all samples get assigned and one chunk may get less
-        let samples_per_chunk =
-            (samples.len() + (ancestor_iterators.len() - 1)) / ancestor_iterators.len();
-        let chunks = samples.as_slice().chunks(samples_per_chunk);
 
-        debug_assert!(ancestor_iterators.len() == chunks.len());
+        let (queue_sender, queue_receiver) = flume::bounded(samples.len());
+        for i in 0..samples.len() {
+            queue_sender.send(i).expect("queue size insufficient");
+        }
 
-        let results = ancestor_iterators
-            .into_iter()
-            .zip(chunks)
-            .par_bridge()
-            .map(|(ancestor_index, samples)| {
-                samples
-                    .into_iter()
-                    .map(|sample| self.find_copy_path(ancestor_index, sample, self.ancestors.len()))
-                    .collect::<Vec<_>>()
-            })
+        let (sender, receiver) = flume::bounded(samples.len());
+
+        let thread_local_iterators = Arc::new(ThreadLocal::with_capacity(self.num_threads.into()));
+
+        scope(|s| {
+            let recv = &queue_receiver;
+            let num_threads = self.num_threads as usize;
+            let num_ancestors = self.ancestors.len();
+            let thread_local_iterators = &thread_local_iterators;
+            let result_sender = &sender;
+            let samples = &samples;
+            let matcher = &self;
+
+            (0..self.num_threads).for_each(|_| {
+                s.spawn(move |_| {
+                    let mut iterator = thread_local_iterators
+                        .get_or(|| RefCell::new(iterator.clone()))
+                        .borrow_mut();
+                    let mut results =
+                        Vec::with_capacity((samples.len() + (num_threads - 1)) / num_threads);
+                    while let Ok(i) = recv.recv() {
+                        let sample = &samples[i];
+                        results.push((
+                            i,
+                            matcher.find_copy_path(&mut iterator, &sample, num_ancestors),
+                        ));
+                    }
+
+                    result_sender.send(results).unwrap();
+                })
+            });
+        });
+        let mut results = receiver
+            .iter()
+            .take(self.num_threads as usize)
+            .flatten()
             .collect::<Vec<_>>();
 
+        results.par_sort_by(|(a, _), (b, _)| a.cmp(b));
+
         // insert results into the partial tree sequence
-        for results in results {
-            for (edges, mutations) in results {
-                self.partial_tree_sequence.push(edges, mutations, false);
-            }
+        for (_, (edges, mutations)) in results {
+            self.partial_tree_sequence.push(edges, mutations, false);
         }
     }
 

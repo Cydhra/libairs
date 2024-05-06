@@ -160,3 +160,11 @@ impl IntoIterator for SampleData {
         self.samples.into_iter()
     }
 }
+
+impl Index<usize> for SampleData {
+    type Output = AncestralSequence;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.samples[index]
+    }
+}
