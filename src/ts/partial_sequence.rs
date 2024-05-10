@@ -82,7 +82,7 @@ impl PartialTreeSequence {
                 .enumerate()
                 .map(|(idx, edges)| {
                     TreeSequenceNode::new(
-                        idx,
+                        idx as u32,
                         edges
                             .iter()
                             .map(|edge| {

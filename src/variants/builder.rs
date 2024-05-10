@@ -6,7 +6,7 @@ use crate::variants::{SequencePosition, VariantData, VariantSite};
 pub struct VariantDataBuilder {
     sites: Vec<VariantSite>,
     positions: Vec<SequencePosition>,
-    num_samples: usize,
+    num_samples: u32,
     last_position: Option<SequencePosition>,
     sequence_length: SequencePosition,
 }
@@ -66,10 +66,10 @@ impl VariantDataBuilder {
     ) {
         // TODO store invalid variant sites somewhere for encoding in final tree sequence
         assert!(!state.is_empty());
-        assert!(self.num_samples == 0 || state.len() == self.num_samples);
+        assert!(self.num_samples == 0 || state.len() == self.num_samples as usize);
 
         if self.num_samples == 0 {
-            self.num_samples = state.len();
+            self.num_samples = state.len() as u32;
         }
 
         let sequence_position = SequencePosition::from_usize(sequence_position);
@@ -93,7 +93,7 @@ impl VariantDataBuilder {
     }
 
     /// Get the sequence position of the last variant site added to the builder.
-    pub fn last_position(&self) -> Option<usize> {
+    pub fn last_position(&self) -> Option<u32> {
         self.last_position.map(|p| p.0)
     }
 

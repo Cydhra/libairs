@@ -25,8 +25,8 @@ impl AncestorArray {
     }
 
     /// Get the number of ancestors in the array
-    pub fn len(&self) -> usize {
-        self.ancestors.len()
+    pub fn len(&self) -> u32 {
+        self.ancestors.len() as u32
     }
 
     /// Get the number of variants that the ancestors in the array are based on
@@ -38,7 +38,7 @@ impl AncestorArray {
         self.ancestors
             .iter()
             .enumerate()
-            .map(|(i, a)| (Ancestor(i), a))
+            .map(|(i, a)| (Ancestor(i as u32), a))
     }
 
     /// Convert a variant index to a sequence position
@@ -74,7 +74,7 @@ impl Index<Ancestor> for AncestorArray {
     type Output = AncestralSequence;
 
     fn index(&self, index: Ancestor) -> &Self::Output {
-        &self.ancestors[index.0]
+        &self.ancestors[index.0 as usize]
     }
 }
 

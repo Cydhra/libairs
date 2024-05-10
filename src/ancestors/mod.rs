@@ -29,7 +29,7 @@ pub struct AncestralSequence {
 }
 
 impl AncestralSequence {
-    fn from_ancestral_state(len: usize, age: f64) -> Self {
+    fn from_ancestral_state(len: u32, age: f64) -> Self {
         AncestralSequence {
             state: VariantSequence::from_ancestral_state(len),
             focal_sites: Vec::new(),
@@ -65,7 +65,7 @@ impl AncestralSequence {
             state: sample_sequence,
             focal_sites: Vec::new(),
             start: VariantIndex(0),
-            end: VariantIndex(sequence_len),
+            end: VariantIndex(sequence_len as u32),
             age: 0.0,
         }
     }
@@ -115,7 +115,7 @@ impl AncestralSequence {
 
     /// Get the length of the ancestral sequence. Only known sites are considered, so the length
     /// might be shorter than the length of the underlying DNA sequence.
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> u32 {
         self.end.get_variant_distance(self.start)
     }
 
@@ -182,7 +182,7 @@ impl IndexMut<VariantIndex> for AncestralSequence {
 #[derive(
     Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, serde::Serialize, serde::Deserialize,
 )]
-pub(crate) struct Ancestor(pub(crate) usize);
+pub(crate) struct Ancestor(pub(crate) u32);
 
 impl Display for Ancestor {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

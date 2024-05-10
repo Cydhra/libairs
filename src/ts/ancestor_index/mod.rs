@@ -132,7 +132,7 @@ impl ViterbiIterator {
     /// nodes of the marginal tree are active. If `use_recompression_threshold` is false, this
     /// parameter is ignored.
     pub(crate) fn new(
-        max_nodes: usize,
+        max_nodes: u32,
         use_recompression_threshold: bool,
         inv_recompression_threshold: u16,
     ) -> Self {
@@ -141,15 +141,15 @@ impl ViterbiIterator {
             "Recompression interval must be greater than 0"
         );
         Self {
-            parents: vec![None; max_nodes],
-            children: vec![Vec::new(); max_nodes],
-            uncompressed_parents: vec![None; max_nodes],
-            is_compressed: vec![true; max_nodes],
+            parents: vec![None; max_nodes as usize],
+            children: vec![Vec::new(); max_nodes as usize],
+            uncompressed_parents: vec![None; max_nodes as usize],
+            is_compressed: vec![true; max_nodes as usize],
             active_nodes: Vec::new(),
-            likelihoods: vec![-1.0f64; max_nodes],
-            linked_viterbi_events: Vec::with_capacity(max_nodes), // TODO this will grow strongly, so we should reserve much more
-            last_event: vec![0; max_nodes],
-            last_compressed: vec![VariantIndex(0); max_nodes],
+            likelihoods: vec![-1.0f64; max_nodes as usize],
+            linked_viterbi_events: Vec::with_capacity(max_nodes as usize), // TODO this will grow strongly, so we should reserve much more
+            last_event: vec![0; max_nodes as usize],
+            last_compressed: vec![VariantIndex(0); max_nodes as usize],
             use_recompression_threshold,
             inv_recompression_threshold,
         }
@@ -171,21 +171,21 @@ impl ViterbiIterator {
         edge_sequence: &'a EdgeSequence,
         start: VariantIndex,
         end: VariantIndex,
-        limit_nodes: usize,
+        limit_nodes: u32,
     ) -> TreeSequenceState<impl Iterator<Item = &'a SequenceEvent>> {
         let mut marginal_tree = MarginalTree::new(
             start,
             edge_sequence.num_nodes,
             limit_nodes,
-            &mut self.parents[0..limit_nodes],
-            &mut self.children[0..limit_nodes],
-            &mut self.uncompressed_parents[0..limit_nodes],
-            &mut self.is_compressed[0..limit_nodes],
+            &mut self.parents[0..limit_nodes as usize],
+            &mut self.children[0..limit_nodes as usize],
+            &mut self.uncompressed_parents[0..limit_nodes as usize],
+            &mut self.is_compressed[0..limit_nodes as usize],
             &mut self.active_nodes,
-            &mut self.likelihoods[0..limit_nodes],
+            &mut self.likelihoods[0..limit_nodes as usize],
             &mut self.linked_viterbi_events,
-            &mut self.last_event[0..limit_nodes],
-            &mut self.last_compressed[0..limit_nodes],
+            &mut self.last_event[0..limit_nodes as usize],
+            &mut self.last_compressed[0..limit_nodes as usize],
             self.use_recompression_threshold,
             self.inv_recompression_threshold,
         );
@@ -249,8 +249,8 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I>
             consumer((self.site, &mut self.marginal_tree));
             if !self.marginal_tree.use_recompression_threshold
                 || self.marginal_tree.active_nodes.len()
-                    > self.marginal_tree.limit_nodes
-                        / self.marginal_tree.inv_recompression_threshold as usize
+                > (self.marginal_tree.limit_nodes
+                / self.marginal_tree.inv_recompression_threshold as u32) as usize
             {
                 self.marginal_tree.recompress_tree(self.site);
             }
@@ -294,7 +294,7 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I>
             current_ancestor,
             self.start,
             self.end,
-            self.marginal_tree.last_event_index[current_ancestor.0],
+            self.marginal_tree.last_event_index[current_ancestor.0 as usize],
         )
     }
 }
@@ -308,13 +308,13 @@ mod tests {
     use crate::ts::partial_sequence::PartialSequenceEdge;
 
     fn find_uncompressed_parent(tree: &MarginalTree, node: Ancestor) -> Option<Ancestor> {
-        let mut parent = tree.parents[node.0];
+        let mut parent = tree.parents[node.0 as usize];
 
         while let Some(p) = parent {
             if !tree.is_compressed(p) {
                 break;
             }
-            parent = tree.parents[p.0];
+            parent = tree.parents[p.0 as usize];
         }
 
         parent
@@ -831,7 +831,7 @@ mod tests {
                 // don't recompress first two nodes
                 0 => tree
                     .nodes()
-                    .for_each(|n| tree.likelihoods[n.0] = n.0 as f64 * 0.1),
+                    .for_each(|n| tree.likelihoods[n.0 as usize] = n.0 as f64 * 0.1),
 
                 // insert mutations and recombination for nodes 0 and 1, and later check if 2 inherited them
                 2 => tree.insert_mutation_event(Ancestor(0), VariantIndex::from_usize(2)),
@@ -955,7 +955,7 @@ mod tests {
                 // don't recompress first two nodes
                 0 => tree
                     .nodes()
-                    .for_each(|n| tree.likelihoods[n.0] = n.0 as f64 * 0.1),
+                    .for_each(|n| tree.likelihoods[n.0 as usize] = n.0 as f64 * 0.1),
 
                 // insert mutations and recombination for nodes 0 and 1, and later check if 2 inherited them
                 2 => tree.insert_mutation_event(Ancestor(0), VariantIndex::from_usize(2)),

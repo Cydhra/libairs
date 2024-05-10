@@ -8,7 +8,7 @@ use std::path::Path;
 /// and the derived state in FASTA notation.
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Mutation {
-    pub variant_index: usize,
+    pub variant_index: u32,
     pub derived_state: char,
 }
 
@@ -17,13 +17,13 @@ pub struct Mutation {
 /// parent node.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TreeSequenceEdge {
-    pub parent: usize,
-    pub start: usize,
-    pub end: usize,
+    pub parent: u32,
+    pub start: u32,
+    pub end: u32,
 }
 
 impl TreeSequenceEdge {
-    pub fn new(parent: usize, start: SequencePosition, end: SequencePosition) -> Self {
+    pub fn new(parent: u32, start: SequencePosition, end: SequencePosition) -> Self {
         Self {
             parent,
             start: start.unwrap(),
@@ -36,7 +36,7 @@ impl TreeSequenceEdge {
 /// represents and a list of intervals that define what parent nodes cover the ancestor sequence.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TreeSequenceNode {
-    ancestor_index: usize,
+    ancestor_index: u32,
     edges: Vec<TreeSequenceEdge>,
     mutations: Vec<Mutation>,
     is_sample: bool,
@@ -44,7 +44,7 @@ pub struct TreeSequenceNode {
 
 impl TreeSequenceNode {
     pub(crate) fn new(
-        ancestor_index: usize,
+        ancestor_index: u32,
         edges: Vec<TreeSequenceEdge>,
         mutations: Vec<Mutation>,
         is_sample: bool,
@@ -59,7 +59,7 @@ impl TreeSequenceNode {
 
     /// Get the index of the ancestor sequence that this node represents
     pub fn ancestor(&self) -> usize {
-        self.ancestor_index
+        self.ancestor_index as usize
     }
 
     /// Get the collection of [`TreeSequenceEdges`] that define the intervals covered by parent nodes.

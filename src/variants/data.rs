@@ -10,7 +10,7 @@ pub struct VariantData {
     sites: Vec<VariantSite>,
     positions: Vec<SequencePosition>,
     sequence_length: SequencePosition,
-    num_samples: usize,
+    num_samples: u32,
 }
 
 impl VariantData {
@@ -19,7 +19,7 @@ impl VariantData {
         sites: Vec<VariantSite>,
         positions: Vec<SequencePosition>,
         sequence_length: SequencePosition,
-        num_samples: usize,
+        num_samples: u32,
     ) -> Self {
         Self {
             sites,
@@ -35,10 +35,10 @@ impl VariantData {
     pub fn into_samples(&self) -> SampleData {
         // transpose sites into sample sequences
         let mut samples =
-            vec![VariantSequence::from_ancestral_state(self.sites.len()); self.num_samples];
+            vec![VariantSequence::from_ancestral_state(self.sites.len() as u32); self.num_samples as usize];
         for (i, site) in self.sites.iter().enumerate() {
             for (j, state) in site.genotypes.iter().enumerate() {
-                samples[j][VariantIndex(i)] = *state;
+                samples[j][VariantIndex(i as u32)] = *state;
             }
         }
 
@@ -67,7 +67,7 @@ impl VariantData {
         self.sites
             .iter()
             .enumerate()
-            .map(|(i, s)| (VariantIndex(i), s))
+            .map(|(i, s)| (VariantIndex(i as u32), s))
     }
 
     /// Get the sequence length of the genome this variant data is about. It is not the length of the
@@ -80,7 +80,7 @@ impl VariantData {
     }
 
     /// Get the number of samples that make up each variant site
-    pub fn get_num_samples(&self) -> usize {
+    pub fn get_num_samples(&self) -> u32 {
         self.num_samples
     }
 
@@ -93,10 +93,10 @@ impl VariantData {
     pub(crate) fn variant_index_to_sequence_pos(&self, index: VariantIndex) -> SequencePosition {
         if index.0 == 0 {
             SequencePosition::from_usize(0)
-        } else if index.0 == self.positions.len() {
+        } else if index.0 == self.positions.len() as u32 {
             self.sequence_length
         } else {
-            self.positions[index.0]
+            self.positions[index.0 as usize]
         }
     }
 }
@@ -106,7 +106,7 @@ impl Index<VariantIndex> for VariantData {
     type Output = VariantSite;
 
     fn index(&self, index: VariantIndex) -> &Self::Output {
-        &self.sites[index.0]
+        &self.sites[index.0 as usize]
     }
 }
 
@@ -114,7 +114,7 @@ impl Index<Range<VariantIndex>> for VariantData {
     type Output = [VariantSite];
 
     fn index(&self, index: Range<VariantIndex>) -> &Self::Output {
-        &self.sites[index.start.0..index.end.0]
+        &self.sites[index.start.0 as usize..index.end.0 as usize]
     }
 }
 

@@ -94,7 +94,7 @@ pub(in crate::ts) struct EdgeSequence {
     /// algorithm.
     /// The actual iterator can be limited to a smaller number of nodes.
     /// Not all nodes included in this number necessarily have edges in the tree sequence.
-    pub(super) num_nodes: usize,
+    pub(super) num_nodes: u32,
 }
 
 impl EdgeSequence {
@@ -120,7 +120,7 @@ impl EdgeSequence {
             .enumerate()
             .skip(1)
         {
-            edge_sequence.insert_sequence_node(Ancestor(node), edges, mutations);
+            edge_sequence.insert_sequence_node(Ancestor(node as u32), edges, mutations);
         }
 
         edge_sequence

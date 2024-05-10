@@ -104,7 +104,7 @@ impl<'o> TracebackSequenceIterator<'o, 'o> {
                 if compressed_until <= end {
                     let parent_index = new_iter.search_parent_index(end);
                     let parent_edge =
-                        &new_iter.partial_tree_sequence.edges[ancestor.0][parent_index];
+                        &new_iter.partial_tree_sequence.edges[ancestor.0 as usize][parent_index];
 
                     // recursively create a new inner iterator that iterates over the compressed interval
                     let inner = Self::new_inner(
@@ -155,7 +155,7 @@ impl<'o> TracebackSequenceIterator<'o, 'o> {
     /// and its immediate predecessor, if it exists.
     fn search_site(&self, ancestor: Ancestor, site: VariantIndex) -> (usize, Option<NonZeroUsize>) {
         let mut pred = None;
-        let mut current = self.marginal_tree.last_event_index[ancestor.0];
+        let mut current = self.marginal_tree.last_event_index[ancestor.0 as usize];
         while self.marginal_tree.linked_viterbi_events[current].site > site
         {
             pred = NonZeroUsize::new(current);
@@ -171,7 +171,7 @@ impl<'o> TracebackSequenceIterator<'o, 'o> {
     /// The index will be of the first site that has a site index less than the given site, meaning
     /// if sites have the given site index, they will be right of the returned index.
     fn search_beyond_site(&self, ancestor: Ancestor, site: VariantIndex) -> usize {
-        let mut current = self.marginal_tree.last_event_index[ancestor.0];
+        let mut current = self.marginal_tree.last_event_index[ancestor.0 as usize];
         while current > 0 && self.marginal_tree.linked_viterbi_events[current].site >= site
         {
             current = self.marginal_tree.linked_viterbi_events[current]
@@ -184,7 +184,7 @@ impl<'o> TracebackSequenceIterator<'o, 'o> {
 
     /// Searches the parent of the current ancestor for the given site
     fn search_parent_index(&self, site: VariantIndex) -> usize {
-        self.partial_tree_sequence.edges[self.current_ancestor.0]
+        self.partial_tree_sequence.edges[self.current_ancestor.0 as usize]
             .binary_search_by(|edge| edge.start().cmp(&site))
             .unwrap_or_else(|next_element_index| {
                 debug_assert!(next_element_index > 0);
@@ -234,7 +234,7 @@ impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
                     let next_parent_index = self.current_parent_edge_index.unwrap() - 1;
 
                     let next_parent_edge = &self.partial_tree_sequence.edges
-                        [self.current_ancestor.0][next_parent_index];
+                        [self.current_ancestor.0 as usize][next_parent_index];
 
                     // we should not be in a position where the current site is already beyond the
                     // end of the next edge, since that would mean the last inner iterator yielded
@@ -292,7 +292,7 @@ impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
                 ViterbiEventKind::Compressed(compressed_until) => {
                     // search for the parent of the compressed node
                     let current_parent_edge_index = self.search_parent_index(event.site);
-                    let parent = self.partial_tree_sequence.edges[self.current_ancestor.0]
+                    let parent = self.partial_tree_sequence.edges[self.current_ancestor.0 as usize]
                         [current_parent_edge_index]
                         .parent();
 

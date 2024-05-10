@@ -124,14 +124,14 @@ mod tests {
             .find(|n| ancestors_copy[n.ancestor()].haplotype() == vec![1, 1, 1, 0, 1, 1])
             .unwrap();
         assert_eq!(seq.edges().len(), 2);
-        assert_eq!(seq.edges()[0].parent, seq1.ancestor());
-        assert_eq!(seq.edges()[1].parent, seq2.ancestor());
+        assert_eq!(seq.edges()[0].parent as usize, seq1.ancestor());
+        assert_eq!(seq.edges()[1].parent as usize, seq2.ancestor());
 
         let seq = ts
             .iter()
             .find(|n| ancestors_copy[n.ancestor()].haplotype() == vec![1, 1, 0, 1, 0, 0])
             .unwrap();
         assert_eq!(seq.edges().len(), 1);
-        assert_eq!(seq.edges()[0].parent, seq1.ancestor());
+        assert_eq!(seq.edges()[0].parent as usize, seq1.ancestor());
     }
 }

@@ -18,8 +18,8 @@ impl VariantSequence {
 
     /// Create a new [`VariantSequence`] with the given length, filled entirely with the ancestral
     /// state (i.e. with zeros).
-    pub fn from_ancestral_state(len: usize) -> Self {
-        Self(vec![0; len])
+    pub fn from_ancestral_state(len: u32) -> Self {
+        Self(vec![0; len as usize])
     }
 
     /// Create a new [`VariantSequence`] from a vector of mutation states
@@ -62,13 +62,13 @@ impl Index<VariantIndex> for VariantSequence {
     type Output = MutationState;
 
     fn index(&self, index: VariantIndex) -> &Self::Output {
-        &self.0[index.0]
+        &self.0[index.0 as usize]
     }
 }
 
 impl IndexMut<VariantIndex> for VariantSequence {
     fn index_mut(&mut self, index: VariantIndex) -> &mut Self::Output {
-        &mut self.0[index.0]
+        &mut self.0[index.0 as usize]
     }
 }
 
@@ -76,7 +76,7 @@ impl Index<Range<VariantIndex>> for VariantSequence {
     type Output = [MutationState];
 
     fn index(&self, index: Range<VariantIndex>) -> &Self::Output {
-        &self.0[index.start.0..index.end.0]
+        &self.0[index.start.0 as usize..index.end.0 as usize]
     }
 }
 

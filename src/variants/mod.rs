@@ -16,12 +16,12 @@ pub use site::VariantSite;
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
-pub struct SequencePosition(usize);
+pub struct SequencePosition(u32);
 
 impl SequencePosition {
     /// Create a new sequence position from a usize.
     pub fn from_usize(position: usize) -> Self {
-        Self(position)
+        Self(position as u32)
     }
 
     #[inline]
@@ -30,7 +30,7 @@ impl SequencePosition {
     }
 
     /// Get the underlying usize value of the sequence position.
-    pub fn unwrap(&self) -> usize {
+    pub fn unwrap(&self) -> u32 {
         self.0
     }
 }
@@ -46,13 +46,13 @@ impl Display for SequencePosition {
 #[derive(
     Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize,
 )]
-pub(crate) struct VariantIndex(pub(crate) usize);
+pub(crate) struct VariantIndex(pub(crate) u32);
 
 impl VariantIndex {
     /// Create a new variant index from a raw index. Only for testing purposes, actual module code shouldn't work
     /// with raw values
     pub(crate) fn from_usize(index: usize) -> Self {
-        Self(index)
+        Self(index as u32)
     }
 
     /// Get the next variant index after this one
@@ -61,7 +61,7 @@ impl VariantIndex {
     }
 
     /// Calculate the distance in variants between this index and another. Does not return the distance in sequence bases.
-    pub(crate) fn get_variant_distance(&self, other: VariantIndex) -> usize {
+    pub(crate) fn get_variant_distance(&self, other: VariantIndex) -> u32 {
         if self.0 > other.0 {
             self.0 - other.0
         } else {
@@ -70,7 +70,7 @@ impl VariantIndex {
     }
 
     /// Get the underlying usize value of the variant index.
-    pub fn unwrap(&self) -> usize {
+    pub fn unwrap(&self) -> u32 {
         self.0
     }
 }
@@ -89,10 +89,10 @@ impl Add for VariantIndex {
     }
 }
 
-impl Add<usize> for VariantIndex {
+impl Add<u32> for VariantIndex {
     type Output = VariantIndex;
 
-    fn add(self, rhs: usize) -> Self::Output {
+    fn add(self, rhs: u32) -> Self::Output {
         VariantIndex(self.0 + rhs)
     }
 }
@@ -105,7 +105,7 @@ impl Sub for VariantIndex {
     }
 }
 
-impl Sub<VariantIndex> for usize {
+impl Sub<VariantIndex> for u32 {
     type Output = VariantIndex;
 
     fn sub(self, rhs: VariantIndex) -> Self::Output {
@@ -113,10 +113,10 @@ impl Sub<VariantIndex> for usize {
     }
 }
 
-impl Sub<usize> for VariantIndex {
+impl Sub<u32> for VariantIndex {
     type Output = VariantIndex;
 
-    fn sub(self, rhs: usize) -> Self::Output {
+    fn sub(self, rhs: u32) -> Self::Output {
         VariantIndex(self.0 - rhs)
     }
 }

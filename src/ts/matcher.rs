@@ -81,7 +81,7 @@ impl ViterbiMatcher {
         let ancestor_count = ancestors.len();
         Self {
             ancestors,
-            partial_tree_sequence: PartialTreeSequence::with_capacity(ancestor_count),
+            partial_tree_sequence: PartialTreeSequence::with_capacity(ancestor_count as usize),
             edge_sequence: EdgeSequence::new(),
             recombination_prob,
             mutation_prob,
@@ -106,14 +106,14 @@ impl ViterbiMatcher {
         &self,
         ancestor_iterator: &mut ViterbiIterator,
         candidate: &AncestralSequence,
-        limit_nodes: usize,
+        limit_nodes: u32,
     ) -> (Vec<PartialSequenceEdge>, Vec<VariantIndex>) {
         let mut candidate_iter = candidate.site_iter();
 
         // index relative to candidate start to index the recombination and mutation arrays
-        let mut candidate_site_index = 0;
+        let mut candidate_site_index: u32 = 0;
 
-        let mut max_likelihoods = vec![None; candidate.len()];
+        let mut max_likelihoods = vec![None; candidate.len() as usize];
 
         let rho: f64 = self.recombination_prob;
         let mu: f64 = self.mutation_prob;
@@ -178,7 +178,7 @@ impl ViterbiMatcher {
                 *marginal_tree.likelihood(ancestor) /= max_site_likelihood;
             }
 
-            max_likelihoods[candidate_site_index] = max_site_likelihood_ancestor;
+            max_likelihoods[candidate_site_index as usize] = max_site_likelihood_ancestor;
 
             candidate_site_index += 1;
         });
@@ -186,7 +186,7 @@ impl ViterbiMatcher {
         let mut edges: Vec<PartialSequenceEdge> = Vec::new();
         let mut mutations: Vec<VariantIndex> = Vec::new();
 
-        let mut current_ancestor = max_likelihoods[candidate_site_index - 1]
+        let mut current_ancestor = max_likelihoods[(candidate_site_index - 1) as usize]
             .expect("no max likelihood ancestor found at last site");
         let mut ancestor_coverage_end = candidate.end();
         let mut last_site = candidate.end();
@@ -203,7 +203,7 @@ impl ViterbiMatcher {
                 ViterbiEventKind::Mutation => mutations.push(event.site),
                 ViterbiEventKind::Recombination => {
                     if candidate_site_index > 0
-                        && max_likelihoods[candidate_site_index - 1]
+                        && max_likelihoods[(candidate_site_index - 1) as usize]
                             .expect("no max likelihood ancestor found")
                             != current_ancestor
                     {
@@ -213,7 +213,7 @@ impl ViterbiMatcher {
                             current_ancestor,
                         ));
 
-                        current_ancestor = max_likelihoods[candidate_site_index - 1]
+                        current_ancestor = max_likelihoods[(candidate_site_index - 1) as usize]
                             .expect("no max likelihood ancestor found");
                         ancestor_coverage_end = event.site;
 
@@ -275,18 +275,18 @@ impl ViterbiMatcher {
 
         while current_ancestor_index < self.ancestors.len() {
             let chunk_size = min(
-                self.num_threads as usize * self.per_thread as usize,
+                self.num_threads as u32 * self.per_thread as u32,
                 self.ancestors.len() - current_ancestor_index,
             );
 
-            for i in current_ancestor_index..current_ancestor_index + chunk_size {
+            for i in current_ancestor_index as u32..(current_ancestor_index + chunk_size) as u32 {
                 queue_sender.send(i).expect("queue size insufficient");
             }
 
             // insert the next chunk of ancestors into the edge sequence as free nodes
             for ancestor_index in current_ancestor_index..(current_ancestor_index + chunk_size - 1)
             {
-                let ancestor_index = Ancestor(ancestor_index);
+                let ancestor_index = Ancestor(ancestor_index as u32);
                 self.edge_sequence.insert_free_node(
                     ancestor_index,
                     self.ancestors[ancestor_index].start(),
@@ -314,7 +314,7 @@ impl ViterbiMatcher {
                         while let Ok(next_ancestor_index) = res {
                             let ancestor_index = Ancestor(next_ancestor_index);
 
-                            if ancestor_index.0 >= ancestors.len() {
+                            if ancestor_index.0 >= ancestors.len() as u32 {
                                 break;
                             }
 
@@ -322,7 +322,7 @@ impl ViterbiMatcher {
 
                             let mut num_ancestors = 0;
                             // TODO precalculate this
-                            for (_, old_ancestor) in ancestors.iter().take(ancestor_index.0) {
+                            for (_, old_ancestor) in ancestors.iter().take(ancestor_index.0 as usize) {
                                 if old_ancestor.relative_age() > ancestor.relative_age() {
                                     // TODO we can perform an overlap check here
                                     num_ancestors += 1;
@@ -342,9 +342,9 @@ impl ViterbiMatcher {
                 });
             });
 
-            let mut results = receiver.iter().take(chunk_size).collect::<Vec<_>>();
+            let mut results = receiver.iter().take(chunk_size as usize).collect::<Vec<_>>();
             results.sort_by(|(a, _), (b, _)| a.cmp(b));
-            current_ancestor_index += results.len();
+            current_ancestor_index += results.len() as u32;
             println!(
                 "Progress: {}/{}",
                 current_ancestor_index,
@@ -376,7 +376,7 @@ impl ViterbiMatcher {
             let mut num_ancestors = 0;
 
             // TODO precalculate this
-            for (_, old_ancestor) in self.ancestors.iter().take(ancestor_index.0) {
+            for (_, old_ancestor) in self.ancestors.iter().take(ancestor_index.0 as usize) {
                 if old_ancestor.relative_age() > ancestor.relative_age() {
                     // TODO we can perform an overlap check here
                     num_ancestors += 1;

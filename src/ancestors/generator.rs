@@ -67,7 +67,7 @@ impl AncestorGenerator {
                 .iter()
                 .enumerate()
                 .rev()
-                .skip(sites - focal_sites[0].unwrap()),
+                .skip(sites - focal_sites[0].unwrap() as usize),
             focal_sites[0],
             buffer_sequence,
             true,
@@ -82,8 +82,8 @@ impl AncestorGenerator {
                     .variant_data
                     .iter()
                     .enumerate()
-                    .skip(focal_site_i.unwrap() + 1)
-                    .take(focal_site_j.unwrap() - focal_site_i.unwrap() - 1),
+                    .skip((focal_site_i.unwrap() + 1) as usize)
+                    .take((focal_site_j.unwrap() - focal_site_i.unwrap() - 1) as usize),
                 focal_site_i,
                 buffer_sequence,
                 false,
@@ -97,7 +97,7 @@ impl AncestorGenerator {
                 .variant_data
                 .iter()
                 .enumerate()
-                .skip(last_focal_site.unwrap() + 1),
+                .skip((last_focal_site.unwrap() + 1) as usize),
             last_focal_site,
             buffer_sequence,
             true,
@@ -136,7 +136,7 @@ impl AncestorGenerator {
         focal_site: VariantIndex,
         ancestral_sequence: &mut VariantSequence,
         termination_condition: bool,
-    ) -> usize {
+    ) -> u32 {
         let mut modified_sites = 0;
         // the focal site is defined by its derived state
         ancestral_sequence[focal_site] = DERIVED_STATE;
@@ -358,7 +358,7 @@ impl AncestorGenerator {
         let focal_sites = broken_focal_sites;
 
         let mut ancestors: Vec<_> = if self.num_threads == 1 {
-            let mut buffer = VariantSequence::from_ancestral_state(self.variant_data.len());
+            let mut buffer = VariantSequence::from_ancestral_state(self.variant_data.len() as u32);
             focal_sites
                 .iter()
                 .map(|focal_sites| self.generate_ancestor(&mut buffer, focal_sites))
@@ -368,7 +368,7 @@ impl AncestorGenerator {
             focal_sites
                 .par_iter()
                 .map_with(
-                    VariantSequence::from_ancestral_state(self.variant_data.len()),
+                    VariantSequence::from_ancestral_state(self.variant_data.len() as u32),
                     |buffer, focal_sites| self.generate_ancestor(buffer, focal_sites),
                 )
                 .collect()
@@ -376,8 +376,8 @@ impl AncestorGenerator {
 
         // artificially add the root ancestor
         let mut ancestral_state =
-            AncestralSequence::from_ancestral_state(self.variant_data.len(), 2.0);
-        ancestral_state.end = VariantIndex(self.variant_data.len());
+            AncestralSequence::from_ancestral_state(self.variant_data.len() as u32, 2.0);
+        ancestral_state.end = VariantIndex(self.variant_data.len() as u32);
         ancestors.push(ancestral_state);
 
         if self.num_threads == 1 {
@@ -404,8 +404,8 @@ impl AncestorGenerator {
         // transpose the variant sites matrix
         let mut samples =
             vec![
-                AncestralSequence::from_ancestral_state(self.variant_data.len(), 0f64);
-                self.variant_data.get_num_samples()
+                AncestralSequence::from_ancestral_state(self.variant_data.len() as u32, 0f64);
+                self.variant_data.get_num_samples() as usize
             ];
         for (site_index, genotypes) in self
             .variant_data
