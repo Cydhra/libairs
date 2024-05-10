@@ -202,9 +202,10 @@ impl ViterbiMatcher {
             match event.kind {
                 ViterbiEventKind::Mutation => mutations.push(event.site),
                 ViterbiEventKind::Recombination => {
-                    if max_likelihoods[candidate_site_index - 1]
-                        .expect("no max likelihood ancestor found")
-                        != current_ancestor
+                    if candidate_site_index > 0
+                        && max_likelihoods[candidate_site_index - 1]
+                            .expect("no max likelihood ancestor found")
+                            != current_ancestor
                     {
                         edges.push(PartialSequenceEdge::new(
                             event.site,
