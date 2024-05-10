@@ -37,7 +37,7 @@ pub(crate) struct MarginalTree<'o> {
 
     /// The list of active nodes, i.e. nodes that are not compressed and are used in the Viterbi
     /// algorithm.
-    pub(super) active_nodes: &'o mut Vec<Ancestor>,
+    // pub(super) active_nodes: &'o mut Vec<Ancestor>,
 
     /// The likelihood of each node in the tree. Likelihood for compressed nodes is wrong, but
     /// they are ignored during the Viterbi algorithm.
@@ -82,7 +82,7 @@ impl<'o> MarginalTree<'o> {
         children: &'o mut [Vec<Ancestor>],
         uncompressed_parents: &'o mut [Option<Ancestor>],
         is_compressed: &'o mut [bool],
-        active_nodes: &'o mut Vec<Ancestor>,
+        active_nodes: &'_ mut Vec<Ancestor>,
         likelihoods: &'o mut [f64],
         linked_viterbi_events: &'o mut Vec<ViterbiEvent>,
         last_event_index: &'o mut [usize],
@@ -115,7 +115,7 @@ impl<'o> MarginalTree<'o> {
             children,
             uncompressed_parents,
             is_compressed,
-            active_nodes,
+            // active_nodes,
             likelihoods,
             linked_viterbi_events,
             last_event_index,
@@ -126,19 +126,13 @@ impl<'o> MarginalTree<'o> {
             inv_recompression_threshold,
         };
 
-        marginal_tree.add_initial_node(Ancestor(0), false);
+        marginal_tree.add_initial_node(active_nodes, Ancestor(0), false);
         assert!(
             limit_nodes <= num_nodes,
             "Limit nodes must be less than or equal to num nodes"
         );
 
         marginal_tree
-    }
-
-    /// An iterator through the currently uncompressed nodes
-    pub fn nodes(&self) -> impl Iterator<Item = Ancestor> {
-        // TODO can we maybe get away without cloning here?
-        self.active_nodes.clone().into_iter()
     }
 
     /// Get the number of valid nodes in the tree.
@@ -205,8 +199,8 @@ impl<'o> MarginalTree<'o> {
     ///
     /// # Parameters
     /// - `site_index`: The index of the current site relative to the beginning of the candidate.
-    pub fn recompress_tree(&mut self, site_index: VariantIndex) {
-        self.active_nodes.retain(|&node| {
+    pub fn recompress_tree(&mut self, active_nodes: &mut Vec<Ancestor>, site_index: VariantIndex) {
+        active_nodes.retain(|&node| {
             debug_assert!(self.is_compressed[node.0 as usize] == false);
 
             if let Some(parent) = self.uncompressed_parents[node.0 as usize] {
@@ -237,9 +231,9 @@ impl<'o> MarginalTree<'o> {
     /// Search the parent of the given node and update the uncompressed_tree_parents array, the is_compressed array
     /// and add the node to active nodes.
     /// Returns the parent.
-    fn set_uncompressed(&mut self, node: Ancestor) -> Ancestor {
+    fn set_uncompressed(&mut self, active_nodes: &mut Vec<Ancestor>, node: Ancestor) -> Ancestor {
         let parent = self.uncompressed_parents[node.0 as usize];
-        self.active_nodes.push(node);
+        active_nodes.push(node);
         self.is_compressed[node.0 as usize] = false;
         parent.unwrap()
     }
@@ -256,12 +250,12 @@ impl<'o> MarginalTree<'o> {
     /// - `site_index`: The index of the current site relative to the beginning of the candidate.
     ///
     /// [`set_uncompressed`]: MarginalTree::set_uncompressed
-    fn ensure_decompressed(&mut self, node: Ancestor, site_index: VariantIndex) {
+    fn ensure_decompressed(&mut self, active_nodes: &mut Vec<Ancestor>, node: Ancestor, site_index: VariantIndex) {
         if self.is_compressed(node) {
-            debug_assert!(!self.active_nodes.contains(&node));
+            debug_assert!(!active_nodes.contains(&node));
 
             // search the first uncompressed ancestor node
-            let uncompressed_parent = self.set_uncompressed(node);
+            let uncompressed_parent = self.set_uncompressed(active_nodes, node);
 
             self.likelihoods[node.0 as usize] = self.likelihoods[uncompressed_parent.0 as usize];
 
@@ -278,10 +272,10 @@ impl<'o> MarginalTree<'o> {
     /// # Parameters
     /// - `node` the free node to insert
     /// - `during_viterbi` must be true, if the viterbi algorithm is already running
-    fn add_initial_node(&mut self, node: Ancestor, during_viterbi: bool) {
+    fn add_initial_node(&mut self, active_nodes: &mut Vec<Ancestor>, node: Ancestor, during_viterbi: bool) {
         debug_assert!(self.parents[node.0 as usize].is_none());
 
-        self.active_nodes.push(node);
+        active_nodes.push(node);
         self.is_compressed[node.0 as usize] = false;
         self.likelihoods[node.0 as usize] = if during_viterbi { 0.0 } else { 1.0 };
         self.parents[node.0 as usize] = None;
@@ -297,7 +291,7 @@ impl<'o> MarginalTree<'o> {
     /// - `child`: The new node to insert
     /// - `keep_compressed`: Whether the node should be kept compressed, i.e. it should not be
     /// added to the set of active nodes.
-    fn insert_new_node(&mut self, parent: Ancestor, child: Ancestor, keep_compressed: bool) {
+    fn insert_new_node(&mut self, active_nodes: &mut Vec<Ancestor>, parent: Ancestor, child: Ancestor, keep_compressed: bool) {
         self.parents[child.0 as usize] = Some(parent);
         self.children[parent.0 as usize].push(child);
 
@@ -318,7 +312,7 @@ impl<'o> MarginalTree<'o> {
                 self.uncompressed_parents[child.0 as usize] = Some(parent);
             }
 
-            self.set_uncompressed(child);
+            self.set_uncompressed(active_nodes, child);
             self.likelihoods[child.0 as usize] = 0.0;
         } else {
             // initially, everything is compressed into the root node
@@ -343,6 +337,7 @@ impl<'o> MarginalTree<'o> {
     /// - `site_index`: The index of the current site relative to the beginning of the candidate.
     fn update_node_parent(
         &mut self,
+        active_nodes: &mut Vec<Ancestor>,
         node: Ancestor,
         new_parent: Ancestor,
         keep_compressed: bool,
@@ -351,7 +346,7 @@ impl<'o> MarginalTree<'o> {
         let mut old_parent = None;
         if !keep_compressed {
             old_parent = self.uncompressed_parents[node.0 as usize];
-            self.ensure_decompressed(node, site_index);
+            self.ensure_decompressed(active_nodes, node, site_index);
         }
 
         // update parent afterwards to ensure it copies from the correct ancestor
@@ -382,9 +377,9 @@ impl<'o> MarginalTree<'o> {
     /// # Parameters
     /// - `node`: The node that has a mutation
     /// - `site_index`: The index of the current site relative to the beginning of the candidate.
-    fn update_node_mutation(&mut self, node: Ancestor, site_index: VariantIndex) {
+    fn update_node_mutation(&mut self, active_nodes: &mut Vec<Ancestor>, node: Ancestor, site_index: VariantIndex) {
         if self.is_compressed(node) {
-            self.ensure_decompressed(node, site_index);
+            self.ensure_decompressed(active_nodes, node, site_index);
             self.update_subtree(node, self.uncompressed_parents[node.0 as usize], Some(node));
         }
     }
@@ -420,7 +415,7 @@ impl<'o> MarginalTree<'o> {
     }
 
     /// Remove a node from the tree. This is done whenever an ancestor ends.
-    fn remove_node(&mut self, node: Ancestor) {
+    fn remove_node(&mut self, active_nodes: &mut Vec<Ancestor>, node: Ancestor) {
         debug_assert!(
             !self.parents.iter().any(|&n| n == Some(node)),
             "Node {} cannot be removed while it has children",
@@ -434,7 +429,7 @@ impl<'o> MarginalTree<'o> {
         }
 
         self.is_compressed[node.0 as usize] = true;
-        self.active_nodes.retain(|&n| n != node);
+        active_nodes.retain(|&n| n != node);
     }
 
     /// Advance the tree to the given site by updating the tree to reflect all events in the queue
@@ -453,6 +448,7 @@ impl<'o> MarginalTree<'o> {
     /// have the same likelihood anyway, so they dont need to be decompressed
     pub(super) fn advance_to_site<'b, I: Iterator<Item = &'b SequenceEvent>>(
         &mut self,
+        active_nodes: &mut Vec<Ancestor>,
         event_queue: &mut Peekable<I>,
         site: VariantIndex,
         keep_compressed: bool,
@@ -474,7 +470,7 @@ impl<'o> MarginalTree<'o> {
                     kind: SequenceEventKind::Mutation,
                 } => {
                     if !keep_compressed {
-                        self.update_node_mutation(*node, site_index);
+                        self.update_node_mutation(active_nodes, *node, site_index);
                     }
                 }
                 SequenceEvent {
@@ -482,14 +478,14 @@ impl<'o> MarginalTree<'o> {
                     node,
                     kind: SequenceEventKind::Start { parent },
                 } => {
-                    self.insert_new_node(*parent, *node, keep_compressed || mutations_only);
+                    self.insert_new_node(active_nodes, *parent, *node, keep_compressed || mutations_only);
                 }
                 SequenceEvent {
                     site: _,
                     node,
                     kind: SequenceEventKind::StartFree,
                 } => {
-                    self.add_initial_node(*node, !(keep_compressed || mutations_only));
+                    self.add_initial_node(active_nodes, *node, !(keep_compressed || mutations_only));
                 }
                 SequenceEvent {
                     site: _,
@@ -497,6 +493,7 @@ impl<'o> MarginalTree<'o> {
                     kind: SequenceEventKind::ChangeParent { new_parent },
                 } => {
                     self.update_node_parent(
+                        active_nodes,
                         *node,
                         *new_parent,
                         keep_compressed || mutations_only,
@@ -508,7 +505,7 @@ impl<'o> MarginalTree<'o> {
                     node,
                     kind: SequenceEventKind::End,
                 } => {
-                    self.remove_node(*node);
+                    self.remove_node(active_nodes, *node);
                 }
             }
         }

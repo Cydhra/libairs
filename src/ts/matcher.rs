@@ -125,7 +125,7 @@ impl ViterbiMatcher {
             limit_nodes,
         );
 
-        sites.for_each(|(site, marginal_tree)| {
+        sites.for_each(|(site, marginal_tree, nodes)| {
             let (_, &state) = candidate_iter.next().unwrap();
 
             let mut max_site_likelihood = -1f64;
@@ -140,7 +140,7 @@ impl ViterbiMatcher {
             let num_alleles = 2f64; // TODO we might not want to hard-code this
             let rev_mu = 1f64 - (num_alleles - 1f64) * mu;
 
-            for ancestor_id in marginal_tree.nodes() {
+            for &ancestor_id in nodes {
                 let ancestral_sequence = &self.ancestors[ancestor_id];
                 let prob_no_recomb = *marginal_tree.likelihood(ancestor_id) * prob_no_recomb;
 
@@ -174,7 +174,7 @@ impl ViterbiMatcher {
             }
 
             // Apparently a measure to maintain numerical stability
-            for ancestor in marginal_tree.nodes() {
+            for &ancestor in nodes {
                 *marginal_tree.likelihood(ancestor) /= max_site_likelihood;
             }
 

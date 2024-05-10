@@ -15,7 +15,7 @@ pub(in crate::ts) use traceback::TracebackSequenceIterator;
 
 /// A DNA sequence site visited during the viterbi algorithm.
 /// Consists of a [`VariantIndex`] and a mutable reference to the marginal tree at that site.
-pub(super) type Site<'a, 'o> = (VariantIndex, &'a mut MarginalTree<'o>);
+pub(super) type Site<'a, 'o> = (VariantIndex, &'a mut MarginalTree<'o>, &'a Vec<Ancestor>);
 
 /// Events that a single ancestor can experience during the Viterbi algorithm.
 /// These events are generated during the forward search and are used to reconstruct
@@ -193,9 +193,9 @@ impl ViterbiIterator {
         let site = start;
         let mut queue = edge_sequence.edge_index.iter().peekable();
 
-        marginal_tree.advance_to_site(&mut queue, site, true, false);
+        marginal_tree.advance_to_site(&mut self.active_nodes, &mut queue, site, true, false);
 
-        TreeSequenceState::new(marginal_tree, start, site, end, queue)
+        TreeSequenceState::new(marginal_tree, &mut self.active_nodes, start, site, end, queue)
     }
 }
 
@@ -207,6 +207,7 @@ impl ViterbiIterator {
 /// [`TreeSequenceState::for_each`], which consumers have to call to process the tree sequence.
 pub(super) struct TreeSequenceState<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> {
     pub(super) marginal_tree: MarginalTree<'o>,
+    pub(super) active_nodes: &'o mut Vec<Ancestor>,
     pub(super) start: VariantIndex,
     pub(super) site: VariantIndex,
     pub(super) end: VariantIndex,
@@ -216,6 +217,7 @@ pub(super) struct TreeSequenceState<'a, 'o, I: Iterator<Item = &'a SequenceEvent
 impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I> {
     pub(super) fn new(
         marginal_tree: MarginalTree<'o>,
+        active_nodes: &'o mut Vec<Ancestor>,
         start: VariantIndex,
         site: VariantIndex,
         end: VariantIndex,
@@ -223,6 +225,7 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I>
     ) -> Self {
         TreeSequenceState {
             marginal_tree,
+            active_nodes,
             start,
             site,
             end,
@@ -230,29 +233,29 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I>
         }
     }
 
-    pub(crate) fn for_each<F: FnMut(Site)>(&mut self, mut consumer: F) {
+    pub(crate) fn for_each<'s, F: FnMut(Site)>(&'s mut self, mut consumer: F) {
         if self.site == self.end {
             return;
         }
 
         // first site has special treatment because we don't need to decompress edges that start here
         self.marginal_tree
-            .advance_to_site(&mut self.queue, self.site.next(), false, true);
-        consumer((self.site, &mut self.marginal_tree));
-        self.marginal_tree.recompress_tree(self.site);
+            .advance_to_site(&mut self.active_nodes, &mut self.queue, self.site.next(), false, true);
+        consumer((self.site, &mut self.marginal_tree, self.active_nodes));
+        self.marginal_tree.recompress_tree(&mut self.active_nodes, self.site);
         self.site = self.site.next();
 
         while self.site < self.end {
             self.marginal_tree
-                .advance_to_site(&mut self.queue, self.site.next(), false, false);
+                .advance_to_site(&mut self.active_nodes, &mut self.queue, self.site.next(), false, false);
 
-            consumer((self.site, &mut self.marginal_tree));
+            consumer((self.site, &mut self.marginal_tree, self.active_nodes));
             if !self.marginal_tree.use_recompression_threshold
-                || self.marginal_tree.active_nodes.len()
+                || self.active_nodes.len()
                 > (self.marginal_tree.limit_nodes
                 / self.marginal_tree.inv_recompression_threshold as u32) as usize
             {
-                self.marginal_tree.recompress_tree(self.site);
+                self.marginal_tree.recompress_tree(&mut self.active_nodes, self.site);
             }
             self.site = self.site.next();
         }
@@ -364,10 +367,10 @@ mod tests {
             VariantIndex::from_usize(10),
             2,
         )
-        .for_each(|(site, tree)| {
+            .for_each(|(site, tree, nodes)| {
             assert_eq!(site, VariantIndex::from_usize(counter));
             assert_eq!(tree.num_nodes(), 2);
-            assert_eq!(tree.nodes().count(), 2);
+                assert_eq!(nodes.len(), 2);
             assert_eq!(find_uncompressed_parent(tree, Ancestor(0)), None);
             assert_eq!(find_uncompressed_parent(tree, Ancestor(1)), None);
             counter += 1;
@@ -397,7 +400,7 @@ mod tests {
             VariantIndex::from_usize(10),
             2,
         )
-        .for_each(|(site, tree)| {
+            .for_each(|(site, tree, nodes)| {
             // fake likelihoods to prevent recompression
             for i in 0..tree.num_nodes() {
                 tree.likelihoods[i] = 0.1 * i as f64
@@ -406,7 +409,7 @@ mod tests {
             assert_eq!(site, VariantIndex::from_usize(counter));
             assert_eq!(tree.num_nodes(), 2);
             assert_eq!(
-                tree.nodes().count(),
+                nodes.len(),
                 if counter < 5 { 1 } else { 2 },
                 "wrong number of nodes at site {}",
                 counter
@@ -438,7 +441,7 @@ mod tests {
             VariantIndex::from_usize(10),
             2,
         )
-        .for_each(|(site, tree)| {
+            .for_each(|(site, tree, nodes)| {
             if site == VariantIndex::from_usize(0) {
                 // fake likelihoods to prevent early recompression
                 for i in 0..tree.num_nodes() {
@@ -453,7 +456,7 @@ mod tests {
             }
 
             assert_eq!(
-                tree.nodes().count(),
+                nodes.len(),
                 if counter < 5 { 2 } else { 1 },
                 "wrong number of nodes at site {}",
                 counter
@@ -502,7 +505,7 @@ mod tests {
             VariantIndex::from_usize(9),
             3,
         )
-        .for_each(|(site, tree)| {
+            .for_each(|(site, tree, nodes)| {
             // fake likelihoods to prevent recompression
             for i in 0..tree.num_nodes() {
                 tree.likelihoods[i] = 0.1 * i as f64
@@ -511,7 +514,7 @@ mod tests {
             assert_eq!(site, VariantIndex::from_usize(counter));
             assert_eq!(tree.num_nodes(), 3);
             assert_eq!(
-                tree.nodes().count(),
+                nodes.len(),
                 if counter < 5 { 1 } else { 2 },
                 "wrong number of nodes at site {}",
                 counter
@@ -544,10 +547,10 @@ mod tests {
             VariantIndex::from_usize(10),
             2,
         )
-        .for_each(|(_, tree)| {
+            .for_each(|(_, _, nodes)| {
             // likelihoods stay at 0, so recompression happens immediately
             assert_eq!(
-                tree.nodes().count(),
+                nodes.len(),
                 match counter {
                     1 => 2,
                     5 => 2,
@@ -599,14 +602,14 @@ mod tests {
             VariantIndex::from_usize(10),
             3,
         )
-        .for_each(|(_, tree)| {
+            .for_each(|(_, tree, nodes)| {
             // fake likelihoods to prevent recompression
             for i in 0..tree.num_nodes() {
                 tree.likelihoods[i] = 0.1 * i as f64
             }
 
             assert_eq!(
-                tree.nodes().count(),
+                nodes.len(),
                 match counter {
                     0..=4 => 2,
                     5.. => 3,
@@ -652,14 +655,14 @@ mod tests {
             VariantIndex::from_usize(10),
             2,
         )
-        .for_each(|(_, tree)| {
+            .for_each(|(_, tree, nodes)| {
             // fake likelihoods to prevent recompression
             for i in 0..tree.num_nodes() {
                 tree.likelihoods[i] = 0.1 * i as f64
             }
 
             assert_eq!(
-                tree.nodes().count(),
+                nodes.len(),
                 2,
                 "wrong number of nodes at site {}",
                 counter
@@ -702,14 +705,14 @@ mod tests {
             VariantIndex::from_usize(10),
             3,
         )
-        .for_each(|(_, tree)| {
+            .for_each(|(_, tree, nodes)| {
             // fake likelihoods to prevent recompression
             for i in 0..tree.num_nodes() {
                 tree.likelihoods[i] = 0.1 * i as f64
             }
 
             assert_eq!(
-                tree.nodes().count(),
+                nodes.len(),
                 match counter {
                     2..=4 => 1,
                     5.. => 2,
@@ -747,14 +750,14 @@ mod tests {
             VariantIndex::from_usize(10),
             2,
         )
-        .for_each(|(_, tree)| {
+            .for_each(|(_, tree, nodes)| {
             // fake likelihoods to prevent recompression
             for i in 0..tree.num_nodes() {
                 tree.likelihoods[i] = 0.1 * i as f64
             }
 
             assert_eq!(
-                tree.nodes().count(),
+                nodes.len(),
                 match counter {
                     0..=4 => 2,
                     5.. => 1,
@@ -826,11 +829,10 @@ mod tests {
             VariantIndex::from_usize(10),
             3,
         );
-        iterator.for_each(|(_, tree)| {
+        iterator.for_each(|(_, tree, nodes)| {
             match counter {
                 // don't recompress first two nodes
-                0 => tree
-                    .nodes()
+                0 => nodes.iter().copied()
                     .for_each(|n| tree.likelihoods[n.0 as usize] = n.0 as f64 * 0.1),
 
                 // insert mutations and recombination for nodes 0 and 1, and later check if 2 inherited them
@@ -950,11 +952,10 @@ mod tests {
             VariantIndex::from_usize(10),
             3,
         );
-        iterator.for_each(|(_, tree)| {
+        iterator.for_each(|(_, tree, nodes)| {
             match counter {
                 // don't recompress first two nodes
-                0 => tree
-                    .nodes()
+                0 => nodes.iter().copied()
                     .for_each(|n| tree.likelihoods[n.0 as usize] = n.0 as f64 * 0.1),
 
                 // insert mutations and recombination for nodes 0 and 1, and later check if 2 inherited them
@@ -1027,7 +1028,7 @@ mod tests {
             VariantIndex::from_usize(10),
             2,
         );
-        iterator.for_each(|(site, tree)| {
+        iterator.for_each(|(site, tree, _)| {
             match counter {
                 // insert a mutation on first site and then immediately recompress
                 0 => tree.insert_mutation_event(Ancestor(1), site),
@@ -1129,7 +1130,7 @@ mod tests {
             VariantIndex::from_usize(10),
             3,
         );
-        iterator.for_each(|(site, tree)| {
+        iterator.for_each(|(site, tree, nodes)| {
             // insert recombination on parent on site 0,
             // to make sure we not only copy mutations from the grandparent, but also stop
             // copying from it once the parent is decompressed
@@ -1137,7 +1138,7 @@ mod tests {
                 tree.insert_recombination_event(Ancestor(1), site);
             }
 
-            tree.nodes().for_each(|n| {
+            nodes.iter().copied().for_each(|n| {
                 // make sure recompression happens instantly, meaning the third node is only present at first and last site
                 *tree.likelihood(n) = 1.0;
 
@@ -1226,14 +1227,14 @@ mod tests {
             3,
         );
 
-        iterator.for_each(|(site, tree)| {
+        iterator.for_each(|(site, tree, nodes)| {
             // insert a mutation on the first site for the root node. This is what we want to see
             // in the traceback despite the direct parent being Ancestor(1) and its interval
             // only stretching to site 0 (so if site 0 is not included in the iterator, we have a
             // off-by-1 error
             if site.0 == 0 {
                 // only root should be active
-                assert_eq!(tree.nodes().collect::<Vec<_>>(), vec![Ancestor(0)]);
+                assert_eq!(nodes.iter().copied().collect::<Vec<_>>(), vec![Ancestor(0)]);
 
                 *tree.likelihood(Ancestor(0)) = 0.5;
                 tree.insert_mutation_event(Ancestor(0), site);
@@ -1242,7 +1243,7 @@ mod tests {
             if site.0 == 1 {
                 // Ancestor(0) and Ancestor(2) should be decompressed here
                 assert_eq!(
-                    tree.nodes().collect::<Vec<_>>(),
+                    *nodes,
                     vec![Ancestor(0), Ancestor(2)]
                 );
 
@@ -1366,7 +1367,7 @@ mod tests {
             VariantIndex::from_usize(10),
             3,
         )
-        .for_each(|(_, tree)| {
+            .for_each(|(_, tree, _)| {
             // always trigger recompression
             match counter {
                 0 => {
