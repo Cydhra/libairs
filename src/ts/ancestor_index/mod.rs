@@ -137,7 +137,7 @@ impl ViterbiIterator {
         inv_recompression_threshold: u16,
     ) -> Self {
         assert!(
-            inv_recompression_threshold > 0,
+            inv_recompression_threshold > 0 || !use_recompression_threshold,
             "Recompression interval must be greater than 0"
         );
         Self {
@@ -270,7 +270,8 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I>
                     prev: NonZeroUsize::new(self.marginal_tree.last_event_index[node]),
                 });
 
-                self.marginal_tree.last_event_index[node] = self.marginal_tree.linked_viterbi_events.len() - 1;
+                self.marginal_tree.last_event_index[node] =
+                    self.marginal_tree.linked_viterbi_events.len() - 1;
             }
         }
     }
