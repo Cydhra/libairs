@@ -324,7 +324,7 @@ impl ViterbiMatcher {
                             let mut num_ancestors = 0;
                             // TODO precalculate this
                             for (_, old_ancestor) in
-                            ancestors.iter().take(ancestor_index.0 as usize)
+                                ancestors.iter().take(ancestor_index.0 as usize)
                             {
                                 if old_ancestor.relative_age() > ancestor.relative_age() {
                                     // TODO we can perform an overlap check here
