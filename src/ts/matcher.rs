@@ -220,6 +220,7 @@ impl ViterbiMatcher {
                         viterbi_event_iter.switch_ancestor(current_ancestor);
                     }
                 }
+                ViterbiEventKind::Uncompressed => {}
                 _ => unreachable!("unexpected viterbi event kind in find_copy_path"),
             }
         }
@@ -322,7 +323,9 @@ impl ViterbiMatcher {
 
                             let mut num_ancestors = 0;
                             // TODO precalculate this
-                            for (_, old_ancestor) in ancestors.iter().take(ancestor_index.0 as usize) {
+                            for (_, old_ancestor) in
+                            ancestors.iter().take(ancestor_index.0 as usize)
+                            {
                                 if old_ancestor.relative_age() > ancestor.relative_age() {
                                     // TODO we can perform an overlap check here
                                     num_ancestors += 1;
@@ -342,7 +345,10 @@ impl ViterbiMatcher {
                 });
             });
 
-            let mut results = receiver.iter().take(chunk_size as usize).collect::<Vec<_>>();
+            let mut results = receiver
+                .iter()
+                .take(chunk_size as usize)
+                .collect::<Vec<_>>();
             results.sort_by(|(a, _), (b, _)| a.cmp(b));
             current_ancestor_index += results.len() as u32;
             println!(

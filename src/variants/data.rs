@@ -34,8 +34,10 @@ impl VariantData {
     /// Data is copied, so the variant data object can still be used after this method is called.
     pub fn into_samples(&self) -> SampleData {
         // transpose sites into sample sequences
-        let mut samples =
-            vec![VariantSequence::from_ancestral_state(self.sites.len() as u32); self.num_samples as usize];
+        let mut samples = vec![
+            VariantSequence::from_ancestral_state(self.sites.len() as u32);
+            self.num_samples as usize,
+        ];
         for (i, site) in self.sites.iter().enumerate() {
             for (j, state) in site.genotypes.iter().enumerate() {
                 samples[j][VariantIndex(i as u32)] = *state;

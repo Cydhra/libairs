@@ -46,7 +46,9 @@ pub(super) enum ViterbiEventKind {
 
     /// Beginning from here, traceback is impossible from the current ancestor
     /// The compressed_until argument is inclusive
-    Compressed(VariantIndex),
+    Compressed,
+
+    Uncompressed,
 }
 
 /// A helper structure for the Viterbi algorithm that helps to iterate through the sites, updating
@@ -291,9 +293,15 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I>
                 let last_compressed_begin = self.marginal_tree.last_compressed[node];
 
                 self.marginal_tree.linked_viterbi_events.push(ViterbiEvent {
-                    kind: ViterbiEventKind::Compressed(last_compressed_begin),
-                    site: self.end,
+                    kind: ViterbiEventKind::Uncompressed,
+                    site: last_compressed_begin,
                     prev: NonZeroUsize::new(self.marginal_tree.last_event_index[node]),
+                });
+
+                self.marginal_tree.linked_viterbi_events.push(ViterbiEvent {
+                    kind: ViterbiEventKind::Compressed,
+                    site: self.end,
+                    prev: NonZeroUsize::new(self.marginal_tree.linked_viterbi_events.len() - 1),
                 });
                 if self.marginal_tree.last_event_index[node] > 0 {
                     debug_assert!(
@@ -883,7 +891,9 @@ mod tests {
             counter += 1;
         });
 
-        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(2));
+        let traceback_iterator = iterator
+            .traceback(&partial_tree_sequence, Ancestor(2))
+            .filter(|e| !matches!(e.kind, ViterbiEventKind::Uncompressed));
         assert_eq!(traceback_iterator.clone().count(), 4);
 
         traceback_iterator.for_each(|state| match state.site.0 {
@@ -1003,7 +1013,9 @@ mod tests {
             counter += 1;
         });
 
-        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(2));
+        let traceback_iterator = iterator
+            .traceback(&partial_tree_sequence, Ancestor(2))
+            .filter(|e| !matches!(e.kind, ViterbiEventKind::Uncompressed));
         assert_eq!(traceback_iterator.clone().count(), 2);
 
         traceback_iterator.for_each(|state| match state.site.0 {
@@ -1080,7 +1092,9 @@ mod tests {
         });
 
         // check that we inherit all mutations from the parent and all from the child are also discovered
-        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(1));
+        let traceback_iterator = iterator
+            .traceback(&partial_tree_sequence, Ancestor(1))
+            .filter(|e| !matches!(e.kind, ViterbiEventKind::Uncompressed));
         assert_eq!(traceback_iterator.clone().count(), 4);
 
         traceback_iterator.for_each(|state| match state.site.0 {
@@ -1182,7 +1196,9 @@ mod tests {
         });
 
         // check that we inherit all mutations from the parent
-        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(2));
+        let traceback_iterator = iterator
+            .traceback(&partial_tree_sequence, Ancestor(2))
+            .filter(|e| !matches!(e.kind, ViterbiEventKind::Uncompressed));
         assert_eq!(traceback_iterator.clone().count(), 11);
 
         traceback_iterator.clone().take(9).for_each(|state| {
@@ -1284,7 +1300,9 @@ mod tests {
         });
 
         // check that we see all expected events
-        let mut traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(2));
+        let mut traceback_iterator = iterator
+            .traceback(&partial_tree_sequence, Ancestor(2))
+            .filter(|e| !matches!(e.kind, ViterbiEventKind::Uncompressed));
         assert_eq!(traceback_iterator.clone().count(), 1);
         assert_eq!(traceback_iterator.next().unwrap().kind, Mutation);
     }

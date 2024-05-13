@@ -180,9 +180,15 @@ impl<'o> MarginalTree<'o> {
         let last_compressed_begin = self.last_compressed[node.0 as usize];
 
         self.linked_viterbi_events.push(ViterbiEvent {
-            kind: ViterbiEventKind::Compressed(last_compressed_begin),
-            site,
+            kind: ViterbiEventKind::Uncompressed,
+            site: last_compressed_begin,
             prev: NonZeroUsize::new(self.last_event_index[node.0 as usize]),
+        });
+
+        self.linked_viterbi_events.push(ViterbiEvent {
+            kind: ViterbiEventKind::Compressed,
+            site,
+            prev: NonZeroUsize::new(self.linked_viterbi_events.len() - 1),
         });
         if self.last_event_index[node.0 as usize] > 0 {
             debug_assert!(
