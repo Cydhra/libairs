@@ -36,7 +36,7 @@ impl VariantData {
         // transpose sites into sample sequences
         let mut samples = vec![
             VariantSequence::from_ancestral_state(self.sites.len() as u32);
-            self.num_samples as usize,
+            self.num_samples as usize
         ];
         for (i, site) in self.sites.iter().enumerate() {
             for (j, state) in site.genotypes.iter().enumerate() {
