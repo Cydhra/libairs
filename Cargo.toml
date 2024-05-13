@@ -11,6 +11,7 @@ twox-hash = "1.6"
 serde = { version = "1.0", features = ["derive"] }
 flume = "0.11.0"
 thread_local = "1.1.8"
+indexset = "0.3.8"
 
 [dev-dependencies]
 vcfire = { git = "https://github.com/Cydhra/vcfire", rev = "3db5fb7" } # probably should be optional because of native dependency

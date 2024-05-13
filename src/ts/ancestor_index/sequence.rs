@@ -2,7 +2,7 @@ use crate::ancestors::Ancestor;
 use crate::ts::partial_sequence::{PartialSequenceEdge, PartialTreeSequence};
 use crate::variants::VariantIndex;
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
+use indexset::BTreeSet;
 
 /// The kind of event that occurs while iterating a partial tree sequence.
 /// The events are ordered by the site they occur at, the kind of event, and the node they are
