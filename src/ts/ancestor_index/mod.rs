@@ -293,35 +293,13 @@ impl<'a, 'o, I: Iterator<Item = &'a SequenceEvent>> TreeSequenceState<'a, 'o, I>
                 && self.marginal_tree.last_compressed[node] < self.end
                 && self.marginal_tree.parents[node].is_some()
             {
-                // inlined version of `self.marginal_tree.insert_compression_event(Ancestor(node), self.end);`
-                let last_compressed_begin = self.marginal_tree.last_compressed[node];
-
-                self.marginal_tree.linked_viterbi_events.push(ViterbiEvent {
-                    kind: ViterbiEventKind::Decompress,
-                    site: last_compressed_begin,
-                    prev: NonZeroUsize::new(self.marginal_tree.last_event_index[node]),
-                });
-
-                self.marginal_tree.linked_viterbi_events.push(ViterbiEvent {
-                    kind: ViterbiEventKind::Compressed,
-                    site: self.end,
-                    prev: NonZeroUsize::new(self.marginal_tree.linked_viterbi_events.len() - 1),
-                });
-                if self.marginal_tree.last_event_index[node] > 0 {
-                    debug_assert!(
-                        last_compressed_begin
-                            >= self.marginal_tree.linked_viterbi_events
-                                [self.marginal_tree.last_event_index[node]]
-                                .site,
-                        "ancestor contains events despite being compressed: site {} < {:?}",
-                        last_compressed_begin,
-                        self.marginal_tree.linked_viterbi_events
-                            [self.marginal_tree.last_event_index[node]],
-                    );
-                }
-
-                self.marginal_tree.last_event_index[node] =
-                    self.marginal_tree.linked_viterbi_events.len() - 1;
+                MarginalTree::insert_compression_event(
+                    self.marginal_tree.linked_viterbi_events,
+                    self.marginal_tree.last_event_index,
+                    self.marginal_tree.last_compressed[node],
+                    Ancestor(node as u32),
+                    self.end,
+                );
             }
         }
     }

@@ -175,32 +175,31 @@ impl<'o> MarginalTree<'o> {
 
     /// Insert a compression event for the given ancestor at the given site (absolute site, not
     /// relative to the candidate)
-    pub fn insert_compression_event(&mut self, node: Ancestor, site: VariantIndex) {
-        // copy the recombination and mutation sites from the parent
-        let last_compressed_begin = self.last_compressed[node.0 as usize];
-
-        self.linked_viterbi_events.push(ViterbiEvent {
+    /// The method is associated instead of taking &mut self, so it can be used while other
+    /// references to the marginal tree exist.
+    pub fn insert_compression_event(linked_viterbi_events: &mut Vec<ViterbiEvent>, last_event_index: &mut [usize], last_compressed_begin: VariantIndex, node: Ancestor, site: VariantIndex) {
+        linked_viterbi_events.push(ViterbiEvent {
             kind: ViterbiEventKind::Decompress,
             site: last_compressed_begin,
-            prev: NonZeroUsize::new(self.last_event_index[node.0 as usize]),
+            prev: NonZeroUsize::new(last_event_index[node.0 as usize]),
         });
 
-        self.linked_viterbi_events.push(ViterbiEvent {
+        linked_viterbi_events.push(ViterbiEvent {
             kind: ViterbiEventKind::Compressed,
             site,
-            prev: NonZeroUsize::new(self.linked_viterbi_events.len() - 1),
+            prev: NonZeroUsize::new(linked_viterbi_events.len() - 1),
         });
-        if self.last_event_index[node.0 as usize] > 0 {
+        if last_event_index[node.0 as usize] > 0 {
             debug_assert!(
                 last_compressed_begin
-                    >= self.linked_viterbi_events[self.last_event_index[node.0 as usize]].site,
+                    >= linked_viterbi_events[last_event_index[node.0 as usize]].site,
                 "ancestor contains events despite being compressed: site {} < {:?}",
                 last_compressed_begin,
-                self.linked_viterbi_events[self.last_event_index[node.0 as usize]],
+                linked_viterbi_events[last_event_index[node.0 as usize]],
             );
         }
 
-        self.last_event_index[node.0 as usize] = self.linked_viterbi_events.len() - 1;
+        last_event_index[node.0 as usize] = linked_viterbi_events.len() - 1;
     }
 
     /// Return whether the node is currently compressed.
@@ -280,7 +279,7 @@ impl<'o> MarginalTree<'o> {
 
             // record event for traceback that starting from here we are compressed into the parent
             if site_index > self.start {
-                self.insert_compression_event(node, site_index - 1);
+                Self::insert_compression_event(&mut self.linked_viterbi_events, self.last_event_index, self.last_compressed[node.0 as usize], node, site_index - 1);
             }
         }
     }
