@@ -220,7 +220,6 @@ impl ViterbiMatcher {
                         viterbi_event_iter.switch_ancestor(current_ancestor);
                     }
                 }
-                ViterbiEventKind::Uncompressed => {}
                 _ => unreachable!("unexpected viterbi event kind in find_copy_path"),
             }
         }
