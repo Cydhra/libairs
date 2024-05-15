@@ -440,7 +440,7 @@ impl ViterbiMatcher {
                         .borrow_mut();
                     let mut results =
                         Vec::with_capacity((samples.len() + (num_threads - 1)) / num_threads);
-                    while let Ok(i) = recv.recv() {
+                    while let Ok(i) = recv.try_recv() {
                         let sample = &samples[i];
                         results.push((
                             i,
