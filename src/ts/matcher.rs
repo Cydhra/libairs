@@ -350,11 +350,11 @@ impl ViterbiMatcher {
                 .collect::<Vec<_>>();
             results.sort_by(|(a, _), (b, _)| a.cmp(b));
             current_ancestor_index += results.len() as u32;
-            println!(
-                "Progress: {}/{}",
-                current_ancestor_index,
-                self.ancestors.len()
-            );
+            // println!(
+            //     "Progress: {}/{}",
+            //     current_ancestor_index,
+            //     self.ancestors.len()
+            // );
 
             for (ancestor_index, (edges, mutations)) in results {
                 self.edge_sequence
