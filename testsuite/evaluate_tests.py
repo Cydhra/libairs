@@ -2,6 +2,7 @@ import sys
 import tsinfer
 import tskit
 import argparse
+from ete3 import Tree
 
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
@@ -92,3 +93,28 @@ for airs_tree in airs_ts.trees(sample_lists=True):
             f"airs and tsinfer disagree on tree {airs_tree.index}: intervals (airs: {airs_tree.interval}, tsi: {tsinfer_tree.interval})")
         sys.exit(1)
 
+    # rename sample nodes (leafs) from 0 to num_samples-1
+    num_samples = airs_ts.num_samples
+    airs_samples_dict = dict()
+    tsinfer_samples_dict = dict()
+    for i, node in enumerate(airs_tree.nodes()):
+        if node >= num_samples:
+            airs_samples_dict[node] = node - num_samples
+        else:
+            airs_samples_dict[node] = "A" + str(node)
+
+    for i, node in enumerate(tsinfer_tree.nodes()):
+        if node >= num_samples:
+            tsinfer_samples_dict[node] = node - num_samples
+        else:
+            tsinfer_samples_dict[node] = "T" + str(node)
+
+    airs_newick = [airs_tree.as_newick(root=root, node_labels=airs_samples_dict, include_branch_lengths=False) for root in airs_tree.roots]
+    tsinfer_newick = [tsinfer_tree.as_newick(root=root, node_labels=tsinfer_samples_dict, include_branch_lengths=False) for root in tsinfer_tree.roots]
+    for (aT, tT) in zip(airs_newick, tsinfer_newick):
+        aT = Tree(aT, format=8)
+        tT = Tree(tT, format=8)
+        rf, max_rf, _, _, _, _, _ = aT.robinson_foulds(tT)
+        if rf > 0:
+            eprint(f"airs and tsinfer disagree on tree {airs_tree.index}: RF distance is {rf}")
+            sys.exit(1)
