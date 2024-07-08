@@ -138,7 +138,18 @@ impl TreeSequence {
         ))?;
 
         for node in &self.nodes {
-            node.tskit_format_node(&self.ancestors[Ancestor(node.ancestor_index)], &mut writer)?;
+            let sample_data = self.ancestors.generate_sample_data();
+            if !node.is_sample {
+                node.tskit_format_node(
+                    &self.ancestors[Ancestor(node.ancestor_index)],
+                    &mut writer,
+                )?;
+            } else {
+                node.tskit_format_node(
+                    &sample_data[node.ancestor_index as usize - self.ancestors.len() as usize],
+                    &mut writer,
+                )?;
+            }
         }
 
         let mut edge_file = path.to_path_buf();
