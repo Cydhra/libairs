@@ -99,7 +99,7 @@ impl PartialTreeSequence {
                                 derived_state: ancestors.get_derived_state(*v),
                             })
                             .collect::<Vec<_>>(),
-                        self.inner_nodes > idx,
+                        self.inner_nodes <= idx,
                     )
                 })
                 .collect(),
