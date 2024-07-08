@@ -133,7 +133,7 @@ impl TreeSequence {
         writer.write_fmt(format_args!(
             "{id}\t{is_sample}\t{time}\n",
             id = 0,
-            is_sample = 1,
+            is_sample = 0,
             time = 3.0,
         ))?;
 
