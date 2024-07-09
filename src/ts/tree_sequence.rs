@@ -1,7 +1,7 @@
 use crate::ancestors::{Ancestor, AncestorArray, AncestralSequence};
 use crate::variants::SequencePosition;
 use std::io;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 
 /// A mutation in an ancestor sequence. The mutation is defined by the sequence position
@@ -126,7 +126,7 @@ impl TreeSequence {
     pub fn tskit_export(&self, path: &Path) -> io::Result<()> {
         let mut node_file = path.to_path_buf();
         node_file.push("nodes.tsv");
-        let mut writer = std::fs::File::create(node_file)?;
+        let mut writer = BufWriter::new(std::fs::File::create(node_file)?);
 
         writer.write_fmt(format_args!("id\tis_sample\ttime\n"))?;
         // write root node twice, because tskit uses the virtual root
@@ -154,7 +154,7 @@ impl TreeSequence {
 
         let mut edge_file = path.to_path_buf();
         edge_file.push("edges.tsv");
-        let mut writer = std::fs::File::create(edge_file)?;
+        let mut writer = BufWriter::new(std::fs::File::create(edge_file)?);
 
         writer.write_fmt(format_args!("left\tright\tparent\tchild\n"))?;
         // write edge from virtual root to root
@@ -167,7 +167,7 @@ impl TreeSequence {
 
         let mut mutation_file = path.to_path_buf();
         mutation_file.push("mutations.tsv");
-        let mut writer = std::fs::File::create(mutation_file)?;
+        let mut writer = BufWriter::new(std::fs::File::create(mutation_file)?);
 
         writer.write_fmt(format_args!("site\tnode\tderived_state\n"))?;
         for node in &self.nodes {
