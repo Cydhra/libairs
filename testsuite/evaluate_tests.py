@@ -85,6 +85,7 @@ if airs_ts.num_nodes != tsinfer_ts.num_nodes:
 tsinfer_trees = tsinfer_ts.trees(sample_lists=True)
 
 # Check that the tree sequences have the same trees by comparing the kc_distance of corresponding trees
+rfs = list()
 for airs_tree in airs_ts.trees(sample_lists=True):
     tsinfer_tree = next(tsinfer_trees)
 
@@ -115,6 +116,10 @@ for airs_tree in airs_ts.trees(sample_lists=True):
         aT = Tree(aT, format=8)
         tT = Tree(tT, format=8)
         rf, max_rf, _, _, _, _, _ = aT.robinson_foulds(tT)
-        if rf > 0:
-            eprint(f"airs and tsinfer disagree on tree {airs_tree.index}: RF distance is {rf}")
-            sys.exit(1)
+        rfs.append(rf / max_rf)
+
+if len(rfs) > 0:
+    mean_rf = sum(rfs) / len(rfs)
+    if mean_rf > 0:
+        eprint(f"airs and tsinfer disagree on tree sequences: mean robinson foulds distance: {mean_rf}")
+        sys.exit(1)

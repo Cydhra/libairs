@@ -41,9 +41,12 @@ pushd testdata > /dev/null
 
 run_test 10000 10000 400000 4
 run_test 20000 10000 800000 16
+run_test 25000 10000 800000 25
 run_test 30000 20000 400000 4
 run_test 40000 10000 400000 16
+run_test 45000 20000 400000 20
 run_test 50000 10000 1000000 32
+run_test 55000 10000 400000 64
 run_test 60000 20000 2000000 100
 
 printf "Ran $number_tests tests, $failed_tests failed\n"
