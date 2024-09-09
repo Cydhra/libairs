@@ -125,7 +125,8 @@ impl ViterbiMatcher {
         );
 
         sites.for_each(|(site, marginal_tree, nodes)| {
-            let rho: f64 = if site == candidate.start() {
+            // no recombination at the first genome site (I don't know whether results change if this special case is removed, we keep it for fidelity)
+            let rho: f64 = if site == VariantIndex::from_usize(0) {
                 0.0
             } else {
                 self.recombination_prob
