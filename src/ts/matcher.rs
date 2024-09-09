@@ -115,7 +115,6 @@ impl ViterbiMatcher {
 
         let mut max_likelihoods = vec![None; candidate.len() as usize];
 
-        let rho: f64 = self.recombination_prob;
         let mu: f64 = self.mutation_prob;
 
         let mut sites = ancestor_iterator.iter_sites(
@@ -126,13 +125,20 @@ impl ViterbiMatcher {
         );
 
         sites.for_each(|(site, marginal_tree, nodes)| {
+            let rho: f64 = if site == candidate.start() {
+                0.0
+            } else {
+                self.recombination_prob
+            };
+
             let (_, &state) = candidate_iter.next().unwrap();
 
             let mut max_site_likelihood = -1f64;
             let mut max_site_likelihood_ancestor: Option<Ancestor> = None;
 
             let k = (marginal_tree.num_nodes() + 1) as f64; // number of ancestors in tableau plus the virtual root
-                                                            // probability that any one specific ancestor recombines to the current ancestors
+
+            // probability that any one specific ancestor recombines to the current ancestors
             let prob_recomb = rho / k;
             // probability that none of the k-1 active ancestors recombines to the current ancestor
             let prob_no_recomb = 1f64 - rho + rho / k;
