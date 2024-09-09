@@ -36,9 +36,7 @@ impl Ord for SequenceEventKind {
             (Self::StartFree, Self::StartFree) => Ordering::Equal,
             (Self::StartFree, _) => Ordering::Less,
             (_, Self::StartFree) => Ordering::Greater,
-            (Self::ChangeParent { new_parent: p1 }, Self::ChangeParent { new_parent: p2 }) => {
-                p1.cmp(p2)
-            }
+            (Self::ChangeParent { new_parent: p1 }, Self::ChangeParent { new_parent: p2 }) => Ordering::Equal,
             (Self::ChangeParent { .. }, _) => Ordering::Less,
             (_, Self::ChangeParent { .. }) => Ordering::Greater,
             (Self::Mutation, Self::Mutation) => Ordering::Equal,
