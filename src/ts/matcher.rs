@@ -206,7 +206,6 @@ impl ViterbiMatcher {
             last_site = event.site;
 
             match event.kind {
-                ViterbiEventKind::Mutation => panic!("unexpected mutation event in queue"),
                 ViterbiEventKind::Recombination => {
                     if candidate_site_index > 0
                         && max_likelihoods[(candidate_site_index - 1) as usize]

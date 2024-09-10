@@ -103,9 +103,7 @@ impl<'o> TracebackSequenceIterator<'o, 'o> {
             let compressed_until = event.site;
 
             // move end_cursor past the decompress event, so we don't yield it.
-            new_iter.next_event = event.prev
-                .map(|p| p.get())
-                .unwrap_or(0);
+            new_iter.next_event = event.prev.map(|p| p.get()).unwrap_or(0);
 
             // if the compressed interval reaches into our interval
             // TODO since we use the uncompressed event, this should always be true
@@ -139,7 +137,10 @@ impl<'o> TracebackSequenceIterator<'o, 'o> {
         // since we do not want to copy the current site
         self.next_event = self.search_beyond_site(ancestor, self.current);
         // we cannot switch to a currently compressed ancestor
-        debug_assert!(!matches!(self.marginal_tree.linked_viterbi_events[self.next_event].kind, ViterbiEventKind::Decompress));
+        debug_assert!(!matches!(
+            self.marginal_tree.linked_viterbi_events[self.next_event].kind,
+            ViterbiEventKind::Decompress
+        ));
 
         self.destroy_inner();
     }
@@ -322,9 +323,7 @@ impl<'o> Iterator for TracebackSequenceIterator<'o, 'o> {
                 }
                 // skip decompression events, since we only need them when we encounter the
                 // compressed event before them
-                ViterbiEventKind::Decompress => {
-                    self.next()
-                }
+                ViterbiEventKind::Decompress => self.next(),
                 _ => element,
             }
         } else {
