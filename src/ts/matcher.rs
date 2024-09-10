@@ -160,7 +160,7 @@ impl ViterbiMatcher {
                 let pe = if state == ancestral_sequence[site] {
                     rev_mu
                 } else {
-                    marginal_tree.insert_mutation_event(ancestor_id, site);
+                    // marginal_tree.insert_mutation_event(ancestor_id, site);
                     mu
                 };
 
@@ -206,7 +206,7 @@ impl ViterbiMatcher {
             last_site = event.site;
 
             match event.kind {
-                ViterbiEventKind::Mutation => mutations.push(event.site),
+                ViterbiEventKind::Mutation => panic!("unexpected mutation event in queue"),
                 ViterbiEventKind::Recombination => {
                     if candidate_site_index > 0
                         && max_likelihoods[(candidate_site_index - 1) as usize]
@@ -237,7 +237,15 @@ impl ViterbiMatcher {
         ));
 
         edges.reverse();
-        mutations.reverse();
+        // mutations.reverse();
+
+        for edge in &edges {
+            for idx in edge.start()..edge.end() {
+                if candidate[idx] != self.ancestors[edge.parent()][idx] {
+                    mutations.push(idx);
+                }
+            }
+        }
 
         (edges, mutations)
     }
