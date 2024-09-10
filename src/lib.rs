@@ -1,3 +1,4 @@
+#![feature(step_trait)]
 extern crate core;
 
 pub mod ancestors;

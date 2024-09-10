@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use std::iter::Step;
 use std::ops::{Add, Sub};
 
 mod builder;
@@ -118,5 +119,32 @@ impl Sub<u32> for VariantIndex {
 
     fn sub(self, rhs: u32) -> Self::Output {
         VariantIndex(self.0 - rhs)
+    }
+}
+
+impl Step for VariantIndex {
+    fn steps_between(start: &Self, end: &Self) -> Option<usize> {
+        Some(start.get_variant_distance(*end) as usize)
+    }
+
+    fn forward_checked(start: Self, count: usize) -> Option<Self> {
+        if count >= u32::MAX as usize {
+            return None;
+        }
+        let count = count as u32;
+
+        if u32::MAX - start.0 < count {
+            return None;
+        }
+
+        Some(Self(start.0 + count))
+    }
+
+    fn backward_checked(start: Self, count: usize) -> Option<Self> {
+        if count > start.0 as usize {
+            return None;
+        }
+
+        Some(Self(start.0 - count as u32))
     }
 }

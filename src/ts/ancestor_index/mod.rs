@@ -38,9 +38,6 @@ pub(super) enum ViterbiEventKind {
     /// the value 0 is now an invalid index into the linked lists.
     Sentinel,
 
-    /// Mutation event here
-    Mutation,
-
     /// Recombination event here
     Recombination,
 
@@ -332,7 +329,7 @@ mod tests {
     use std::hint::black_box;
 
     use super::*;
-    use crate::ts::ancestor_index::ViterbiEventKind::{Mutation, Recombination};
+    use crate::ts::ancestor_index::ViterbiEventKind::Recombination;
     use crate::ts::partial_sequence::PartialSequenceEdge;
 
     fn find_uncompressed_parent(tree: &MarginalTree, node: Ancestor) -> Option<Ancestor> {
@@ -791,7 +788,7 @@ mod tests {
 
     #[test]
     fn test_copying_from_parent_on_mutation() {
-        // test whether the iterator copies the recombination and mutation sites from the parent when a child is
+        // test whether the iterator copies the recombination sites from the parent when a child is
         // decompressed
 
         let mut ix = ViterbiIterator::new(3, false, 1);
@@ -857,15 +854,15 @@ mod tests {
                     .copied()
                     .for_each(|n| tree.likelihoods[n.0 as usize] = n.0 as f64 * 0.1),
 
-                // insert mutations and recombination for nodes 0 and 1, and later check if 2 inherited them
-                2 => tree.insert_mutation_event(Ancestor(0), VariantIndex::from_usize(2)),
+                // insert recombinations for nodes 0 and 1, and later check if 2 inherited them
+                2 => tree.insert_recombination_event(Ancestor(0), VariantIndex::from_usize(2)),
                 3 => tree.insert_recombination_event(Ancestor(0), VariantIndex::from_usize(3)),
                 4 => {
                     tree.likelihoods[2] = 0.1; // set likelihood of third node to that of second to trigger recompression
-                    tree.insert_mutation_event(Ancestor(0), VariantIndex::from_usize(4))
+                    tree.insert_recombination_event(Ancestor(0), VariantIndex::from_usize(4))
                     // this shouldnt be copied, because the second node is uncompressed at this site
                 }
-                6 => tree.insert_mutation_event(Ancestor(1), VariantIndex::from_usize(6)),
+                6 => tree.insert_recombination_event(Ancestor(1), VariantIndex::from_usize(6)),
                 7 => tree.insert_recombination_event(Ancestor(1), VariantIndex::from_usize(7)),
                 _ => {}
             }
@@ -873,38 +870,32 @@ mod tests {
             counter += 1;
         });
 
-        let traceback_iterator = iterator
-            .traceback(&partial_tree_sequence, Ancestor(2));
+        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(2));
         assert_eq!(traceback_iterator.clone().count(), 4);
 
         traceback_iterator.for_each(|state| match state.site.0 {
             2 => assert_eq!(
-                state.kind,
-                ViterbiEventKind::Mutation,
+                state.kind, Recombination,
                 "expected mutation at {}",
                 state.site.0
             ),
             6 => assert_eq!(
-                state.kind,
-                ViterbiEventKind::Mutation,
+                state.kind, Recombination,
                 "expected mutation at {}",
                 state.site.0
             ),
             3 => assert_eq!(
-                state.kind,
-                ViterbiEventKind::Recombination,
+                state.kind, Recombination,
                 "expected recombination at {}",
                 state.site.0
             ),
             7 => assert_eq!(
-                state.kind,
-                ViterbiEventKind::Recombination,
+                state.kind, Recombination,
                 "expected recombination at {}",
                 state.site.0
             ),
             _ => assert_ne!(
-                state.kind,
-                ViterbiEventKind::Recombination,
+                state.kind, Recombination,
                 "expected no event at site {}",
                 state.site.0
             ),
@@ -913,7 +904,7 @@ mod tests {
 
     #[test]
     fn test_copying_from_parent_on_change_parent() {
-        // test whether the iterator copies the recombination and mutation sites from the parent when a child is
+        // test whether the iterator copies the recombination sites from the parent when a child is
         // decompressed
 
         let mut ix = ViterbiIterator::new(3, false, 1);
@@ -983,10 +974,10 @@ mod tests {
                     .copied()
                     .for_each(|n| tree.likelihoods[n.0 as usize] = n.0 as f64 * 0.1),
 
-                // insert mutations and recombination for nodes 0 and 1, and later check if 2 inherited them
-                2 => tree.insert_mutation_event(Ancestor(0), VariantIndex::from_usize(2)),
+                // insert recombinations for nodes 0 and 1, and later check if 2 inherited them
+                2 => tree.insert_recombination_event(Ancestor(0), VariantIndex::from_usize(2)),
                 3 => tree.insert_recombination_event(Ancestor(0), VariantIndex::from_usize(3)),
-                5 => tree.insert_mutation_event(Ancestor(1), VariantIndex::from_usize(5)), // this should not be copied because the second ancestor is uncompressed at this site
+                5 => tree.insert_recombination_event(Ancestor(1), VariantIndex::from_usize(5)), // this should not be copied because the second ancestor is uncompressed at this site
 
                 _ => {}
             }
@@ -994,26 +985,22 @@ mod tests {
             counter += 1;
         });
 
-        let traceback_iterator = iterator
-            .traceback(&partial_tree_sequence, Ancestor(2));
+        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(2));
         assert_eq!(traceback_iterator.clone().count(), 2);
 
         traceback_iterator.for_each(|state| match state.site.0 {
             2 => assert_eq!(
-                state.kind,
-                ViterbiEventKind::Mutation,
-                "expected mutation at {}",
+                state.kind, Recombination,
+                "expected recombination at {}",
                 state.site.0
             ),
             3 => assert_eq!(
-                state.kind,
-                ViterbiEventKind::Recombination,
+                state.kind, Recombination,
                 "expected recombination at {}",
                 state.site.0
             ),
             _ => assert_ne!(
-                state.kind,
-                ViterbiEventKind::Recombination,
+                state.kind, Recombination,
                 "expected no events at site {}",
                 state.site.0
             ),
@@ -1056,15 +1043,15 @@ mod tests {
         );
         iterator.for_each(|(site, tree, _)| {
             match counter {
-                // insert a mutation on first site and then immediately recompress
-                0 => tree.insert_mutation_event(Ancestor(1), site),
+                // insert recombinations on first site and then immediately recompress
+                0 => tree.insert_recombination_event(Ancestor(1), site),
 
-                // insert mutations for parent for sites 2, 3 and check if they are inherited
-                2 => tree.insert_mutation_event(Ancestor(0), site),
-                3 => tree.insert_mutation_event(Ancestor(0), site),
+                // insert recombinations for parent for sites 2, 3 and check if they are inherited
+                2 => tree.insert_recombination_event(Ancestor(0), site),
+                3 => tree.insert_recombination_event(Ancestor(0), site),
 
                 // then one more for the child for site 9
-                9 => tree.insert_mutation_event(Ancestor(1), site),
+                9 => tree.insert_recombination_event(Ancestor(1), site),
                 _ => {}
             }
 
@@ -1072,38 +1059,32 @@ mod tests {
         });
 
         // check that we inherit all mutations from the parent and all from the child are also discovered
-        let traceback_iterator = iterator
-            .traceback(&partial_tree_sequence, Ancestor(1));
+        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(1));
         assert_eq!(traceback_iterator.clone().count(), 4);
 
         traceback_iterator.for_each(|state| match state.site.0 {
             0 => assert_eq!(
-                state.kind,
-                ViterbiEventKind::Mutation,
-                "expected mutation at {}",
+                state.kind, Recombination,
+                "expected recombination at {}",
                 state.site.0
             ),
             2 => assert_eq!(
-                state.kind,
-                ViterbiEventKind::Mutation,
-                "expected mutation at {}",
+                state.kind, Recombination,
+                "expected recombination at {}",
                 state.site.0
             ),
             3 => assert_eq!(
-                state.kind,
-                ViterbiEventKind::Mutation,
-                "expected mutation at {}",
+                state.kind, Recombination,
+                "expected recombination at {}",
                 state.site.0
             ),
             9 => assert_eq!(
-                state.kind,
-                ViterbiEventKind::Mutation,
-                "expected mutation at {}",
+                state.kind, Recombination,
+                "expected recombination at {}",
                 state.site.0
             ),
             _ => assert_ne!(
-                state.kind,
-                ViterbiEventKind::Mutation,
+                state.kind, Recombination,
                 "expected no event at site {}",
                 state.site.0
             ),
@@ -1169,21 +1150,19 @@ mod tests {
                 // make sure recompression happens instantly, meaning the third node is only present at first and last site
                 *tree.likelihood(n) = 1.0;
 
-                // insert mutations on every site
-                tree.insert_mutation_event(n, site);
+                // insert recombination on every site
+                tree.insert_recombination_event(n, site);
             });
         });
 
         // check that we inherit all mutations from the parent
-        let traceback_iterator = iterator
-            .traceback(&partial_tree_sequence, Ancestor(2));
+        let traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(2));
         assert_eq!(traceback_iterator.clone().count(), 11);
 
         traceback_iterator.clone().take(9).for_each(|state| {
             assert_eq!(
-                state.kind,
-                ViterbiEventKind::Mutation,
-                "expected mutation at {}",
+                state.kind, Recombination,
+                "expected recombination at {}",
                 state.site.0
             )
         });
@@ -1192,7 +1171,7 @@ mod tests {
             traceback_iterator.clone().skip(9).next().unwrap().kind,
             Recombination
         );
-        assert_eq!(traceback_iterator.last().unwrap().kind, Mutation);
+        assert_eq!(traceback_iterator.last().unwrap().kind, Recombination);
     }
 
     #[test]
@@ -1265,7 +1244,7 @@ mod tests {
                 assert_eq!(nodes.iter().copied().collect::<Vec<_>>(), vec![Ancestor(0)]);
 
                 *tree.likelihood(Ancestor(0)) = 0.5;
-                tree.insert_mutation_event(Ancestor(0), site);
+                tree.insert_recombination_event(Ancestor(0), site);
             }
 
             if site.0 == 1 {
@@ -1278,10 +1257,9 @@ mod tests {
         });
 
         // check that we see all expected events
-        let mut traceback_iterator = iterator
-            .traceback(&partial_tree_sequence, Ancestor(2));
+        let mut traceback_iterator = iterator.traceback(&partial_tree_sequence, Ancestor(2));
         assert_eq!(traceback_iterator.clone().count(), 1);
-        assert_eq!(traceback_iterator.next().unwrap().kind, Mutation);
+        assert_eq!(traceback_iterator.next().unwrap().kind, Recombination);
     }
 
     #[test]
@@ -1331,7 +1309,7 @@ mod tests {
             &vec![VariantIndex::from_usize(0)],
         );
 
-        // if one of the above restrictions is violated, the queue will panic, so we don't need to explicitely test this
+        // if one of the above restrictions is violated, the queue will panic, so we don't need to explicitly test this
         // behavior (and we also can't because the closure is only called after all events for a site have been processed)
         ix.iter_sites(
             &edges,
