@@ -30,15 +30,20 @@ impl PartialOrd<Self> for SequenceEventKind {
 impl Ord for SequenceEventKind {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
+            // TODO: ChangeParent should logically come after Start, since new nodes must be present
+            //  before they are being switched to. Having ChangeParent before Start will fail,
+            //  if an edge starts right at the beginning of an incomplete ancestor. However, we
+            //  achieve tsinfer fidelity by changing the order those events are processed
+            (Self::ChangeParent { .. }, Self::ChangeParent { .. }) => Ordering::Equal,
+            (Self::ChangeParent { .. }, _) => Ordering::Less,
+            (_, Self::ChangeParent { .. }) => Ordering::Greater,
             (Self::Start { parent: p1 }, Self::Start { parent: p2 }) => p1.cmp(p2),
             (Self::Start { .. }, _) => Ordering::Less,
             (_, Self::Start { .. }) => Ordering::Greater,
             (Self::StartFree, Self::StartFree) => Ordering::Equal,
             (Self::StartFree, _) => Ordering::Less,
             (_, Self::StartFree) => Ordering::Greater,
-            (Self::ChangeParent { .. }, Self::ChangeParent { .. }) => Ordering::Equal,
-            (Self::ChangeParent { .. }, _) => Ordering::Less,
-            (_, Self::ChangeParent { .. }) => Ordering::Greater,
+
             (Self::Mutation, Self::Mutation) => Ordering::Equal,
             (Self::Mutation, _) => Ordering::Less,
             (_, Self::Mutation) => Ordering::Greater,
