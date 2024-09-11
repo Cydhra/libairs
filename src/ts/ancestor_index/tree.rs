@@ -161,17 +161,23 @@ impl<'o> MarginalTree<'o> {
         self.last_event_index[node.0 as usize] = self.linked_viterbi_events.len() - 1;
     }
 
+    /// Insert a mutation for the given ancestor at the given site (absolute site, not relative to the
+    /// candidate)
+    pub fn insert_mutation_event(&mut self, node: Ancestor, site: VariantIndex) {
+        self.linked_viterbi_events.push(ViterbiEvent {
+            kind: ViterbiEventKind::Mutation,
+            site,
+            prev: NonZeroUsize::new(self.last_event_index[node.0 as usize]),
+        });
+
+        self.last_event_index[node.0 as usize] = self.linked_viterbi_events.len() - 1;
+    }
+
     /// Insert a compression event for the given ancestor at the given site (absolute site, not
     /// relative to the candidate)
     /// The method is associated instead of taking &mut self, so it can be used while other
     /// references to the marginal tree exist.
-    pub fn insert_compression_event(
-        linked_viterbi_events: &mut Vec<ViterbiEvent>,
-        last_event_index: &mut [usize],
-        last_compressed_begin: VariantIndex,
-        node: Ancestor,
-        site: VariantIndex,
-    ) {
+    pub fn insert_compression_event(linked_viterbi_events: &mut Vec<ViterbiEvent>, last_event_index: &mut [usize], last_compressed_begin: VariantIndex, node: Ancestor, site: VariantIndex) {
         linked_viterbi_events.push(ViterbiEvent {
             kind: ViterbiEventKind::Decompress,
             site: last_compressed_begin,
@@ -273,13 +279,7 @@ impl<'o> MarginalTree<'o> {
 
             // record event for traceback that starting from here we are compressed into the parent
             if site_index > self.start {
-                Self::insert_compression_event(
-                    &mut self.linked_viterbi_events,
-                    self.last_event_index,
-                    self.last_compressed[node.0 as usize],
-                    node,
-                    site_index - 1,
-                );
+                Self::insert_compression_event(&mut self.linked_viterbi_events, self.last_event_index, self.last_compressed[node.0 as usize], node, site_index - 1);
             }
         }
     }
