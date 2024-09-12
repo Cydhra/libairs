@@ -177,7 +177,13 @@ impl<'o> MarginalTree<'o> {
     /// relative to the candidate)
     /// The method is associated instead of taking &mut self, so it can be used while other
     /// references to the marginal tree exist.
-    pub fn insert_compression_event(linked_viterbi_events: &mut Vec<ViterbiEvent>, last_event_index: &mut [usize], last_compressed_begin: VariantIndex, node: Ancestor, site: VariantIndex) {
+    pub fn insert_compression_event(
+        linked_viterbi_events: &mut Vec<ViterbiEvent>,
+        last_event_index: &mut [usize],
+        last_compressed_begin: VariantIndex,
+        node: Ancestor,
+        site: VariantIndex,
+    ) {
         linked_viterbi_events.push(ViterbiEvent {
             kind: ViterbiEventKind::Decompress,
             site: last_compressed_begin,
@@ -279,7 +285,13 @@ impl<'o> MarginalTree<'o> {
 
             // record event for traceback that starting from here we are compressed into the parent
             if site_index > self.start {
-                Self::insert_compression_event(&mut self.linked_viterbi_events, self.last_event_index, self.last_compressed[node.0 as usize], node, site_index - 1);
+                Self::insert_compression_event(
+                    &mut self.linked_viterbi_events,
+                    self.last_event_index,
+                    self.last_compressed[node.0 as usize],
+                    node,
+                    site_index - 1,
+                );
             }
         }
     }
@@ -453,7 +465,12 @@ impl<'o> MarginalTree<'o> {
     }
 
     /// Remove a node from the tree. This is done whenever an ancestor ends.
-    fn remove_node(&mut self, active_nodes: &mut Vec<Ancestor>, node: Ancestor) {
+    fn remove_node(
+        &mut self,
+        active_nodes: &mut Vec<Ancestor>,
+        node: Ancestor,
+        site: VariantIndex,
+    ) {
         debug_assert!(
             !self.parents.iter().any(|&n| n == Some(node)),
             "Node {} cannot be removed while it has children",
@@ -464,6 +481,17 @@ impl<'o> MarginalTree<'o> {
         if self.parents[node.0 as usize].is_some() {
             self.children[self.parents[node.0 as usize].unwrap().0 as usize].retain(|&n| n != node);
             self.parents[node.0 as usize] = None;
+        }
+
+        if self.is_compressed[node.0 as usize] {
+            // add compression event
+            Self::insert_compression_event(
+                self.linked_viterbi_events,
+                self.last_event_index,
+                self.last_compressed[node.0 as usize],
+                node,
+                site,
+            );
         }
 
         self.is_compressed[node.0 as usize] = true;
@@ -549,11 +577,11 @@ impl<'o> MarginalTree<'o> {
                     );
                 }
                 SequenceEvent {
-                    site: _,
+                    site,
                     node,
                     kind: SequenceEventKind::End,
                 } => {
-                    self.remove_node(active_nodes, *node);
+                    self.remove_node(active_nodes, *node, *site);
                 }
             }
         }
